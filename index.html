@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- The same viewport rules as client/index.html, for the same reasons: the
+     page reaches under the notch, a double tap is not a zoom, a drag is not a
+     scroll. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d12">
+<link rel="icon" href="data:,">
+<title>Digidream Studio</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #0b0d12; color: #cfe3ff;
+    font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    touch-action: none; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; }
+  #boot {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; background: #0b0d12; z-index: 200;
+  }
+  #boot .bar { width: min(60vw, 320px); height: 4px; background: #1b2230; border-radius: 2px; overflow: hidden; }
+  #boot .fill { height: 100%; width: 0; background: #5b8fd6; transition: width 120ms linear; }
+  #boot[hidden] { display: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/vendor/three/three.module.js",
+    "three/": "/vendor/three/"
+  }
+}
+</script>
+<!-- The native shell's hook, exactly as client/index.html has it: a classic
+     script, so `window.dnp` exists before the module below asks for it. -->
+<script src="/shell.js"></script>
+<script type="module" src="/studio/src/main.js"></script>
+</head>
+<body>
+  <div id="boot"><div>Studio</div><div class="bar"><div class="fill" id="bootfill"></div></div><div id="bootmsg">starting</div></div>
+</body>
+</html>
