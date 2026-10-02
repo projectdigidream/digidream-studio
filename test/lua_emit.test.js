@@ -19,7 +19,7 @@ import { Vocab } from '../src/vocab.js'
 import { door, lift, switchFor, teleport, ambush, exit, crusher } from '../src/presets.js'
 import { ROOT } from './oracle.js'
 
-const TRIGGERCHECK = join(ROOT, 'build', 'lua', 'triggercheck')
+const TRIGGERCHECK = join(ROOT, 'engine', 'build', 'lua', 'triggercheck')
 
 let checks = 0
 let fails = 0
@@ -29,8 +29,8 @@ const check = (ok, label) => {
 }
 
 const vocab = new Vocab(
-  JSON.parse(readFileSync(join(ROOT, 'maps', 'scripts', 'trigger_vocab.json'), 'utf8')),
-  JSON.parse(readFileSync(join(ROOT, 'maps', 'scripts', 'mob_vocab.json'), 'utf8')))
+  JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'trigger_vocab.json'), 'utf8')),
+  JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'mob_vocab.json'), 'utf8')))
 
 const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
 
@@ -103,7 +103,7 @@ if (!existsSync(TRIGGERCHECK)) {
   const dir = mkdtempSync(join(tmpdir(), 'dnp-lua-'))
   const file = join(dir, 'presets.lua')
   writeFileSync(file, lua.text)
-  const r = spawnSync(TRIGGERCHECK, [ROOT, file], { encoding: 'utf8' })
+  const r = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), file], { encoding: 'utf8' })
   check(r.status === 0, `triggercheck accepts the studio's table:\n${r.stderr}`)
   const n = /ok \((\d+) triggers\)/.exec(r.stderr)
   check(n && Number(n[1]) === doc.triggers.length, `all ${doc.triggers.length} triggers loaded (${n?.[1]})`)
@@ -117,7 +117,7 @@ if (!existsSync(TRIGGERCHECK)) {
   check(!/level_camera/.test(lua.text), 'CONTROL: a map with no camera set does not call it')
   const cfile = join(dir, 'camera.lua')
   writeFileSync(cfile, camLua.text)
-  const rc = spawnSync(TRIGGERCHECK, [ROOT, cfile], { encoding: 'utf8' })
+  const rc = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), cfile], { encoding: 'utf8' })
   check(rc.status === 0, `the runtime takes a map that sets its camera:\n${rc.stderr}`)
 
   // CONTROL: without the guards the runtime refuses the table. If it did not,
@@ -125,7 +125,7 @@ if (!existsSync(TRIGGERCHECK)) {
   const bare = emitMapLua(doc, emitted, { guards: false })
   const bfile = join(dir, 'bare.lua')
   writeFileSync(bfile, bare.text)
-  const rb = spawnSync(TRIGGERCHECK, [ROOT, bfile], { encoding: 'utf8' })
+  const rb = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), bfile], { encoding: 'utf8' })
   check(rb.status !== 0, 'CONTROL: the runtime refuses side_is without expect_neighbour')
 }
 

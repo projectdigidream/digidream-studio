@@ -11,9 +11,9 @@ import { fileURLToPath } from 'node:url'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x86_64'
-export const NATIVE_MAPC = [join(ROOT, 'build', ARCH, 'mapc'), join(ROOT, 'build', 'native', 'mapc')]
+export const NATIVE_MAPC = [join(ROOT, 'engine', 'build', ARCH, 'mapc'), join(ROOT, 'engine', 'build', 'native', 'mapc')]
   .find((p) => existsSync(p)) ?? null
-export const CORE_WASM = existsSync(join(ROOT, 'client', 'wasm', 'dist', 'dnp_core.mjs'))
+export const CORE_WASM = existsSync(join(ROOT, 'engine', 'client', 'wasm', 'dist', 'dnp_core.mjs'))
 
 /** Print the skip line the suite expects and leave, when an oracle is missing. */
 export function requireOracles (name, { mapc = true, core = true } = {}) {
@@ -43,7 +43,7 @@ let corePromise = null
 /** The loaded core, once. */
 export async function core () {
   if (!corePromise) {
-    corePromise = import(join(ROOT, 'client', 'src', 'core.js')).then((m) => m.Core.load())
+    corePromise = import(join(ROOT, 'engine', 'client', 'src', 'core.js')).then((m) => m.Core.load())
   }
   return corePromise
 }
@@ -51,7 +51,7 @@ export async function core () {
 /** Parse a baked map with the runtime's loader and read it out as plain data. */
 export async function readBaked (dnpm) {
   const c = await core()
-  const { readMap } = await import(join(ROOT, 'client', 'src', 'mapdata.js'))
+  const { readMap } = await import(join(ROOT, 'engine', 'client', 'src', 'mapdata.js'))
   const r = c.loadMap(new Uint8Array(dnpm))
   if (!r.ok) throw new Error(`core refused the baked map: status ${r.status}`)
   const data = readMap(r.map)

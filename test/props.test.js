@@ -8,7 +8,7 @@
 //
 import { moduleProps, newProp, deleteProp, renameProp, placementsOf, artFromPicture, artFromSheet } from '../src/props.js'
 import { emitProps } from '../src/props_emit.js'
-import { parseProps } from '../../client/src/render/props.js'
+import { parseProps } from '../../engine/client/src/render/props.js'
 
 let checks = 0
 let fails = 0

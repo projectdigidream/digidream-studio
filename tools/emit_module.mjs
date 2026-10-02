@@ -28,7 +28,7 @@ const module = JSON.parse(readFileSync(join(dir, 'module.studio.json'), 'utf8'))
 const docs = readdirSync(join(dir, 'maps')).filter((f) => f.endsWith('.studio.json'))
   .map((f) => JSON.parse(readFileSync(join(dir, 'maps', f), 'utf8')))
 const runtime = {}
-for (const name of RUNTIME_SCRIPTS) runtime[name] = readFileSync(join(ROOT, 'maps', 'scripts', name), 'utf8')
+for (const name of RUNTIME_SCRIPTS) runtime[name] = readFileSync(join(ROOT, 'engine', 'maps', 'scripts', name), 'utf8')
 
 const r = await emitModule(module, docs, { bake, runtime })
 for (const p of r.problems) {

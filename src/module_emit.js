@@ -30,7 +30,10 @@ import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
 
 export const RUNTIME_SCRIPTS = ['mob_vocab.lua', 'mobs.lua', 'trigger_vocab.lua', 'triggers.lua']
-const RUNTIME_DIR = 'maps/scripts'
+// Where the runtime lives, as a map declares it: the engine's folder in the
+// repository (engine/maps/scripts), and the same path in the virtual tree a
+// bake here is given, so the two agree.
+const RUNTIME_DIR = 'engine/maps/scripts'
 
 export function newModule (id, name = id) {
   return {

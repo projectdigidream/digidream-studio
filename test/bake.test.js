@@ -20,7 +20,7 @@ import { bake } from '../src/bake.js'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x86_64'
-const NATIVE = [join(ROOT, 'build', ARCH, 'mapc'), join(ROOT, 'build', 'native', 'mapc')]
+const NATIVE = [join(ROOT, 'engine', 'build', ARCH, 'mapc'), join(ROOT, 'engine', 'build', 'native', 'mapc')]
   .find((p) => existsSync(p))
 
 let checks = 0
@@ -37,9 +37,9 @@ if (!NATIVE) {
 }
 
 const CORPUS = [
-  'maps/test.map',
-  'maps/void.map',
-  'maps/doors_trig.map',
+  'engine/maps/test.map',
+  'engine/maps/void.map',
+  'engine/maps/doors_trig.map',
   'modules/shootrange/maps/range.map',
   'modules/starter/maps/first.map',
   'modules/doom2/maps/map01.map'

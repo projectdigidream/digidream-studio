@@ -17,9 +17,9 @@ import { emitMobsLua } from '../src/mobs_emit.js'
 import { emitProps, nextPropId } from '../src/props_emit.js'
 import { Vocab } from '../src/vocab.js'
 import { ROOT } from './oracle.js'
-import { parseProps } from '../../client/src/render/props.js'
+import { parseProps } from '../../engine/client/src/render/props.js'
 
-const LUAJIT = join(ROOT, 'third_party', 'luajit', 'src', 'luajit')
+const LUAJIT = join(ROOT, 'engine', 'third_party', 'luajit', 'src', 'luajit')
 
 let checks = 0
 let fails = 0
@@ -68,8 +68,8 @@ const module = {
 }
 
 const vocab = new Vocab(
-  JSON.parse(readFileSync(join(ROOT, 'maps', 'scripts', 'trigger_vocab.json'), 'utf8')),
-  JSON.parse(readFileSync(join(ROOT, 'maps', 'scripts', 'mob_vocab.json'), 'utf8')))
+  JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'trigger_vocab.json'), 'utf8')),
+  JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'mob_vocab.json'), 'utf8')))
 check(vocab.validateMobs(module.mobs).length === 0, `the spirit validates (${vocab.validateMobs(module.mobs).join(' | ')})`)
 check(emitMobsLua({ id: 'x', mobs: { missiles: {}, mobs: {} } }) === null, 'a module with no mobs writes no file')
 
@@ -142,18 +142,18 @@ if (!existsSync(LUAJIT)) {
   const dir = mkdtempSync(join(tmpdir(), 'dnp-mobs-'))
   const file = join(dir, 'mobs.lua')
   writeFileSync(file, lua)
-  const r = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', file], { cwd: ROOT, encoding: 'utf8' })
+  const r = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', file], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
   check(r.status === 0 && /1 mobs, 0 missiles, 0 problems/.test(r.stdout), `mobcheck accepts the spirit:\n${r.stdout}${r.stderr}`)
   const hfile = join(dir, 'hunter.lua')
   writeFileSync(hfile, lua2)
-  const rh = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', hfile], { cwd: ROOT, encoding: 'utf8' })
+  const rh = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', hfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
   check(rh.status === 0 && /2 mobs, 0 missiles, 0 problems/.test(rh.stdout), `mobcheck accepts the brain written with the new vocabulary:\n${rh.stdout}${rh.stderr}`)
   const kfile = join(dir, 'kind.lua')
   writeFileSync(kfile, emitMobsLua({ id: 'x', mobs: kind }))
-  check(spawnSync(LUAJIT, ['tools/mobcheck/check.lua', kfile], { cwd: ROOT, encoding: 'utf8' }).status !== 0, 'CONTROL: the runtime refuses the unknown target kind too')
+  check(spawnSync(LUAJIT, ['tools/mobcheck/check.lua', kfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' }).status !== 0, 'CONTROL: the runtime refuses the unknown target kind too')
   const bfile = join(dir, 'broken.lua')
   writeFileSync(bfile, emitMobsLua({ id: 'x', mobs: broken }))
-  const rb = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', bfile], { cwd: ROOT, encoding: 'utf8' })
+  const rb = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', bfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
   check(rb.status !== 0, 'CONTROL: the runtime refuses the corpse with no death state too')
 }
 

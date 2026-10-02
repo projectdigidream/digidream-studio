@@ -13,7 +13,7 @@ import { newDoc, addSector, addSpawn, validate } from '../src/doc.js'
 import { normalize, derive, sectorAt, snapToMap, nearestEdgePoint } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { requireOracles, bakeNative, readBaked, sideBetween } from './oracle.js'
-import { SIDE_FLAG, NO_SECTOR } from '../../client/src/mapdata.js'
+import { SIDE_FLAG, NO_SECTOR } from '../../engine/client/src/mapdata.js'
 
 requireOracles('topology')
 

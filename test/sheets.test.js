@@ -10,8 +10,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { importSheetFile, sheetRecord, guessStates, sheetName } from '../src/sheets.js'
-import { parseAtlas } from '../../client/src/render/atlas.js'
-import { readProject, compare } from '../../tools/tsprite/read.js'
+import { parseAtlas } from '../../engine/client/src/render/atlas.js'
+import { readProject, compare } from '../../engine/tools/tsprite/read.js'
 import { ROOT } from './oracle.js'
 
 let checks = 0
