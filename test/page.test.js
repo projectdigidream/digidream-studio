@@ -1449,6 +1449,95 @@ await page.keyboard.press('Escape')
   await page.evaluate(async (mob) => { const S = window.__studio; delete S.doc.graph; S.doc.entities = window.__keptEntities; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map') }, setup.mob)
 }
 
+// THE GAME'S GRAPH: listed with the maps' in the Graphs section, edited with
+// only the words the game has, a call to the level answered by a map's
+// on_call whose value is linked straight into an action's argument.
+{
+  const listed = await page.evaluate(async () => {
+    const S = window.__studio
+    delete S.module.graph
+    S.moduleChanged()
+    await S.go('graphs')
+    const rows = [...document.querySelectorAll('[data-graph]')].map((r) => r.dataset.graph)
+    document.querySelector('[data-graph="game"]').click()
+    await new Promise((r) => setTimeout(r, 300))
+    const opts = [...document.querySelector('.gw .wk-top select').options].map((o) => o.value)
+    return { rows, maps: Object.keys(S.docs), scope: S.window?.scope, title: document.querySelector('.gw .wk-title')?.textContent, opts }
+  })
+  check(listed.rows[0] === 'game' && listed.maps.every((m) => listed.rows.includes(m)), `the Graphs section lists the game's graph, then every map's (${listed.rows.join(', ')})`)
+  check(listed.scope === 'game' && /game/.test(listed.title ?? ''), `and opens the game's (${listed.title})`)
+  check(listed.opts.includes('event:on_player_enter') && !listed.opts.includes('event:on_interact') && listed.opts.includes('node:call') && listed.opts.includes('node:on_call'),
+        'its menu offers what the game hears and calls, not a level\'s events')
+  const game = await page.evaluate(async () => {
+    const S = window.__studio
+    const pick = (v) => { const s = document.querySelector('.gw .wk-top select'); s.value = v; s.dispatchEvent(new Event('change')) }
+    pick('event:on_player_enter')
+    pick('node:call')
+    await new Promise((r) => setTimeout(r, 200))
+    const verbs = (() => { pick('act:'); return [...document.querySelector('.gw [data-node="do"] select').options].map((o) => o.value) })()
+    return { nodes: S.module.graph?.nodes.map((n) => `${n.type}:${n.id}`), call: S.module.graph?.nodes.find((n) => n.type === 'call'), verbs, mapGraph: !!S.doc.graph }
+  })
+  check(game.nodes?.join() === 'event:player_enter,call:call,action:do' && game.call?.to === 'level' && !game.mapGraph,
+        `nodes go into the module's graph, not the map's; a call from the game goes to the level (${JSON.stringify(game.nodes)})`)
+  check(game.verbs.includes('counter_add') && !game.verbs.includes('sector_move') && !game.verbs.includes('teleport'), 'its actions are the game\'s only')
+  // The level answers: on_call 'reward', whose value is the counter's step.
+  const lvl = await page.evaluate(async () => {
+    const S = window.__studio
+    const g = S.module.graph
+    g.nodes = g.nodes.filter((n) => n.id !== 'do')
+    g.nodes.find((n) => n.type === 'call').name = 'reward'
+    g.links = [['player_enter.then', 'call.in'], ['player_enter.entity', 'call.entity']]
+    S.moduleChanged()
+    await S.go('graphs')
+    const unanswered = [...document.querySelectorAll('[data-unanswered]')].map((x) => x.dataset.unanswered)
+    const name = Object.keys(S.docs)[0]
+    S.docs[name].graph = { vars: {}, nodes: [
+      { id: 'heard', type: 'on_call', name: 'reward', pos: { x: 0, y: 0 } },
+      { id: 'add', type: 'action', a: 'counter_add', counter: 'gold', pos: { x: 320, y: 0 } }], links: [['heard.then', 'add.in']] }
+    document.querySelector(`[data-graph="${name}"]`).click()
+    await new Promise((r) => setTimeout(r, 600))
+    S.commit()
+    await new Promise((r) => setTimeout(r, 200))
+    const row = document.querySelector('.gw [data-node="add"] .gw-argrow[data-arg="counter"]')
+    return { unanswered, scope: S.window?.scope, doc: S.docName, name, rowPin: !!row?.querySelector('.gw-pin[data-pin="add.counter"]'),
+             more: !!document.querySelector('.gw [data-node="add"] .gw-more') }
+  })
+  check(lvl.unanswered.includes('reward'), 'a call nothing answers is said')
+  check(lvl.scope === 'map' && lvl.doc === lvl.name, `a map's graph opens from the list, with its map (${lvl.scope}, ${lvl.doc})`)
+  check(lvl.rowPin && lvl.more, 'an argument\'s data pin sits in its row on the node, and optional arguments can be brought on')
+  // Show `by`, then drag heard.value into its pin.
+  await page.evaluate(async () => {
+    const sel = document.querySelector('.gw [data-node="add"] .gw-more')
+    sel.value = 'by'; sel.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+  })
+  const ends = await page.evaluate(() => {
+    const c = (sel) => { const r = document.querySelector(sel)?.querySelector('.gw-dot')?.getBoundingClientRect(); return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null }
+    return { from: c('.gw-pin[data-pin="heard.value"][data-dir="out"]'), to: c('.gw-argrow .gw-pin[data-pin="add.by"]') }
+  })
+  if (ends.from && ends.to) {
+    await page.mouse.move(ends.from.x, ends.from.y); await page.mouse.down()
+    await page.mouse.move((ends.from.x + ends.to.x) / 2, ends.to.y + 10, { steps: 5 }); await page.mouse.move(ends.to.x, ends.to.y, { steps: 5 }); await page.mouse.up()
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  const fed = await page.evaluate(async () => {
+    const S = window.__studio
+    const row = document.querySelector('.gw [data-node="add"] [data-arg="by"]')
+    const { graphProblems } = await import('/studio/src/graphs_emit.js')
+    const r = await S.emitAll()
+    await S.go('graphs')
+    return { links: S.doc.graph.links, row: row?.textContent ?? '', curve: document.querySelectorAll('.gw .gw-data-link').length,
+             problems: graphProblems(S.doc.graph, S.vocab.graph, S.vocab.trigger), ok: !!r,
+             files: (r?.files ?? []).map((f) => f.path).filter((p) => /graph|module\.txt/.test(p)),
+             txt: r ? String(r.files.find((f) => f.path === 'module.txt').bytes) : '',
+             unanswered: [...document.querySelectorAll('[data-unanswered]')].length }
+  })
+  check(fed.links.some(([f, t]) => f === 'heard.value' && t === 'add.by') && /← heard\.value/.test(fed.row), `a value dragged into an argument's pin feeds it, and the field says so (${JSON.stringify(fed.links)} / ${fed.row})`)
+  check(fed.ok && fed.files.includes('maps/module.graph.json') && /game graphs\.lua shared/.test(fed.txt), `the module is written with its game graph (${fed.files.join(', ')})`)
+  check(fed.unanswered === 0, 'and with the map answering, no call is left unanswered')
+  await page.evaluate(async () => { const S = window.__studio; delete S.module.graph; S.moduleChanged(); delete S.doc.graph; S.commit(); await S.go('map') })
+}
+
 // WRONG ROOMS: a room that makes the bake fail is marked on the map in red and
 // explained in its inspector; fixing it clears the mark.
 {

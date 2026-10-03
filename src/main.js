@@ -20,6 +20,7 @@ import { install as installSounds } from './sections/sounds.js'
 import { install as installTextures } from './sections/textures.js'
 import { install as installSettings } from './sections/settings.js'
 import { install as installScripts } from './sections/scripts.js'
+import { install as installGraphs } from './sections/graphs.js'
 import { install as installCamera } from './mapeditor/camera.js'
 import { install as installNeighbours } from './mapeditor/neighbours.js'
 import { migratePlayer, overrides, paramNames } from './player.js'
@@ -35,7 +36,7 @@ import { parseAtlas } from '/src/render/atlas.js'
 import { loadMapcBinary, bake as bakeWith } from './bake.js'
 import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP } from './doc.js'
 import { normalize } from './topology.js'
-import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts } from './module_emit.js'
+import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
 import { Vocab } from './vocab.js'
 import { Viewport, COLORS } from './viewport.js'
 import { Preview } from './preview.js'
@@ -217,7 +218,7 @@ S.sectionAlias = sectionAlias
 // `save` is a const further down; reached through a wrapper so this runs first.
 S.save = () => save()
 Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starterDoc, showInspector, emitAll })
-for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installCamera, installNeighbours]) install(S)
+for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installGraphs, installCamera, installNeighbours]) install(S)
 await S.loadPacks()
 S.router.register({
   id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
@@ -243,7 +244,8 @@ pageSection('music', 'Music', '♪', /^Soundtrack/, () => S.showMusic())
 pageSection('sounds', 'Sounds', '🔊', /^Sounds$/, () => S.showSounds())
 windowSection('screens', 'Screens', '▣', () => openScreens(S))
 pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
-windowSection('graph', 'Graph', '◇', () => openGraph(S), { rail: false, parent: 'maps' })
+pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
+windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
 pageSection('settings', 'Settings', '⚙', /^Module settings$/, () => S.showSettings())
 new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
@@ -872,6 +874,7 @@ S.suggest = (arg, owner) => {
   if (arg === 'item') return S.propNames()
   if (arg === 'cue') return [...new Set(['default', ...Object.keys(S.doc?.music ?? {})])]
   if (arg === 'panel') return Object.keys(S.doc?.panels ?? {})
+  if (arg === 'name' && (owner === 'call' || owner === 'on_call')) return S.callNames?.() ?? null
   if (arg === 'param' && owner === 'add_effect') return paramNames()
   return null
 }
@@ -925,6 +928,8 @@ async function emitAll () {
     const gp = S.vocab.graph ? graphProblems(d.graph, S.vocab.graph, S.vocab.trigger) : []
     if (gp.length) { S.status(`${d.name}'s graph: ${gp.join('; ')}`, 'error'); return null }
   }
+  const mg = S.vocab.graph ? graphProblems(S.module.graph, S.vocab.graph, S.vocab.trigger, { game: true }) : []
+  if (mg.length) { S.status(`the game's graph: ${mg.join('; ')}`, 'error'); return null }
   const sizes = { ...S.textureSizes }
   const assets = {}
   for (const [path, blob] of Object.entries(S.rec.assets ?? {})) assets[path] = new Uint8Array(await blob.arrayBuffer())
@@ -1018,9 +1023,9 @@ function scriptBudget () {
     graph: (S.doc?.graph?.nodes?.length ?? 0) > 0 ? `${S.docName}.graph.json` : null
   })
   const used = decls.length + 1
-  const game = gameScripts(S.module)
+  const game = gameScripts(S.module).map(gameFileOf)
   return `Scripts: ${used} of the ${CAP.scripts} a map may declare -- ${decls.map((d) => d.split('/').pop()).join(', ')}, and ${S.docName}.lua.` +
-         (game.length ? ` The weapons are not among them: they run once for the whole game (${game.join(', ')}).` : '')
+         (game.length ? ` The game's own scripts are not among them: they run once for the whole game (${game.join(', ')}).` : '')
 }
 
 /** The map editor's ⋯: what is about this map, not the module. */

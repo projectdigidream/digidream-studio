@@ -6,9 +6,7 @@
 // chained with every other part's rather than replacing them. It is the place
 // for behaviour no vocabulary has words for yet. Game-wide behaviour -- what
 // should run once for the whole game rather than once per level -- is the
-// weapons runtime's today; a module-wide graph waits on the engine (the game
-// VM skips a level's copy of a script by its file name, so triggers.lua cannot
-// be game-wide without switching off every map's triggers).
+// game's graph's (sections/graphs.js) and the weapons runtime's.
 //
 import { el, button, muted, row, confirmDialog, ask } from '../ui.js'
 

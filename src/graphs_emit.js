@@ -21,6 +21,12 @@
 
 export const GRAPH_EXT = '.graph.json'
 export const graphFile = (mapName) => `${mapName}${GRAPH_EXT}`
+/**
+ * The module's own graph, run once in the game VM (a module.txt `game` line):
+ * it hears the players come and go and keeps the game's state across levels.
+ * Named after module.lua, so no map can share its name.
+ */
+export const GAME_GRAPH = 'module.graph.json'
 
 export function newGraph () { return { vars: {}, nodes: [], links: [] } }
 
@@ -46,15 +52,33 @@ export const hasGraph = (doc) => (doc?.graph?.nodes?.length ?? 0) > 0
 /** A node type's spec from graph_vocab.json, by name. */
 export function nodeSpecs (gv) { return new Map((gv?.nodes ?? []).map((n) => [n.name, n])) }
 
+// A verb's arguments the studio writes itself, never a person: no pins.
+const NOT_PINNED = new Set(['expect_neighbour', 'expect_tag', 'fn', 'side'])
+
+/** The verb (trigger_vocab entry) a condition or action node runs, or null. */
+export function verbOf (node, tv) {
+  if (node.type === 'condition') return (tv?.conditions ?? []).find((c) => c.name === node.c) ?? null
+  if (node.type === 'action') return (tv?.actions ?? []).find((a) => a.name === node.a) ?? null
+  return null
+}
+
 /**
  * A node's pins, given its spec: exec and data, in and out. A `sequence`
  * has as many exits as its `count` says, up to the eight the vocabulary lists.
+ * A condition's or action's arguments of a PINNABLE type are data inputs too
+ * (graph_vocab `data_in_args`, `pinnable_types`): linked, the argument takes
+ * the value at run time. `argPins` says which of `dataIn` are those.
  */
-export function pinsOf (node, spec) {
-  if (!spec) return { execIn: [], execOut: [], dataIn: [], dataOut: [] }
+export function pinsOf (node, spec, tv = null, gv = null) {
+  if (!spec) return { execIn: [], execOut: [], dataIn: [], dataOut: [], argPins: [] }
   let execOut = spec.exec_out ?? []
   if (node.type === 'sequence') execOut = execOut.slice(0, Math.max(1, Math.min(execOut.length, node.count ?? 2)))
-  return { execIn: spec.exec_in ?? [], execOut, dataIn: spec.data_in ?? [], dataOut: spec.data_out ?? [] }
+  const argPins = []
+  if (spec.data_in_args && tv) {
+    const pinnable = new Set(gv?.pinnable_types ?? ['int', 'fx', 'string', 'bool', 'enum', 'sector', 'value'])
+    for (const a of verbOf(node, tv)?.args ?? []) if (pinnable.has(a.type) && !NOT_PINNED.has(a.name)) argPins.push(a.name)
+  }
+  return { execIn: spec.exec_in ?? [], execOut, dataIn: [...(spec.data_in ?? []), ...argPins], dataOut: spec.data_out ?? [], argPins }
 }
 
 const split = (s) => { const i = String(s).lastIndexOf('.'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)] }
@@ -71,9 +95,13 @@ const split = (s) => { const i = String(s).lastIndexOf('.'); return i < 0 ? [s, 
  * @param tv  trigger_vocab.json
  * @returns [string]
  */
-export function graphProblems (graph, gv, tv) {
+export function graphProblems (graph, gv, tv, { game = false } = {}) {
   const problems = []
   if (!graph) return problems
+  // A GAME graph (a module's, in the game VM) may use only what the game
+  // hears and what does not act on a level (graph_vocab.game).
+  const gameOk = { event: new Set(gv?.game?.events ?? []), condition: new Set(gv?.game?.conditions ?? []), action: new Set(gv?.game?.actions ?? []) }
+  const linkedInto = new Set((graph.links ?? []).map((l) => l?.[1]))
   const specs = nodeSpecs(gv)
   const events = new Set((tv?.events ?? []).map((e) => e.name))
   const conds = new Map((tv?.conditions ?? []).map((c) => [c.name, c]))
@@ -87,7 +115,15 @@ export function graphProblems (graph, gv, tv) {
     const spec = specs.get(n.type)
     if (!spec) { problems.push(`${where}: no node type '${n.type}'`); continue }
     for (const a of spec.args ?? []) if (!a.optional && (n[a.name] === undefined || n[a.name] === '')) problems.push(`${where}: needs \`${a.name}\``)
-    if (n.type === 'event' && n.event && !events.has(n.event)) problems.push(`${where}: no event '${n.event}'`)
+    if (game && n.type === 'event' && n.event && !gameOk.event.has(n.event)) {
+      problems.push(`${where}: '${n.event}' does not reach the game -- a game graph starts from ${[...gameOk.event].join(', ')}`)
+    } else if (!game && n.type === 'event' && ['on_player_enter', 'on_player_leave'].includes(n.event)) {
+      problems.push(`${where}: '${n.event}' reaches only the game's graph`)
+    } else if (n.type === 'event' && n.event && !events.has(n.event) && !gameOk.event.has(n.event)) problems.push(`${where}: no event '${n.event}'`)
+    if (game && (n.type === 'condition' || n.type === 'action')) {
+      const name = n.type === 'condition' ? n.c : n.a
+      if (name && !gameOk[n.type].has(name)) problems.push(`${where}: ${n.type} '${name}' acts on a level, and the game has none -- call the level's graph (a call node, to level) and do it there`)
+    }
     const verb = n.type === 'condition' ? conds.get(n.c) : n.type === 'action' ? acts.get(n.a) : null
     if (n.type === 'condition' && n.c && !verb) problems.push(`${where}: no condition '${n.c}'`)
     if (n.type === 'action' && n.a && !verb) problems.push(`${where}: no action '${n.a}'`)
@@ -96,6 +132,8 @@ export function graphProblems (graph, gv, tv) {
         if (a.optional || ['expect_neighbour', 'expect_tag', 'fn'].includes(a.name)) continue
         // side_is takes its side as a wall reference, which stands in for side.
         if (a.name === 'side' && n.side) continue
+        // A linked argument is supplied at run time.
+        if (linkedInto.has(`${n.id}.${a.name}`)) continue
         if (n[a.name] === undefined || n[a.name] === '') problems.push(`${where}: ${n.c ?? n.a} needs \`${a.name}\``)
       }
     }
@@ -109,7 +147,7 @@ export function graphProblems (graph, gv, tv) {
     const [fid, fpin] = split(link[0]); const [tid, tpin] = split(link[1])
     const from = byId.get(fid); const to = byId.get(tid)
     if (!from || !to) { problems.push(`${where}: names a node that is not there (${link.join(' → ')})`); continue }
-    const fp = pinsOf(from, specs.get(from.type)); const tp = pinsOf(to, specs.get(to.type))
+    const fp = pinsOf(from, specs.get(from.type), tv, gv); const tp = pinsOf(to, specs.get(to.type), tv, gv)
     const execLink = fp.execOut.includes(fpin) && tp.execIn.includes(tpin)
     const dataLink = fp.dataOut.includes(fpin) && tp.dataIn.includes(tpin)
     if (!execLink && !dataLink) { problems.push(`${where}: ${link[0]} cannot feed ${link[1]} (an output to an input, exec to exec, data to data)`); continue }
@@ -144,7 +182,7 @@ export function graphProblems (graph, gv, tv) {
 export function emitGraph (graph, name, resolve) {
   const problems = []
   const nodes = (graph.nodes ?? []).map((n) => {
-    const { pos, ...rest } = n
+    const { pos, show, ...rest } = n
     let out = rest
     if (n.type === 'condition' || n.type === 'action') {
       const where = `graph node '${n.id}'`
@@ -158,6 +196,8 @@ export function emitGraph (graph, name, resolve) {
       }
     }
     if (pos) out.meta = { x: Math.round(pos.x ?? 0), y: Math.round(pos.y ?? 0) }
+    // Which optional arguments the board shows: the editor's, like the place.
+    if (show?.length) out.meta = { ...(out.meta ?? {}), show: [...show] }
     return out
   })
   const json = { graph: 1, name, vars: { ...(graph.vars ?? {}) }, nodes, links: (graph.links ?? []).map((l) => [...l]) }

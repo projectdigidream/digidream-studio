@@ -30,7 +30,7 @@
 import { normalize, derive } from './topology.js'
 import { emitMap } from './mapfmt.js'
 import { emitMapLua, makeResolver } from './lua_emit.js'
-import { emitGraph, graphFile, hasGraph } from './graphs_emit.js'
+import { emitGraph, graphFile, hasGraph, GAME_GRAPH } from './graphs_emit.js'
 import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
 import { emitPlayerLua, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
@@ -181,12 +181,27 @@ export const GAME_RUNTIME = ['weapon_vocab.lua', 'weapons.lua']
 export const PLAYER_GAME_RUNTIME = 'player_sounds.lua'
 export const PLAYER_GAME_FILE = 'player_setup.lua'
 
-/** The module's game scripts, in load order; empty when it needs none. */
+// The game's graph: the trigger and graph runtimes in the game VM too. They
+// are SHARED -- the levels keep their own copies, which a plain game line
+// would take from them (docs/GRAPHS.md, The game's graph).
+export const GRAPH_GAME_RUNTIME = ['trigger_vocab.lua', 'triggers.lua', 'graph_vocab.lua', 'graphs.lua']
+
+/** Does the module have a graph of its own, for the game? */
+export const hasGameGraph = (module) => (module?.graph?.nodes?.length ?? 0) > 0
+
+/**
+ * The module's game scripts, in load order, as module.txt says them: a file,
+ * with ` shared` when the levels keep their copies too. Empty when it needs none.
+ */
 export function gameScripts (module) {
   const out = hasWeapons(module) ? [...GAME_RUNTIME, GAME_FILE] : []
   if (hasMoveSounds(module)) out.push(PLAYER_GAME_RUNTIME, PLAYER_GAME_FILE)
+  if (hasGameGraph(module)) out.push(...GRAPH_GAME_RUNTIME.map((f) => `${f} shared`), GAME_GRAPH)
   return out
 }
+
+/** A game line's file, without its ` shared`. */
+export const gameFileOf = (line) => line.split(' ')[0]
 
 /** The game-wide file: the arsenal, and what every player starts holding. */
 export function emitGameLua (module) {
@@ -379,8 +394,16 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
     files.push({ path: `maps/${PLAYER_GAME_FILE}`, bytes: playerGame })
   }
 
+  // The game's graph: the runtimes it needs beside it, then the graph.
+  if (hasGameGraph(module)) {
+    for (const name of GRAPH_GAME_RUNTIME) files.push({ path: `maps/${name}`, bytes: runtime[name] })
+    const g = emitGraph(module.graph, 'module', null)
+    files.push({ path: `maps/${GAME_GRAPH}`, bytes: g.text })
+    if (g.problems.length) problems.push({ map: 'module graph', errors: g.problems.map((msg) => ({ line: 0, msg })), warnings: [] })
+  }
+
   // A metamap the server would refuse is fatal there, so it is here.
-  let ok = !problems.some((p) => p.map === 'metamap' && p.errors.length)
+  let ok = !problems.some((p) => (p.map === 'metamap' || p.map === 'module graph') && p.errors.length)
   const baked = []
   for (const doc of docs) {
     const r = await emitLevel(module, doc, { bake, runtime, hooks })

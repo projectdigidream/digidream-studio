@@ -79,6 +79,7 @@ function problemRows () {
   const items = [
     ...p.maps.map((x) => ({ go: ['map', x.map], text: `🗺 ${x.map}: ${x.msg}` })),
     ...p.metamap.map((m) => ({ go: ['maps'], text: `▦ metamap: ${m}` })),
+    ...p.graphs.map((m) => ({ go: ['graphs'], text: `◇ ${m}` })),
     ...p.monsters.map((m) => ({ go: ['monsters'], text: `☠ ${m}` })),
     ...p.weapons.map((m) => ({ go: ['weapons'], text: `🔫 ${m}` })),
     ...p.sounds.map((m) => ({ go: ['sounds'], text: `🔊 ${m}` }))

@@ -13,16 +13,16 @@
 // runtime the graph's verbs come from, in the server's own VM), and mapc
 // baking the map that declares the graph.
 //
-import { readFileSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
-import { join } from 'node:path'
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync } from 'node:fs'
+import { spawnSync, spawn } from 'node:child_process'
+import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { newDoc, addSector, addSpawn, CAP } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { makeResolver } from '../src/lua_emit.js'
-import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph } from '../src/graphs_emit.js'
-import { emitLevel, scriptDecls, RUNTIME_SCRIPTS, MODULE_FILE } from '../src/module_emit.js'
+import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, GAME_GRAPH } from '../src/graphs_emit.js'
+import { emitLevel, emitModule, scriptDecls, moduleTxt, gameScripts, newModule, RUNTIME_SCRIPTS, MODULE_FILE } from '../src/module_emit.js'
 import { toLua } from '../src/lua.js'
 import { bake } from '../src/bake.js'
 import { ROOT } from './oracle.js'
@@ -78,6 +78,47 @@ check(bad((g) => g.links.push(['many.value', 'many.b'])).some((p) => /cycle/.tes
 check(bad((g) => { g.nodes[2].a = 'fly' }).some((p) => /no action 'fly'/.test(p)), 'CONTROL: an action the vocabulary lacks is named')
 check(bad((g) => { delete g.nodes[4].ticks }).some((p) => /needs `ticks`/.test(p)), 'CONTROL: a delay without its ticks is named')
 
+// --- pins on a verb's arguments, calls, and the game's graph -----------------------------------
+const lp = pinsOf({ type: 'action', a: 'counter_add' }, specs.get('action'), TV, GV)
+check(lp.argPins.join() === 'counter,by' && lp.dataIn.includes('by'), `an action's pinnable arguments are data inputs (${lp.argPins.join()})`)
+check(pinsOf({ type: 'condition', c: 'side_is' }, specs.get('condition'), TV, GV).argPins.every((x) => x !== 'side' && x !== 'expect_neighbour'),
+      'what the studio writes itself (a side, its guard) has no pin')
+// A level's graph: the game calls it with a value, which sets a counter's step.
+const levelGraph = { vars: {}, nodes: [
+  { id: 'heard', type: 'on_call', name: 'reward', pos: { x: 0, y: 0 } },
+  { id: 'add', type: 'action', a: 'counter_add', counter: 'gold', pos: { x: 260, y: 0 } },
+  { id: 'say', type: 'action', a: 'log', text: 'rewarded', pos: { x: 520, y: 0 } }
+], links: [['heard.then', 'add.in'], ['heard.value', 'add.by'], ['add.then', 'say.in']] }
+check(graphProblems(levelGraph, GV, TV).length === 0, `an on_call feeding an argument is clean (${graphProblems(levelGraph, GV, TV).join(' | ')})`)
+const unlinked = structuredClone(levelGraph); delete unlinked.nodes[1].counter
+unlinked.links.push(['heard.value', 'add.counter']); unlinked.links = unlinked.links.filter(([, t]) => t !== 'add.by')
+check(graphProblems(unlinked, GV, TV).length === 0, 'a required argument a link supplies needs no literal')
+unlinked.links = unlinked.links.filter(([, t]) => t !== 'add.counter')
+check(graphProblems(unlinked, GV, TV).some((p) => /needs `counter`/.test(p)), 'CONTROL: unlinked again, it is missed')
+// The game's graph: a player arrives, a counter goes up, the level is called.
+const gameGraph = { vars: { arrivals: 0 }, nodes: [
+  { id: 'came', type: 'event', event: 'on_player_enter', pos: { x: 0, y: 0 } },
+  { id: 'n', type: 'add_var', var: 'arrivals', value: 1, pos: { x: 260, y: 0 } },
+  { id: 'tell', type: 'call', to: 'level', name: 'reward', value: 5, pos: { x: 520, y: 0 } }
+], links: [['came.then', 'n.in'], ['n.then', 'tell.in'], ['came.entity', 'tell.entity']] }
+check(graphProblems(gameGraph, GV, TV, { game: true }).length === 0, `the game's graph is clean as one (${graphProblems(gameGraph, GV, TV, { game: true }).join(' | ')})`)
+check(graphProblems(gameGraph, GV, TV).some((p) => /on_player_enter/.test(p)), 'CONTROL: as a level\'s, its on_player_enter is named')
+const levelVerb = structuredClone(gameGraph)
+levelVerb.nodes.push({ id: 'lift', type: 'action', a: 'sector_move', sector: 1, surface: 'floor', offset: 2, speed: 2, pos: { x: 780, y: 0 } })
+levelVerb.links.push(['tell.then', 'lift.in'])
+check(graphProblems(levelVerb, GV, TV, { game: true }).some((p) => /acts on a level/.test(p) && /call/.test(p)), 'CONTROL: a level\'s action in the game\'s graph is named, with a call as the way')
+check(graphProblems({ nodes: [{ id: 'e', type: 'event', event: 'on_interact' }], links: [] }, GV, TV, { game: true }).some((p) => /does not reach the game/.test(p)),
+      'CONTROL: an event the game never hears is named')
+// show: the editor's, into meta.
+const shown = emitGraph({ nodes: [{ id: 'h', type: 'action', a: 'set_hp', show: ['add'], pos: { x: 1, y: 2 } }], links: [] }, 's', null).json.nodes[0]
+check(!('show' in shown) && shown.meta?.show?.[0] === 'add', 'which optional arguments the board shows goes in meta')
+// The module: shared runtimes, then the graph, as module.txt game lines.
+const gm = newModule('gg', 'gg'); gm.graph = gameGraph
+const txt = moduleTxt(gm)
+check(/^game trigger_vocab\.lua shared\ngame triggers\.lua shared\ngame graph_vocab\.lua shared\ngame graphs\.lua shared\ngame module\.graph\.json$/m.test(txt),
+      `module.txt runs the runtimes shared and then the game's graph (${gameScripts(gm).join(', ')})`)
+check(!/graph/.test(moduleTxt(newModule('p', 'p'))), 'CONTROL: a module without one says nothing of it')
+
 // --- the file ---------------------------------------------------------------------------------
 const emitted = emitMap(derive(doc), doc, [])
 const unresolved = []
@@ -121,6 +162,32 @@ if (!existsSync(TRIGGERCHECK)) {
   check(good.ok, `graphs.load takes the studio's graph:\n${good.out}`)
   const tpLoad = loads(emitGraph(tpGraph, 'tp', makeResolver(doc, emitted, { problems: [] })).json, 'tp')
   check(tpLoad.ok, `and a teleport node with its x, y, z:\n${tpLoad.out}`)
+  // The game's graph in the game VM (dnp.is_game), and a level's answering it.
+  const gameLoads = (json, name) => {
+    const f = join(dir, `${name}.lua`)
+    writeFileSync(f, [
+      'dnp = dnp or {}', 'dnp.is_game = function() return true end',
+      'dofile("maps/scripts/graph_vocab.lua")',
+      'dofile("maps/scripts/graphs.lua")',
+      `local ok, problems = graphs.load(${toLua(json)}, "${name}")`,
+      'if not ok then error(table.concat(problems or {}, "\\n")) end',
+      'triggers.load{ name = "carrier", triggers = { { name = "x", event = "on_tick", actions = { { a = "log", text = "x" } } } } }'
+    ].join('\n'))
+    const r = spawnSync(TRIGGERCHECK, ['.', f], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+    return { ok: r.status === 0, out: r.stderr + r.stdout }
+  }
+  const gl = gameLoads(emitGraph(gameGraph, 'module', null).json, 'game1')
+  check(gl.ok, `graphs.load takes the studio's game graph in the game VM:\n${gl.out}`)
+  const gbad = gameLoads(emitGraph(levelVerb, 'module', null).json, 'game2')
+  check(!gbad.ok && /acts on a level/.test(gbad.out), `CONTROL: and refuses a level's action there, as the studio said:\n${gbad.out.slice(0, 300)}`)
+  const ll = loads(emitGraph(levelGraph, 'lvl', null).json, 'lvl')
+  check(ll.ok, `a level's on_call feeding an argument loads:\n${ll.out}`)
+  const ul = structuredClone(emitGraph(levelGraph, 'lvl', null).json)
+  ul.links = ul.links.filter(([, t]) => t !== 'add.by'); ul.links.push(['heard.value', 'add.counter']); delete ul.nodes[1].counter
+  check(loads(ul, 'lvl2').ok, 'and one whose required argument comes from a link')
+  ul.links = ul.links.filter(([, t]) => t !== 'add.counter')
+  check(!loads(ul, 'lvl3').ok, 'CONTROL: refused once nothing supplies it')
+
   const broken = structuredClone(g.json)
   broken.links.push(['press.then', 'say.in'])
   check(!loads(broken, 'broken').ok, 'CONTROL: and refuses the exec exit with two links the studio named, so the load above means something')
@@ -142,6 +209,27 @@ check(r.ok && Object.keys(r.copies).some((n) => n.endsWith('.graph.json')), 'map
 const plain = { ...doc, graph: undefined, name: 'plain' }
 const rp = await emitLevel(module, plain, { bake, runtime })
 check(rp.ok && /script module\.lua/.test(rp.mapText) && !/graph/.test(rp.mapText), 'CONTROL: a map without a graph declares no graph runtime')
+
+const em = await emitModule(gm, [{ ...plain, name: 'answers', graph: levelGraph }], { bake, runtime })
+const paths = em.files.map((f) => f.path)
+check(em.ok && paths.includes(`maps/${GAME_GRAPH}`) && ['triggers.lua', 'graphs.lua', 'graph_vocab.lua', 'trigger_vocab.lua'].every((n) => paths.includes(`maps/${n}`)),
+      `the module carries its game graph and the runtimes beside it (${em.problems.map((p) => JSON.stringify(p)).join(' | ')})`)
+// The server: the game's graph runs once, and the levels keep their runtimes.
+const SERVER = join(ROOT, 'engine', 'build', 'server', 'dnp-server')
+if (!existsSync(SERVER)) console.log('graphs: no server build -- the module check is skipped')
+else if (em.ok) {
+  const dir = mkdtempSync(join(tmpdir(), 'dnp-gg-'))
+  for (const f of em.files) { const p = join(dir, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, typeof f.bytes === 'string' ? f.bytes : Buffer.from(f.bytes)) }
+  const srv = spawn(SERVER, ['--port', '34693', '--module', dir], { cwd: join(ROOT, 'engine') })
+  let log = ''
+  srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
+  await new Promise((res) => setTimeout(res, 2500))
+  srv.kill()
+  check(/module\.graph\.json \(a graph, for the whole game\)/.test(log) && /\[graphs\] module\.graph\.json: 3 nodes, 3 links/.test(log),
+        `the server runs the game's graph once (${log.split('\n').filter((l) => /graph/.test(l)).join(' | ')})`)
+  check(/level 0: \S*triggers\.lua \(declared by the map\)/.test(log) && /level 0: \S*graphs\.lua \(declared by the map\)/.test(log),
+        'and the level still runs its own trigger and graph runtimes (shared)')
+}
 
 console.log(`graphs: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

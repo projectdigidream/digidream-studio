@@ -71,6 +71,15 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
   const fx = (v) => (Number.isInteger(v) ? v : String(Number(v.toFixed(3))))
   for (const a of args) {
     if (skip.includes(a.name)) continue
+    argRows(a)
+    // The argument's own row says whose it is, for a caller that adds to it
+    // (the graph board puts the argument's data pin there).
+    const own = rows[rows.length - 1]
+    if (own && own.dataset && !own.dataset.arg) own.dataset.arg = a.name
+  }
+  return rows
+
+  function argRows (a) {
     // A PLACE: x, y (and z) together, from one tap on the floor.
     for (const [px, py, pz, what] of [['x', 'y', 'z', 'where'], ['pivot_x', 'pivot_y', null, 'turning about']]) {
       if (a.name !== px || !names.has(py) || !ctx.pickPoint) continue
@@ -90,13 +99,13 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         if (a.name === 'tag' && ctx.pickTag) {
           const i = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
           rows.push(row(label, i, button('📍', () => ctx.pickTag((t) => { if (t) set(t) }))))
-          continue
+          return
         }
         if (VFX_ARGS.has(a.name) && ctx.vfxChoices) {
           rows.push(select(label, cur === undefined || cur === null ? '' : String(cur),
                            [['', a.optional ? '(none)' : '(choose)'], ...ctx.vfxChoices()],
                            (v) => set(v === '' ? undefined : Number(v))))
-          continue
+          return
         }
         control = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
         break
@@ -108,13 +117,13 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         // A sound is picked from the module's packs and heard, not typed.
         if (ctx.soundField && (a.name === 'sound' || (a.name === 'name' && owner === 'sound'))) {
           rows.push(ctx.soundField(label, cur, (v) => set(v || undefined)))
-          continue
+          return
         }
         control = input(cur, (v) => set(v), { choices: ctx.suggest?.(a.name, owner) ?? null })
         // A THING'S NAME, from tapping one placed on the map.
         if (a.name === 'name' && THING_NAMES.has(owner) && ctx.pickThing) {
           rows.push(row(label, control, button('📍', () => ctx.pickThing((e) => { if (e) set(e.name) }))))
-          continue
+          return
         }
         break
       // A list of names, written as the comma-separated line a person types.
@@ -126,10 +135,10 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         break
       case 'bool':
         rows.push(toggle(label, !!cur, (v) => set(v)))
-        continue
+        return
       case 'enum':
         rows.push(select(label, cur ?? '', [['', a.optional ? '(default)' : '(choose)'], ...a.values], (v) => set(v || undefined)))
-        continue
+        return
       case 'sector': {
         const label2 = refLabel(cur, ctx)
         const b = button(label2, () => ctx.pickSector?.((hit) => set({ sector: hit.id })))
@@ -138,44 +147,43 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
                            (v) => { if (v) set(v) })
         sym.style.flex = '0 0 auto'
         rows.push(row(label, b, sym.lastChild))
-        continue
+        return
       }
       case 'trigger': {
         const opts = [['', '(choose)'], ...(ctx.triggers ?? []).map((t) => [t.id, t.name])]
         rows.push(select(label, cur?.trigger ?? '', opts, (v) => set(v ? { trigger: v } : undefined)))
-        continue
+        return
       }
       case 'state':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.states ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       case 'var':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.vars ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       case 'missile':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.missiles ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       case 'mob':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.mobs ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       // The weapon vocabulary's references: a pool, a weapon, a phase.
       case 'ammo':
         rows.push(select(label, cur ?? '', [['', a.optional ? '(never runs out)' : '(choose)'], ...(ctx.ammo ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       case 'weapon':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.weapons ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       case 'phase':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.phases ?? ctx.states ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       case 'prop':
         rows.push(select(label, cur ?? '', [['', a.optional ? '(any)' : '(choose)'], ...(ctx.props ?? [])], (v) => set(v || undefined)))
-        continue
+        return
       default:
-        continue                      // tables, functions: not edited here
+        return                      // tables, functions: not edited here
     }
     rows.push(row(label, control))
   }
-  return rows
 }
 
 export function refLabel (v, ctx) {
