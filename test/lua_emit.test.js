@@ -16,7 +16,7 @@ import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { emitMapLua } from '../src/lua_emit.js'
 import { Vocab } from '../src/vocab.js'
-import { door, lift, switchFor, teleport, ambush, exit, crusher } from '../src/presets.js'
+import { door, lift, switchFor, teleport, ambush, exit, crusher, slider, turntable } from '../src/presets.js'
 import { ROOT } from './oracle.js'
 
 const TRIGGERCHECK = join(ROOT, 'engine', 'build', 'lua', 'triggercheck')
@@ -62,6 +62,25 @@ check(ra.ok && ra.triggers.length === 2, `ambush on the door line fires from eit
 const rx = exit(doc, edgeOf(far, 40, 0))
 check(rx.ok, 'exit switch on the far wall')
 const rc = crusher(doc, edgeOf(hall, 16, 8), pit.id)
+
+// A platform that travels, and one that turns. Both are sector_move, which is
+// the point: `dx`/`dy` and `spin` joined the vocabulary rather than a script
+// reaching past it into sector:move_parametric.
+const slideEdge = edgeOf(hall, 0, 0)
+const rslide = slider(doc, slideEdge, liftS.id, { dx: 4, dy: 2 })
+check(rslide.ok && rslide.triggers.length === 2, `slider: a switch sends it out and it comes back (${rslide.triggers.length})`)
+check(doc.sectors[liftS.id].floorStyle.anchor === 'sector',
+      'and its flat is painted in its own frame, or it slides out from under its own pattern')
+const rturn = turntable(doc, edgeOf(hall, 16, 0), pit.id, { spin: 90 })
+check(rturn.ok && rturn.triggers.length === 1, 'turntable: one switch, one turn')
+check(doc.sectors[pit.id].floorStyle.anchor === 'sector', 'anchored for the same reason, and more so')
+{
+  const act = rturn.triggers[0].actions[0]
+  check(act.spin === 90 && act.pivot_x === undefined,
+        'the pivot is left out, because it defaults to the mean of the sector\'s own corners')
+}
+check(!slider(doc, slideEdge, liftS.id, { dx: 0, dy: 0 }).ok, 'CONTROL: a slider that travels nowhere is refused')
+
 check(rc.ok, 'crusher switch')
 const rNo = door(doc, far.id)
 check(rNo.ok && rNo.triggers.length === 3, `a door with one neighbour opens from one side (${rNo.triggers.length})`)
@@ -127,6 +146,24 @@ if (!existsSync(TRIGGERCHECK)) {
   writeFileSync(bfile, bare.text)
   const rb = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), bfile], { encoding: 'utf8' })
   check(rb.status !== 0, 'CONTROL: the runtime refuses side_is without expect_neighbour')
+
+  // PANELS, as the panel editor writes them: a layout in the table's `panels`,
+  // opened by ui_open and answered through on_ui_event + widget_is.
+  const panelDoc = { ...doc, triggers: [...doc.triggers,
+    { id: 'tp1', name: 'open shop', event: 'on_interact', actions: [{ a: 'ui_open', panel: 'shop' }] },
+    { id: 'tp2', name: 'buy', event: 'on_ui_event', conditions: [{ c: 'widget_is', widget: 2 }], actions: [{ a: 'log', text: 'bought' }] }],
+  panels: { shop: { title: 'Shop', widgets: [{ kind: 'label', id: 1, label: 'Wares' }, { kind: 'button', id: 2, label: 'Buy' },
+    { kind: 'slider', id: 3, label: 'How many', lo: 1, hi: 9, value: 3 }, { kind: 'select', id: 4, label: 'Colour', options: ['red', 'blue'] }] } } }
+  check(vocab.validateTriggers(panelDoc).length === 0, `a panel and the triggers using it validate (${vocab.validateTriggers(panelDoc).join(' | ')})`)
+  const pfile = join(dir, 'panels.lua')
+  writeFileSync(pfile, emitMapLua(panelDoc, emitted).text)
+  const rp = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), pfile], { encoding: 'utf8' })
+  check(rp.status === 0, `the runtime takes the panels as the studio writes them:\n${rp.stderr}`)
+  const missing = { ...panelDoc, panels: { other: panelDoc.panels.shop } }
+  check(vocab.validateTriggers(missing).some((m) => /no panel called "shop"/.test(m)), 'the studio names a ui_open whose panel is missing before the runtime does')
+  writeFileSync(pfile, emitMapLua(missing, emitted).text)
+  check(spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), pfile], { encoding: 'utf8' }).status !== 0,
+        'CONTROL: and refuses a ui_open naming a panel the table does not define')
 }
 
 // --- the studio's own checks say it first -----------------------------------------

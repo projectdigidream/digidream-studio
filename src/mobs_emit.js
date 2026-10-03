@@ -9,11 +9,6 @@
 //
 import { toLua, block } from './lua.js'
 
-// NOT mobs.lua: mapc copies every declared script beside the map under its
-// bare name, and the runtime is maps/scripts/mobs.lua. Two files becoming one
-// copy was found by a server that loaded the table before the runtime.
-export const MOBS_FILE = 'monsters.lua'
-
 /**
  * @param module  the module document: { id, mobs: { missiles: {}, mobs: {} } }
  * @returns the file's text, or null when the module defines nothing

@@ -99,8 +99,45 @@ export function brainRows (S, m, ctx) {
   const states = Object.keys(m.states ?? {})
   return [
     select('initial state', m.initial ?? '', [['', '(choose)'], ...states], (v) => { m.initial = v || undefined; ctx.onChange() }),
-    ...argFields(S.vocab.mob.mob_fields, m, ctx, ['states', 'vars', 'prop', 'initial'])
+    ...argFields(S.vocab.mob.mob_fields, m, ctx, ['states', 'vars', 'prop', 'initial', 'drops']),
+    ...dropsRows(S, m, ctx)
   ]
+}
+
+/**
+ * What the monster leaves where it dies (mob_vocab's `drops`): a list of
+ * entries, each an item placed every time, or ONE of weighted choices -- a
+ * choice with no item is nothing, which is how a drop is made a chance.
+ * The fields come from the vocabulary (drop_fields, drop_choice_fields).
+ */
+export function dropsRows (S, m, ctx) {
+  const V = S.vocab.mob
+  if (!V.drop_fields) return []
+  const changed = () => { if (m.drops && !m.drops.length) delete m.drops; ctx.onChange() }
+  const rows = [el('div', { class: 'st-section-head', text: '🎁 drops' })]
+  ;(m.drops ?? []).forEach((d, i) => {
+    const body = [...argFields(V.drop_fields, d, { ...ctx, onChange: changed }, ['one_of'])]
+    if (d.one_of) {
+      body.push(muted('one of these, by weight:'))
+      d.one_of.forEach((c, j) => {
+        body.push(el('div', { class: 'st-card' }, [
+          ...argFields(V.drop_choice_fields ?? [], c, { ...ctx, onChange: changed }),
+          button('✕ choice', () => { d.one_of.splice(j, 1); if (!d.one_of.length) delete d.one_of; changed() })
+        ]))
+      })
+      const total = d.one_of.reduce((n, c) => n + (c.weight ?? 0), 0)
+      const none = d.one_of.filter((c) => !c.item).reduce((n, c) => n + (c.weight ?? 0), 0)
+      if (total > 0) body.push(muted(`Something drops ${Math.round(100 * (total - none) / total)}% of the time.`))
+    }
+    body.push(el('div', { class: 'st-row' }, [
+      button('+ weighted choice', () => { delete d.item; (d.one_of ??= []).push({ weight: 1 }); changed() }),
+      button('✕ drop', () => { m.drops.splice(i, 1); changed() }, 'st-danger')
+    ]))
+    rows.push(el('div', { class: 'st-card' }, body))
+  })
+  rows.push(button('+ drop', () => { (m.drops ??= []).push({ item: S.propNames?.()[0] }); changed() }))
+  rows.push(muted('An item is a catalogue name. Several of one are spread round the body; a choice with no item is nothing.'))
+  return rows
 }
 
 export function varsRows (m, changed) {
@@ -115,11 +152,24 @@ export function varsRows (m, changed) {
   ]
 }
 
-/** One state: its fields, its transitions with their conditions, its sequence. */
-export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null } = {}) {
-  const vocab = S.vocab
-  const states = Object.keys(m.states ?? {})
-  const rows = [...argFields(vocab.mob.state_fields, st, ctx, ['sequence', 'transitions'])]
+/**
+ * One node of a graph: its fields, its transitions with their conditions, and
+ * its sequence.
+ *
+ * A monster's state and a weapon's phase are the same shape (see graph.js), so
+ * this takes the vocabulary to read rather than assuming the mob's -- which is
+ * the whole of what it took to make one editor serve both.
+ */
+export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null, vocab: V = null, nodes = 'states', skip = [] } = {}) {
+  const spec = V ?? {
+    fields: S.vocab.mob.state_fields,
+    conditions: S.vocab.mob.conditions,
+    actions: S.vocab.mob.actions,
+    conditionSpec: (n) => S.vocab.mobConditions.get(n),
+    actionSpec: (n) => S.vocab.mobActions.get(n)
+  }
+  const states = Object.keys(m[nodes] ?? {})
+  const rows = [...argFields(spec.fields, st, ctx, ['sequence', 'transitions', ...skip])]
   rows.push(el('div', { class: 'st-section-head st-if', text: '❓ go to … when all of …' }))
   ;(st.transitions ?? []).forEach((tr, i) => {
     const trRows = [el('div', { class: 'st-row' }, [
@@ -127,15 +177,15 @@ export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null 
       button('✕', () => { st.transitions.splice(i, 1); changed() })
     ])]
     ;(tr.when ?? []).forEach((c, j) => {
-      const spec = vocab.mobConditions.get(c.cond)
+      const cspec = spec.conditionSpec(c.cond)
       trRows.push(el('div', { class: 'st-row' }, [
         el('span', { class: 'st-entry', text: c.cond }),
         toggle('', !!c.negate, (v) => { c.negate = v || undefined; changed() }).lastChild, muted('not'),
         button('✕', () => { tr.when.splice(j, 1); changed() })
       ]))
-      if (spec) trRows.push(...argFields(spec.args ?? [], c, ctx, ['fn']))
+      if (cspec) trRows.push(...argFields(cspec.args ?? [], c, ctx, ['fn']))
     })
-    trRows.push(select('add when', '', [['', '…'], ...vocab.mob.conditions.map((c) => [c.name, c.name])],
+    trRows.push(select('add when', '', [['', '…'], ...spec.conditions.map((c) => [c.name, c.name])],
                        (v) => { if (v) { (tr.when ??= []).push({ cond: v }); changed() } }))
     rows.push(el('div', { class: 'st-card', 'data-transition': String(i) }, trRows))
   })
@@ -145,16 +195,16 @@ export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null 
   ]))
   rows.push(el('div', { class: 'st-section-head st-then', text: '▶ at tick … do …' }))
   ;(st.sequence ?? []).forEach((step, i) => {
-    const spec = vocab.mobActions.get(step.action)
+    const aspec = spec.actionSpec(step.action)
     const stRows = [el('div', { class: 'st-row' }, [
       number('at', step.at ?? 0, { min: 0, max: 600, step: 1 }, (v) => { step.at = Math.round(v); changed() }).lastChild,
       el('span', { class: 'st-entry', text: step.action }),
       button('✕', () => { st.sequence.splice(i, 1); changed() })
     ])]
-    if (spec) stRows.push(...argFields(spec.args ?? [], step, ctx, ['fn']))
+    if (aspec) stRows.push(...argFields(aspec.args ?? [], step, ctx, ['fn'], step.action))
     rows.push(el('div', { class: 'st-card' }, stRows))
   })
-  rows.push(select('add step', '', [['', '…'], ...vocab.mob.actions.map((a) => [a.name, a.name])],
+  rows.push(select('add step', '', [['', '…'], ...spec.actions.map((a) => [a.name, a.name])],
                    (v) => { if (v) { (st.sequence ??= []).push({ at: 0, action: v }); changed() } }))
   return rows
 }
@@ -173,7 +223,7 @@ export function missilesSection (S, changed) {
         const spec = vocab.mobActions.get(act.action)
         r.push(el('div', { class: 'st-card' }, [
           el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: act.action }), button('✕', () => { ms[list].splice(i, 1); changed() })]),
-          ...(spec ? argFields(spec.args ?? [], act, ctx, ['fn']) : [])
+          ...(spec ? argFields(spec.args ?? [], act, ctx, ['fn'], act.action) : [])
         ]))
       })
       r.push(select(`add ${list}`, '', [['', '…'], ...vocab.mob.actions.map((a) => [a.name, a.name])],

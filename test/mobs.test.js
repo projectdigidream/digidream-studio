@@ -119,6 +119,16 @@ const jit = structuredClone(module2.mobs); delete jit.mobs.hunter.states.look.ti
 check(vocab.validateMobs(jit, { props: catalogue }).some((m) => /`ticks_jitter` and so needs `ticks`/.test(m)), 'CONTROL: ticks_jitter without ticks is named')
 const kind = structuredClone(module2.mobs); kind.mobs.hunter.states.look.transitions[0].when[0].kind = 'ghost'
 check(vocab.validateMobs(kind, { props: catalogue }).some((m) => /`kind` should be one of player, mob, prop/.test(m)), 'CONTROL: a target kind the vocabulary lacks is named')
+// THE SWEPT COLLIDER. A monster's claw is the same engine facility a player's
+// fist is, so it has the same fields and the same rule about damage.
+hunter.swing = { damage: 12, reach: '1.75', half_arc: [1, 8], sweep_from: [-1, 8], sweep_to: [1, 8], ticks: 12, cooldown: 24, hit_vfx: 10 }
+hunter.blood = 14
+hunter.states.attack.sequence.push({ at: 6, action: 'swing' })
+check(vocab.validateMobs(module2.mobs, { props: catalogue }).length === 0,
+      `a monster that swings validates (${vocab.validateMobs(module2.mobs, { props: catalogue }).join(' | ')})`)
+const noDmg = structuredClone(module2.mobs)
+delete noDmg.mobs.hunter.swing.damage
+check(vocab.validateMobs(noDmg, { props: catalogue }).some((m) => /swing: needs `damage`/.test(m)), 'CONTROL: a swing with no damage is named')
 const lua2 = emitMobsLua(module2)
 
 // The validator's own rules, each the runtime's.
@@ -155,6 +165,20 @@ if (!existsSync(LUAJIT)) {
   writeFileSync(bfile, emitMobsLua({ id: 'x', mobs: broken }))
   const rb = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', bfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
   check(rb.status !== 0, 'CONTROL: the runtime refuses the corpse with no death state too')
+
+  // DROPS, as the drop editor writes them: an item every time, and one of
+  // weighted choices where a choice with no item is nothing.
+  const dropper = structuredClone(module)
+  const spirit = Object.values(dropper.mobs.mobs)[0]
+  spirit.drops = [{ item: 'spirit', count: 2 }, { one_of: [{ item: 'spirit', weight: 1 }, { weight: 3 }] }]
+  const dfile = join(dir, 'drops.lua')
+  writeFileSync(dfile, emitMobsLua(dropper))
+  const rd = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', dfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+  check(rd.status === 0 && /0 problems/.test(rd.stdout), `the runtime accepts a drop table as the studio writes it:\n${rd.stdout}${rd.stderr}`)
+  spirit.drops = [{ one_of: [{ item: 'spirit', weight: 0 }] }]
+  writeFileSync(dfile, emitMobsLua(dropper))
+  check(spawnSync(LUAJIT, ['tools/mobcheck/check.lua', dfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' }).status !== 0,
+        'CONTROL: and refuses a choice with no weight, so the check above is not passing everything')
 }
 
 // --- the body ---------------------------------------------------------------------

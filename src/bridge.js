@@ -38,6 +38,31 @@ export const shell = {
     return true
   },
 
+  /**
+   * Ask for several files at once: [{ name, bytes }], empty when cancelled.
+   * Where the shell's picker takes one, it asks for one.
+   */
+  importFiles: async (accept = '') => {
+    const n = native()
+    if (n) { if (n.importFiles) return n.importFiles(accept); const one = await n.importFile(accept); return one ? [one] : [] }
+    return new Promise((resolve) => {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.multiple = true
+      if (accept) input.accept = accept
+      input.style.display = 'none'
+      document.body.appendChild(input)
+      input.onchange = async () => {
+        const out = []
+        for (const f of input.files ?? []) out.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })
+        input.remove()
+        resolve(out)
+      }
+      input.oncancel = () => { input.remove(); resolve([]) }
+      input.click()
+    })
+  },
+
   /** Ask the user for a file: { name, bytes } or null. */
   importFile: async (accept = '') => {
     const n = native()

@@ -23,6 +23,13 @@ export class History {
     this.current = structuredClone(doc)
   }
 
+  /**
+   * The present changed in a way this history does not undo -- the map was
+   * edited under the module's history -- so the next step it records starts
+   * from what is there now, not from what it last saw.
+   */
+  replace (doc) { this.current = structuredClone(doc) }
+
   get canUndo () { return this.past.length > 0 }
   get canRedo () { return this.future.length > 0 }
 

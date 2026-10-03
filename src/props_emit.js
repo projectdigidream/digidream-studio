@@ -19,12 +19,52 @@
 // short of where a double starts inventing digits.
 const num = (v) => Number(Number(v).toFixed(6)).toString()
 
+// The particle and tracer kinds, exactly as client/src/render/vfx.js parses
+// them. ONE LINE EACH and no continuation: a wrapped entry keeps the
+// attributes before the break and loses every one after it, without a warning.
+//
+// Written in the parser's own order so two modules' catalogues diff cleanly.
+const VFX_NUM = [
+  ['count', 'count'], ['life', 'life'], ['life_var', 'lifeVar'],
+  ['speed', 'speed'], ['speed_var', 'speedVar'], ['cone', 'cone'],
+  ['gravity', 'gravity'], ['drag', 'drag'], ['size', 'size'], ['size_end', 'sizeEnd'],
+  ['attach', 'attach'], ['rate', 'rate'], ['linger', 'linger']
+]
+const hex6 = (n) => (Number(n) >>> 0).toString(16).padStart(6, '0')
+
+/** One `vfx` record: a burst of particles, or a tracer. */
+export function vfxLine (v) {
+  if (v.type === 'tracer') {
+    return `vfx ${v.id} tracer colour ${hex6(v.colour ?? 0xffdd55)} width ${num(v.width ?? 0.04)} life ${num(v.life ?? 0.12)}`
+  }
+  const out = [`vfx ${v.id} particles`]
+  for (const [word, key] of VFX_NUM) {
+    // An attached emitter counts nothing and a one-shot burst has no rate, so
+    // neither writes the other's fields: a line that says both is a line whose
+    // reader has to guess which was meant.
+    if (v.attach ? (key === 'count') : (key === 'rate' || key === 'linger' || key === 'attach')) continue
+    if (v[key] === undefined || v[key] === null) continue
+    out.push(`${word} ${num(v[key])}`)
+  }
+  out.push(`colour ${hex6(v.colour ?? 0xffaa33)}`)
+  out.push(`colour_end ${hex6(v.colourEnd ?? 0x662200)}`)
+  if (v.blend === 'alpha') out.push('blend alpha')
+  return out.join(' ')
+}
+
 export function emitProps (module) {
   const L = [
     `# props.txt -- written by the studio for module ${module.id}.`,
     `# Ids ${module.propIdBase}.. are this module's; the studio hands them out.`,
     ''
   ]
+  const vfx = [...(module.vfx ?? [])].sort((a, b) => a.id - b.id)
+  if (vfx.length) {
+    L.push('# Transient visuals: bursts of particles and tracers. Drawn entirely by')
+    L.push('# the client -- none of this crosses the wire or enters a hash.')
+    for (const v of vfx) L.push(vfxLine(v))
+    L.push('')
+  }
   for (const p of module.props ?? []) {
     const rec = [`prop ${p.id} ${p.name} radius ${num(p.radius)} height ${num(p.height)}`]
     if (p.speed) rec.push(`speed ${num(p.speed)}`)
@@ -51,6 +91,22 @@ export function emitProps (module) {
         rec2.push(`frames ${s.frames.join(',')}`)
         L.push(rec2.join(' '))
       }
+    }
+    L.push('')
+  }
+
+  // WHICH RECORD DRAWS A PLAYER. A line rather than a record of its own,
+  // because a player is kind 0 on the wire and kind 0 is structurally "no
+  // prop" in both readers -- so the art is an ordinary record and only its
+  // addressing is special (assets/props.txt).
+  const player = module.player
+  const avatar = player && (module.props ?? []).find((p) => p.name === player.prop)
+  if (avatar) {
+    L.push("# The player's own art.")
+    L.push(`avatar ${avatar.id}${player.blend ? ` blend ${num(player.blend)}` : ''}`)
+    for (const [cond, state] of Object.entries(player.when ?? {})) {
+      if (state === undefined || state === null || state === '') continue
+      L.push(`avatar ${avatar.id} when ${cond} state ${Math.round(state)}`)
     }
     L.push('')
   }

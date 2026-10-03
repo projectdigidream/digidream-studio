@@ -13,13 +13,31 @@
 // own orientation means it never has to reverse anything, and the side that
 // starts at corner i is the side that starts at corner i all the way down.
 //
-import { RES } from './doc.js'
+import { RES, DEFAULT_BODY } from './doc.js'
 
 /** A dyadic number as mapc reads it: exact, no exponent, no trailing zeros. */
 export const num = (v) => {
   const s = (Math.round(v * RES) / RES).toString()
   if (s.includes('e')) throw new Error(`number out of range for a map: ${v}`)
   return s
+}
+
+// --- sector effects (docs/SECTOR_FX.md) -------------------------------------------
+
+/** A value as an `fx` line takes it: a colour as six hex digits, a number exactly. */
+export function fxWord (key, v) {
+  if (key === 'color') {
+    const n = typeof v === 'number' ? v : parseInt(String(v).replace(/^#/, ''), 16)
+    return (n >>> 0).toString(16).padStart(6, '0').slice(-6)
+  }
+  const s = String(Number(Number(v).toFixed(4)))
+  if (s.includes('e') || !Number.isFinite(Number(v))) throw new Error(`fx ${key}: ${v} is not a number a map can hold`)
+  return s
+}
+
+/** The `fx` lines of one sector, in the order they were added. */
+export function fxLines (fx = []) {
+  return fx.map((e) => ['fx', e.kind, ...Object.entries(e.params ?? {}).flatMap(([k, v]) => [k, fxWord(k, v)])].join(' '))
 }
 
 function area2 (verts) {
@@ -29,6 +47,19 @@ function area2 (verts) {
     a += p.x * q.y - q.x * p.y
   }
   return a
+}
+
+/** `floorangle 30 floorscale 1.5` -- one prefix for the surface, one suffix for the attribute. */
+function styleWords (prefix, st) {
+  if (!st) return []
+  const out = []
+  if (st.angle) out.push(`${prefix}angle ${num(st.angle)}`)
+  if (st.offX) out.push(`${prefix}offx ${num(st.offX)}`)
+  if (st.offY) out.push(`${prefix}offy ${num(st.offY)}`)
+  if (st.scale !== undefined && st.scale !== 1) out.push(`${prefix}scale ${num(st.scale)}`)
+  if (st.alpha !== undefined && st.alpha !== 255) out.push(`${prefix}alpha ${Math.round(st.alpha)}`)
+  if (st.anchor === 'sector') out.push(`${prefix}anchor sector`)
+  return out
 }
 
 function vertexLine (v, sectorIndex, indent) {
@@ -44,6 +75,9 @@ function vertexLine (v, sectorIndex, indent) {
   if (e.yoff) w.push(`yoff ${num(e.yoff)}`)
   if (e.unpegUpper) w.push('unpeg-upper')
   if (e.unpegLower) w.push('unpeg-lower')
+  // A GRATE. 255 is the solid sheet, and writing it would be saying nothing at
+  // more length -- and would fold a default into the map's hash.
+  if (e.alpha !== undefined && e.alpha !== 255) w.push(`alpha ${Math.round(e.alpha)}`)
   return w.join(' ')
 }
 
@@ -57,7 +91,7 @@ function vertexLine (v, sectorIndex, indent) {
  *                                             a neighbour's edge or a hole rim
  *            sides: [{ index, sector, neighbor, edge, a, b }] }
  */
-export function emitMap (derived, doc, scripts = []) {
+export function emitMap (derived, doc, scripts = [], { body = doc.body ?? DEFAULT_BODY } = {}) {
   const L = []
   const sectorIndex = new Map(derived.sectors.map((s, i) => [s.id, i]))
   const sideIndex = new Map()
@@ -68,13 +102,15 @@ export function emitMap (derived, doc, scripts = []) {
   L.push(`# ${doc.name}.map -- written by the studio from ${doc.name}.studio.json.`)
   L.push('# Edit the level there; this file is rewritten on every bake.')
   L.push('')
-  L.push(`body radius ${num(doc.body.radius)} height ${num(doc.body.height)}`)
+  L.push(`body radius ${num(body.radius)} height ${num(body.height)}`)
   L.push(`texscale ${num(doc.texscale)}`)
   if (scripts.length) {
     L.push('')
     for (const s of scripts) L.push(`script ${s}`)
   }
 
+  // 1-based .map line number -> { sector, edge? }, for the lines of sector blocks.
+  const lineOwner = []
   let side = 0
   for (const s of derived.sectors) {
     if (s.verts.length < 3) continue
@@ -85,7 +121,20 @@ export function emitMap (derived, doc, scripts = []) {
     if (s.thickness) head.push(`thickness ${num(s.thickness)}`)
     if (s.floorTex) head.push(`floortex ${s.floorTex}`)
     if (s.ceilTex) head.push(`ceiltex ${s.ceilTex}`)
+    // WRITTEN ONLY WHEN IT SAYS SOMETHING. The map's content hash folds a
+    // surface style in only when it differs from the default, so a map that
+    // has never touched one hashes exactly as it did before these existed --
+    // which is what lets an older module keep its soundtrack, keyed by that
+    // hash, without a re-bake.
+    head.push(...styleWords('floor', s.floorStyle))
+    head.push(...styleWords('ceil', s.ceilStyle))
     L.push(head.join(' '))
+    // Every line of the block is the sector's, so a mapc error by line
+    // number can be traced back to the room it is about (problems.js).
+    const first = L.length
+    // Effects right after the head, before the vertices (docs/SECTOR_FX.md 5).
+    // A map with none is written, and hashed, exactly as before they existed.
+    for (const line of fxLines(s.fx)) L.push(`  ${line}`)
 
     // Reversing here would move every edge to a different corner and break
     // the side indices this function promises, so a wrong winding is a bug
@@ -99,6 +148,7 @@ export function emitMap (derived, doc, scripts = []) {
       loop.forEach((v, i) => {
         const q = loop[(i + 1) % loop.length]
         L.push(vertexLine(v, sectorIndex, indent))
+        lineOwner[L.length] = { sector: s.id, edge: v.edge.id }
         const rec = { index: side, sector: s.id, neighbor: v.neighbor, edge: v.edge, a: v, b: q }
         sides.push(rec)
         byKey.set(`${v.x},${v.y}>${q.x},${q.y}`, rec)
@@ -108,6 +158,7 @@ export function emitMap (derived, doc, scripts = []) {
       if (li > 0) L.push('  end')
     })
     L.push('end')
+    for (let n = first; n <= L.length; n++) lineOwner[n] ??= { sector: s.id }
   }
 
   for (const rec of sides) {
@@ -123,6 +174,19 @@ export function emitMap (derived, doc, scripts = []) {
     L.push(`light ${num(l.x)} ${num(l.y)} ${num(l.z)} color ${l.r} ${l.g} ${l.b} ` +
            `radius ${num(l.radius)} intensity ${num(l.intensity)}`)
   }
+  // Camera paths, at file scope (docs/MAP_AUTHOR.md). `waypoint` is the same
+  // word a rail uses and means the same thing; which block is open decides
+  // where the point goes. The anchor is left to mapc, which infers it from the
+  // sector each point falls in -- unless the path asked to be world-fixed.
+  for (const p of doc.paths ?? []) {
+    if (p.points.length < 2) continue
+    L.push('')
+    L.push(`path tag ${p.tag}${p.loop ? ' loop' : ''}`)
+    for (const pt of p.points) {
+      L.push(`  waypoint ${num(pt.x)} ${num(pt.y)} ${num(pt.z)}${p.anchored === false ? ' anchor none' : ''}`)
+    }
+    L.push('end')
+  }
   L.push('')
-  return { text: L.join('\n'), sectorIndex, sideIndex, twinIndex, sides }
+  return { text: L.join('\n'), sectorIndex, sideIndex, twinIndex, sides, lineOwner }
 }

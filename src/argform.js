@@ -24,9 +24,18 @@ export function showFx (v) {
   return v === undefined || v === null ? '' : String(v)
 }
 
-function input (value, onChange, { placeholder = '', type = 'text' } = {}) {
+let listSeq = 0
+function input (value, onChange, { placeholder = '', type = 'text', choices = null } = {}) {
   const i = el('input', { type, value: value ?? '', placeholder })
   i.addEventListener('change', () => onChange(i.value))
+  // Names the studio knows -- the bank's sounds, the sheets' frames -- offered
+  // as the field is typed in, and never enforced: a name from another module
+  // loaded beside this one is still a name.
+  if (choices && choices.length) {
+    const id = `st-choices-${++listSeq}`
+    i.setAttribute('list', id)
+    return el('span', { class: 'st-choice' }, [i, el('datalist', { id }, choices.map((c) => el('option', { value: c })))])
+  }
   return i
 }
 
@@ -35,19 +44,60 @@ function input (value, onChange, { placeholder = '', type = 'text' } = {}) {
  * @param obj    the object being edited (a condition, an action, a state ...)
  * @param ctx    { onChange(), pickSector(cb), pickEdge(cb), triggers: [{id,name}],
  *                 states: [names], vars: [names], missiles: [names], mobs: [names],
- *                 props: [names] -- the catalogue's records, for a `prop` argument }
+ *                 props: [names] -- the catalogue's records, for a `prop` argument,
+ *                 vfxChoices() -> [[id, label]] -- particle kinds, for the ints that name one,
+ *                 suggest(argName, owner) -> [names] | null -- what a string field might hold,
+ *                 soundField(label, value, onChange) -> row -- the picker for a sound's name,
+ *                 pickTag(cb) / pickPoint(cb) / pickThing(cb) -- a tag, a place or a thing
+ *                 tapped on the map (S.mapPickers) }
  * @param skip   argument names handled elsewhere
+ * @param owner  the entry these arguments belong to ('sound', 'ui_open' ...), so
+ *               a `name` can mean a sound in one place and nothing in another
  */
-export function argFields (args, obj, ctx, skip = []) {
+// The arguments that are a PARTICLE KIND rather than a plain number. Every
+// vocabulary types them `int`, because to the runtime that is all they are --
+// the catalogue says what a 12 looks like and nothing else does. Recognised by
+// name here so the studio can offer the kinds it has instead of asking someone
+// to remember which number was the green blood.
+const VFX_ARGS = new Set(['hit_vfx', 'kind', 'effect', 'tracer', 'blood'])
+
+// Arguments that name a THING by its catalogue name, which can be taken from
+// one placed on the map.
+const THING_NAMES = new Set(['entity_kind_is', 'target_name_is', 'spawn_prop', 'spawn_enemy'])
+
+export function argFields (args, obj, ctx, skip = [], owner = null) {
   const rows = []
+  const names = new Set(args.map((a) => a.name))
+  const fx = (v) => (Number.isInteger(v) ? v : String(Number(v.toFixed(3))))
   for (const a of args) {
     if (skip.includes(a.name)) continue
+    // A PLACE: x, y (and z) together, from one tap on the floor.
+    for (const [px, py, pz, what] of [['x', 'y', 'z', 'where'], ['pivot_x', 'pivot_y', null, 'turning about']]) {
+      if (a.name !== px || !names.has(py) || !ctx.pickPoint) continue
+      rows.push(row(`📍 ${what}`, button('pick a point on the map', () => ctx.pickPoint((p) => {
+        obj[px] = fx(p.x); obj[py] = fx(p.y)
+        if (pz && names.has(pz)) obj[pz] = fx(p.z ?? 0)
+        ctx.onChange()
+      }))))
+    }
     const label = a.optional ? `${a.name}?` : a.name
     const set = (v) => { if (v === undefined || v === '' || v === null) delete obj[a.name]; else obj[a.name] = v; ctx.onChange() }
     const cur = obj[a.name]
     let control
     switch (a.type) {
       case 'int':
+        // A ROOM'S TAG, from tapping the room (which is given one if it has none).
+        if (a.name === 'tag' && ctx.pickTag) {
+          const i = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
+          rows.push(row(label, i, button('📍', () => ctx.pickTag((t) => { if (t) set(t) }))))
+          continue
+        }
+        if (VFX_ARGS.has(a.name) && ctx.vfxChoices) {
+          rows.push(select(label, cur === undefined || cur === null ? '' : String(cur),
+                           [['', a.optional ? '(none)' : '(choose)'], ...ctx.vfxChoices()],
+                           (v) => set(v === '' ? undefined : Number(v))))
+          continue
+        }
         control = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
         break
       case 'fx':
@@ -55,7 +105,24 @@ export function argFields (args, obj, ctx, skip = []) {
                         { placeholder: 'e.g. 0.25 or -4/48' })
         break
       case 'string': case 'value':
-        control = input(cur, (v) => set(v))
+        // A sound is picked from the module's packs and heard, not typed.
+        if (ctx.soundField && (a.name === 'sound' || (a.name === 'name' && owner === 'sound'))) {
+          rows.push(ctx.soundField(label, cur, (v) => set(v || undefined)))
+          continue
+        }
+        control = input(cur, (v) => set(v), { choices: ctx.suggest?.(a.name, owner) ?? null })
+        // A THING'S NAME, from tapping one placed on the map.
+        if (a.name === 'name' && THING_NAMES.has(owner) && ctx.pickThing) {
+          rows.push(row(label, control, button('📍', () => ctx.pickThing((e) => { if (e) set(e.name) }))))
+          continue
+        }
+        break
+      // A list of names, written as the comma-separated line a person types.
+      case 'string_list':
+        control = input(Array.isArray(cur) ? cur.join(', ') : '', (v) => {
+          const list = v.split(',').map((x) => x.trim()).filter(Boolean)
+          set(list.length ? list : undefined)
+        }, { placeholder: 'red, green, blue' })
         break
       case 'bool':
         rows.push(toggle(label, !!cur, (v) => set(v)))
@@ -89,6 +156,16 @@ export function argFields (args, obj, ctx, skip = []) {
         continue
       case 'mob':
         rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.mobs ?? [])], (v) => set(v || undefined)))
+        continue
+      // The weapon vocabulary's references: a pool, a weapon, a phase.
+      case 'ammo':
+        rows.push(select(label, cur ?? '', [['', a.optional ? '(never runs out)' : '(choose)'], ...(ctx.ammo ?? [])], (v) => set(v || undefined)))
+        continue
+      case 'weapon':
+        rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.weapons ?? [])], (v) => set(v || undefined)))
+        continue
+      case 'phase':
+        rows.push(select(label, cur ?? '', [['', '(choose)'], ...(ctx.phases ?? ctx.states ?? [])], (v) => set(v || undefined)))
         continue
       case 'prop':
         rows.push(select(label, cur ?? '', [['', a.optional ? '(any)' : '(choose)'], ...(ctx.props ?? [])], (v) => set(v || undefined)))

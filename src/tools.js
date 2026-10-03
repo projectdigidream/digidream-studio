@@ -7,7 +7,7 @@
 // which sector is under a point -- is done in document space; the viewport
 // only turns pixels into ground coordinates and back.
 //
-import { addSector, addSpawn, addLight, addEntity, snap, newId, newEdge } from './doc.js'
+import { addSector, addSpawn, addLight, addEntity, addPathPoint, snap, newId, newEdge } from './doc.js'
 import { sectorAt, snapToMap } from './topology.js'
 
 const HIT_PX = 14
@@ -110,6 +110,19 @@ export function hitTest (S, info) {
 
 export function onTap (S, info) {
   if (S.pick) {
+    // A POINT: wherever the floor is tapped, on the grid, at that room's floor.
+    if (S.pick.kinds.includes('point')) {
+      const g0 = groundAt(S, info, 0)
+      const room = g0 ? sectorAt(S.doc, g0.x, g0.y) : null
+      const g = room ? groundAt(S, info, room.floor) ?? g0 : g0
+      if (g) {
+        const step = S.doc.grid || 0.25
+        const snapTo = (v) => Math.round(v / step) * step
+        const p = S.pick; S.pick = null; S.redraw()
+        p.resolve({ kind: 'point', x: snapTo(g.x), y: snapTo(g.y), z: room?.floor ?? 0, sectorId: room?.id ?? null })
+        return
+      }
+    }
     const hit = hitTest(S, info)
     if (hit && S.pick.kinds.includes(hit.kind)) { const p = S.pick; S.pick = null; S.redraw(); p.resolve(hit); return }
     S.status(`tap ${S.pick.kinds.join(' or ')}`, 'warn')
@@ -124,6 +137,7 @@ export function onTap (S, info) {
       return
     }
     case 'room': return roomTap(S, info)
+    case 'path': return pathTap(S, info)
     case 'place': return placeTap(S, info)
     case 'trigger': {
       const hit = hitTest(S, info)
@@ -145,6 +159,37 @@ function roomTap (S, info) {
   if (d.corners.some((c) => c.x === x && c.y === y)) return
   d.corners.push({ x, y })
   S.redraw()
+}
+
+/**
+ * Another point on the camera path being edited, at the end of it.
+ *
+ * On the WORK plane, not the floor: a camera path is usually above head
+ * height, and a point dropped on the floor of the room below is a shot through
+ * the carpet. The height comes from the path's last point, so a path stays at
+ * the height it was started at.
+ */
+function pathTap (S, info) {
+  const p = S.editedPath()
+  if (!p) { S.status('no camera path being edited', 'warn'); return }
+  // A TAP ON A POINT PICKS IT rather than dropping a second one on top of it,
+  // which is what a tap there used to do -- and the height of the one you
+  // picked is what the sheet then edits.
+  const f = S.viewport.pickFurniture(info.x, info.y)
+  if (f?.kind === 'pathpoint' && p.points.some((q) => q.id === f.id)) {
+    S.selectPathPoint(f.id)
+    return
+  }
+  // At the height of the point last worked on, or of the last one placed: a
+  // camera path is usually above head height, and a point dropped on the floor
+  // of the room below is a shot through the carpet.
+  const sel = p.points.find((q) => q.id === S.pathPointSel)
+  const z = sel ? sel.z : (p.points.length ? p.points[p.points.length - 1].z : S.workZ())
+  const g = groundAt(S, info, z)
+  if (!g) return
+  const pt = addPathPoint(S.doc, p, snap(g.x, 1 / 8), snap(g.y, 1 / 8), z)
+  S.selectPathPoint(pt.id, { quiet: true })
+  S.commit()
 }
 
 export function finishRoom (S) {
@@ -197,6 +242,16 @@ export function onDragStart (S, info) {
     S.drag = { kind: 'pan', last: { x: info.x, y: info.y } }
     return
   }
+  // A path point is dragged with the path tool, where a tap would otherwise
+  // add a point on top of it.
+  if (S.tool === 'path') {
+    const f = S.viewport.pickFurniture(info.x, info.y)
+    const p = S.editedPath()
+    const pt = f?.kind === 'pathpoint' && p ? p.points.find((x) => x.id === f.id) : null
+    if (pt) { S.selectPathPoint(pt.id, { quiet: true }); S.drag = { kind: 'pathpoint', pt, start: { x: pt.x, y: pt.y }, from: groundAt(S, info, pt.z) } }
+    else S.drag = { kind: 'pan', last: { x: info.x, y: info.y } }
+    return
+  }
   const hit = S.tool === 'select' ? hitTest(S, info) : null
   const g = groundAt(S, info, 0)
   if (hit?.kind === 'vertex' && hit.sectorId) {
@@ -230,7 +285,7 @@ export function onDrag (S, info) {
     d.last = { x: info.x, y: info.y }
     return
   }
-  const z = d.kind === 'vertex' || d.kind === 'sector' ? d.s.floor : 0
+  const z = d.kind === 'vertex' || d.kind === 'sector' ? d.s.floor : d.kind === 'pathpoint' ? d.pt.z : 0
   const g = groundAt(S, info, z)
   if (!g || !d.from) return
   const dx = g.x - d.from.x; const dy = g.y - d.from.y
@@ -243,6 +298,8 @@ export function onDrag (S, info) {
     d.s.verts.forEach((v, i) => { v.x = d.start[i].x + sx; v.y = d.start[i].y + sy })
   } else if (d.kind === 'thing') {
     d.e.x = snap(d.start.x + dx, 1 / 8); d.e.y = snap(d.start.y + dy, 1 / 8)
+  } else if (d.kind === 'pathpoint') {
+    d.pt.x = snap(d.start.x + dx, 1 / 8); d.pt.y = snap(d.start.y + dy, 1 / 8)
   }
   S.redraw()
   // Reshape the one sector on the loaded map; a bake only when that cannot
@@ -270,6 +327,7 @@ export function onDragEnd (S, info, cancelled) {
     if (d.kind === 'vertex') { d.v.x = d.start.x; d.v.y = d.start.y }
     else if (d.kind === 'sector') d.s.verts.forEach((v, i) => { v.x = d.start[i].x; v.y = d.start[i].y })
     else if (d.kind === 'thing') { d.e.x = d.start.x; d.e.y = d.start.y }
+    else if (d.kind === 'pathpoint') { d.pt.x = d.start.x; d.pt.y = d.start.y }
     S.redraw(); S.previewNow()
     return
   }
@@ -282,6 +340,17 @@ export function onDragEnd (S, info, cancelled) {
 }
 
 export function onLongPress (S, info) {
+  // A path's point is removed by holding it, the way a sector's corner is.
+  if (S.tool === 'path') {
+    const f = S.viewport.pickFurniture(info.x, info.y)
+    const p = S.editedPath()
+    if (f?.kind === 'pathpoint' && p) {
+      p.points = p.points.filter((x) => x.id !== f.id)
+      if (S.pathPointSel === f.id) S.pathPointSel = null
+      S.commit()
+    }
+    return
+  }
   const hit = hitTest(S, info)
   if (!hit) return
   if (hit.kind === 'vertex' && hit.sectorId) {

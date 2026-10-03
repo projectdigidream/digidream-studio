@@ -10,7 +10,10 @@
 const STYLE = `
 .st-layer{position:fixed;inset:0;pointer-events:none;z-index:50;
   font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e8f0ff}
-.st-bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:6px;padding:8px;
+/* WRAPS, because the bar is eight buttons now and a narrow phone is 360 CSS
+   pixels: eight at their 56px floor plus the gaps does not fit on one row, and
+   a bar that overflows puts More off the edge of the screen. */
+.st-bar{position:absolute;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;gap:6px;padding:8px;
   padding-bottom:calc(8px + env(safe-area-inset-bottom));justify-content:center;pointer-events:auto;
   background:linear-gradient(transparent,rgba(11,13,18,.9) 40%)}
 .st-bar button{flex:0 1 96px;min-width:56px;height:52px;border-radius:10px;
@@ -76,10 +79,17 @@ const STYLE = `
 .st-card h4 span{flex:1 1 auto}
 .st-muted{opacity:.6;font-size:12px}
 .st-danger{color:#ff8a8a}
+.st-row select.st-sound[data-missing="1"]{border-color:#ff4d4d;color:#ff8a8a}
+.st-problem{background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.45);border-radius:8px;padding:8px 10px;white-space:pre-wrap;font-size:12px}
+.st-warn-box{color:#ffd27a;background:rgba(255,169,77,.10);border:1px solid rgba(255,169,77,.4);border-radius:8px;padding:8px 10px;white-space:pre-wrap;font-size:12px}
 .st-trow{display:flex;gap:10px;align-items:center;min-height:56px;border:1px solid #3a4454;border-radius:10px;
   padding:6px 12px;cursor:pointer;background:#12161e}
 .st-trow:hover{background:#1a2130}
 .st-trow[data-on="1"]{border-color:#ffe066}
+/* The swing's two views, and the particle preview: both are pictures of
+   numbers that are hard to read as numbers. */
+.st-swing-canvas{width:100%;max-width:336px;aspect-ratio:336/172;background:#12161e;border:1px solid #2a3446;border-radius:10px;align-self:center}
+.st-vfx-canvas{width:100%;max-width:320px;aspect-ratio:8/5;background:#0b0d12;border:1px solid #2a3446;border-radius:10px;align-self:center}
 .st-thumb{width:96px;height:96px;border:1px solid #3a4454;border-radius:10px;background:#12161e;display:flex;align-items:center;
   justify-content:center;overflow:hidden;image-rendering:pixelated;color:#5f7fa8;font-size:24px;flex:0 0 auto}
 .st-thumb img{max-width:100%;max-height:100%}
@@ -122,6 +132,12 @@ const STYLE = `
 .st-sheet .st-trow{min-height:44px;padding:4px 10px;gap:8px}
 .st-sheet .st-mark{font-size:16px;width:22px}
 .st-sheet .st-muted{font-size:11px}
+/* A button that is there but has nowhere to go: the first waypoint cannot move
+   earlier. Dimmed rather than removed, so the row does not reflow under a
+   thumb that is already reaching for it. */
+.st-dim{opacity:.4}
+.st-panel-preview{position:relative;min-height:120px;margin-top:6px;border:1px dashed #3a4256;border-radius:8px;overflow:hidden}
+.st-panel-preview .dnp-ui{position:absolute;top:8px;right:8px;left:8px;max-width:none}
 .st-hidden{display:none!important}
 /* A question: window.prompt is not there in Electron, nor in a phone's WebView
    without native help on each platform, so the studio asks with its own. */
@@ -130,8 +146,10 @@ const STYLE = `
 .st-dialog form{display:flex;flex-direction:column;gap:10px}
 .st-dialog .st-row label{flex:1 1 auto}
 .st-dialog .st-actions{justify-content:flex-end}
-.st-layer[data-workshop="1"] .st-bar,.st-layer[data-workshop="1"] .st-top,.st-layer[data-workshop="1"] .st-sheet{display:none}
+.st-layer[data-workshop="1"] .st-bar,.st-layer[data-workshop="1"] .st-top{display:none}
 /* --- the monster workshop: its own windows over the whole screen --- */
+/* The player's window has no graph, so its column is not allocated. */
+.wk[data-nograph="1"]{grid-template-columns:340px 1fr;grid-template-areas:"top top" "preview details"}
 .wk{position:fixed;inset:0;z-index:60;background:#0b0d12;color:#e8f0ff;display:grid;
   grid-template-rows:auto 1fr;grid-template-columns:340px 1fr 400px;grid-template-areas:"top top top" "preview graph details";
   font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;padding-top:env(safe-area-inset-top)}
@@ -167,7 +185,7 @@ const STYLE = `
   padding-bottom:calc(20px + env(safe-area-inset-bottom))}
 .wk-flash{outline:2px solid #ffe066}
 @media (max-width:1100px){
-  .wk{grid-template-columns:1fr;grid-template-areas:"top" "main"}
+  .wk,.wk[data-nograph="1"]{grid-template-columns:1fr;grid-template-areas:"top" "main"}
   .wk-preview,.wk-graph,.wk-details{grid-area:main;display:none;border:0}
   .wk[data-pane="preview"] .wk-preview{display:flex}
   .wk[data-pane="graph"] .wk-graph{display:flex}
@@ -181,6 +199,23 @@ const STYLE = `
   .wk-canvas{grid-column:1;grid-row:2/span 8;width:min(320px,calc(100vh - 150px));max-width:none;align-self:start}
 }
 @media (min-width:1101px){ .wk-top .wk-tabs{display:none} }
+/* THE PLAYER on a phone: no graph, so the picture and the forms both fit --
+   side by side when it is on its side, one scrolling column when upright --
+   rather than one pane at a time behind a switch. */
+@media (max-width:1100px) and (orientation:landscape){
+  .wk[data-nograph="1"]{grid-template-columns:minmax(220px,38%) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"top top" "preview details"}
+  .wk[data-nograph="1"] .wk-preview{display:flex;grid-area:preview;min-height:0;overflow-y:auto;border-right:1px solid #2a3446}
+  .wk[data-nograph="1"] .wk-details{display:flex;grid-area:details;min-height:0;overflow-y:auto}
+  .wk[data-nograph="1"] .wk-top .wk-tabs{display:none}
+  .wk[data-nograph="1"] .wk-canvas{width:100%;max-width:240px}
+}
+@media (max-width:1100px) and (orientation:portrait){
+  .wk[data-nograph="1"]{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .wk[data-nograph="1"] .wk-preview,.wk[data-nograph="1"] .wk-details{display:flex;overflow:visible;border:0}
+  .wk[data-nograph="1"] .wk-preview{border-bottom:1px solid #2a3446}
+  .wk[data-nograph="1"] .wk-top .wk-tabs{display:none}
+  .wk[data-nograph="1"] .wk-canvas{max-width:min(320px,70vw)}
+}
 `
 
 const el = (tag, attrs = {}, children = []) => {
@@ -202,7 +237,8 @@ export const TOOLS = [
   { id: 'room', label: 'Room', ico: '▭' },
   { id: 'place', label: 'Place', ico: '✦' },
   { id: 'trigger', label: 'Triggers', ico: '⚡' },
-  { id: 'mobs', label: 'Mobs', ico: '☠' },
+  { id: 'camera', label: 'Camera', ico: '🎥' },
+  { id: 'graph', label: 'Graph', ico: '◇' },
   { id: 'play', label: 'Play', ico: '▶' },
   { id: 'menu', label: 'More', ico: '⋯' }
 ]
@@ -219,7 +255,9 @@ export class Ui {
     this.viewBtn = el('button', { text: 'PLAN', title: 'plan / game view', onclick: () => on.view() })
     this.rotL = el('button', { text: '⟲', title: 'rotate', onclick: () => on.rotate(-1) })
     this.rotR = el('button', { text: '⟳', title: 'rotate', onclick: () => on.rotate(1) })
-    this.side = el('div', { class: 'st-side' }, [this.undoBtn, this.redoBtn, this.rotL, this.rotR, this.viewBtn])
+    // Back to the module, on a phone held upright where there is no rail.
+    this.homeBtn = el('button', { class: 'st-home-btn', text: '‹', title: 'the module', onclick: () => on.home?.() })
+    this.side = el('div', { class: 'st-side' }, [this.homeBtn, this.undoBtn, this.redoBtn, this.rotL, this.rotR, this.viewBtn])
     this.top = el('div', { class: 'st-top' }, [this.status, this.side])
     this.bar = el('div', { class: 'st-bar' })
     this.buttons = {}
@@ -262,6 +300,9 @@ export class Ui {
   }
 
   showSheet (title, body, onClose = null) {
+    // A section that was a sheet is a page now: while it is up, its rows go
+    // there (app/shell.js), and everything else still slides up as a sheet.
+    if (this.pageTitles && this.pageTitles.test(title) && this.pageSink) return this.pageSink(title, body, onClose)
     // Drawn again after every edit; the same sheet keeps its place. A
     // different sheet taking over closes the old one properly.
     const same = this.sheet.dataset.open === '1' && this.sheetTitle.textContent === title

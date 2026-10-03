@@ -8,29 +8,51 @@
 // object they share, and routes events between them. If it is doing
 // arithmetic, something is in the wrong file.
 //
+import { Router, parseHash } from './app/router.js'
+import { Shell } from './app/shell.js'
+import { moduleProblems, badgeCounts } from './app/problems.js'
+import { install as installHome } from './sections/home.js'
+import { install as installMaps } from './sections/maps.js'
+import { install as installProps } from './sections/props.js'
+import { install as installParticles } from './sections/particles.js'
+import { install as installMusic } from './sections/music.js'
+import { install as installSounds } from './sections/sounds.js'
+import { install as installTextures } from './sections/textures.js'
+import { install as installSettings } from './sections/settings.js'
+import { install as installScripts } from './sections/scripts.js'
+import { install as installCamera } from './mapeditor/camera.js'
+import { install as installNeighbours } from './mapeditor/neighbours.js'
+import { migratePlayer, overrides, paramNames } from './player.js'
+import { migrateModule } from './migrate.js'
+import { bankNames } from './soundpacks.js'
+import { fxSchema } from './fxlib.js'
+import { openScreens } from './screens.js'
+import { openGraph } from './graphwin.js'
+import { graphProblems } from './graphs_emit.js'
 import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
-import { parseAtlas, frameKey } from '/src/render/atlas.js'
-import { ISO_ELEVATION } from '/src/camera.js'
+import { parseAtlas } from '/src/render/atlas.js'
 import { loadMapcBinary, bake as bakeWith } from './bake.js'
-import { newDoc, addSector, addSpawn, validate, findEdge, newId, newEdge } from './doc.js'
+import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP } from './doc.js'
 import { normalize } from './topology.js'
-import { newModule, emitModule, RUNTIME_SCRIPTS } from './module_emit.js'
+import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts } from './module_emit.js'
 import { Vocab } from './vocab.js'
 import { Viewport, COLORS } from './viewport.js'
 import { Preview } from './preview.js'
 import { TextureCache } from './textures.js'
 import { SpriteLibrary } from './sprites.js'
-import { importSheetFile, sheetRecord } from './sheets.js'
 import { Gestures } from './gestures.js'
 import { History } from './history.js'
 import { Store, debounce } from './store.js'
 import { shell, hasShell } from './bridge.js'
-import { Ui, el, button, row, text, muted, card, chips, select, slider, toggle, ask, confirmDialog } from './ui.js'
-import { moduleProps, newProp, deleteProp, renameProp, placementsOf, propRows } from './props.js'
+import { Ui, el, button, row, text, muted, card, select, number, ask } from './ui.js'
+import { moduleProps } from './props.js'
+import { hasWeapons } from './weapons_emit.js'
 import { inspector, titleFor, texturePicker, placePalette } from './inspector.js'
 import { triggersSheet } from './cards.js'
-import { openWorkshop } from './workshop.js'
+import { openWorkshop, openArsenal, openPlayer } from './workshop.js'
+import { parseVfx } from '/src/render/vfx.js'
+import { vfxChoices } from './vfxlib.js'
 import * as tools from './tools.js'
 import { writePack, readPack } from './pack.js'
 
@@ -42,6 +64,10 @@ const stage = (msg, frac) => { bootMsg.textContent = msg; bootFill.style.width =
 const fetchText = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${url}`); return r.text() }
 const fetchJson = async (url, fallback = null) => { const r = await fetch(url); if (!r.ok) return fallback; return r.json() }
 
+// Where Play left from (see rememberReturn): read at boot, so declared before it.
+const RETURN_KEY = 'dnp.studio.return'
+const RETURN_MS = 60 * 60 * 1000
+
 // --- the state everything shares -------------------------------------------------
 const S = {
   core: null, bake: null, runtime: {}, vocab: null,
@@ -52,6 +78,8 @@ const S = {
   draw: { corners: [], rect: null },
   style: { sector: { kind: 'auto', floor: 0, ceil: 4, light: 200, thickness: 0, floorTex: null, ceilTex: null }, edge: { middle: null } },
   imageUrls: new Map(),
+  pathEdit: null,              // the camera path being edited, by id
+  pathPointSel: null,          // and which of its waypoints is in hand
   spriteUrls: new Map(),       // the module's single pictures and sheet images, as blob URLs
   trackUrls: new Map(),        // the module's baked tracks (.mstk), as blob URLs
   music: null,                 // the client's Music, once something was listened to
@@ -71,14 +99,24 @@ const mapcBinary = await loadMapcBinary('/studio/wasm/dist/mapc.wasm')
 S.bake = (opts) => bakeWith({ ...opts, wasmBinary: mapcBinary })
 stage('loading the runtime', 0.35)
 for (const name of RUNTIME_SCRIPTS) S.runtime[name] = await fetchText(`/studio/runtime/${name}`)
-S.vocab = new Vocab(await fetchJson('/studio/runtime/trigger_vocab.json'), await fetchJson('/studio/runtime/mob_vocab.json'))
+S.vocab = new Vocab(await fetchJson('/studio/runtime/trigger_vocab.json'), await fetchJson('/studio/runtime/mob_vocab.json'),
+                    await fetchJson('/studio/runtime/weapon_vocab.json').catch(() => null))
+// The graph nodes' types and pins (docs/GRAPHS.md), generated from graph_vocab.lua.
+S.vocab.graph = await fetchJson('/studio/runtime/graph_vocab.json').catch(() => null)
 stage('reading the catalogue', 0.5)
 const texIndex = await fetchJson('/textures/index.json', { sizes: {} })
 S.textureSizes = texIndex.sizes ?? {}
 S.textureNames = Object.keys(S.textureSizes).sort()
 const propsText = await fetch('/props.txt').then((r) => (r.ok ? r.text() : '')).catch(() => '')
 S.kinds = parseProps(propsText).kinds
+// The particle and tracer kinds the app serves, so the studio can offer them
+// beside the module's own wherever something names one by number.
+S.servedVfx = parseVfx(propsText).kinds
 S.catalogue = [...S.kinds.values()].filter((k) => k.name).map((k) => k.name).sort()
+// What the app serves besides the module: its sound bank's names and its
+// sprite pictures, offered wherever a field names one.
+S.servedSounds = await fetch('/sounds/bank.sfxproj').then((r) => (r.ok ? r.json() : null)).then(bankNames).catch(() => [])
+S.servedSprites = await fetch('/sprites/index.json').then((r) => (r.ok ? r.json() : {})).then((j) => Object.keys(j.sizes ?? {})).catch(() => [])
 stage('opening your work', 0.65)
 S.store = await Store.open()
 await seedFromShell()
@@ -89,13 +127,25 @@ S.viewport = new Viewport(document.body)
 // The module's own pictures come from the record's blobs; everything else the
 // shell serves. Decoded once each, whatever the number of bakes.
 S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {} })
-S.preview = new Preview({ core: S.core, bake: S.bake, runtime: S.runtime, viewport: S.viewport, textures: S.textures })
+S.preview = new Preview({ core: S.core, bake: S.bake, runtime: S.runtime, viewport: S.viewport, textures: S.textures,
+                          hooks: S.vocab.trigger.events.map((e) => e.name) })
 // Placed things are drawn as their own pictures, once those have loaded.
 S.sprites = new SpriteLibrary({ sheets: S.sheets, kinds: S.kinds, moduleProps: () => S.module?.props ?? [], onLoad: () => redraw(), imageFor: (n) => S.spriteUrls.get(n) ?? null })
 S.preview.onResult = (r) => {
-  if (!r.ok) S.status(r.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('\n'), 'error')
+  // The rooms something is wrong with, marked on the map in red (amber for a
+  // warning) and explained in each one's inspector.
+  const before = JSON.stringify(S.problems ?? [])
+  S.problems = r.problems ?? []
+  const rooms = new Set(S.problems.filter((p) => p.level === 'error').map((p) => p.sector)).size
+  const lead = rooms ? `${rooms === 1 ? 'one room is' : `${rooms} rooms are`} wrong (marked in red; tap one to see why)\n` : ''
+  if (!r.ok) S.status(lead + r.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('\n'), 'error')
+  else if (rooms) S.status(lead + S.problems.filter((p) => p.level === 'error').map((p) => p.msg).join('\n'), 'error')
   else if (r.warnings.length) S.status(r.warnings.map((w) => `${w.sector}: ${w.msg}`).join('\n'), 'warn')
   else S.status(`${S.module.id} / ${S.docName}  ·  ${S.doc.order.length} sectors`, 'ok')
+  // The neighbours and the seams follow every bake of this map (cheap: each
+  // neighbour is baked again only when its own document changed).
+  if (S.route() === 'map') S.refreshNeighbours?.()
+  if (JSON.stringify(S.problems) !== before) { redraw(); if (S.selection && S.ui.sheetOpen && ['sector', 'edge'].includes(S.selection.kind)) showInspector() }
   S.viewport.dirty = true
 }
 S.ui = new Ui({
@@ -103,12 +153,98 @@ S.ui = new Ui({
   undo: () => restore(S.history.undo()),
   redo: () => restore(S.history.redo()),
   view: () => { S.viewport.setMode(S.viewport.mode === 'plan' ? 'iso' : 'plan'); S.ui.setView(S.viewport.mode) },
-  rotate: (dir) => S.viewport.rotate(dir * Math.PI / 4)
+  rotate: (dir) => S.viewport.rotate(dir * Math.PI / 4),
+  home: () => S.go('home')
 })
 S.ui.setView(S.viewport.mode)
 // The map's name at the top is where the maps are: tap it for the list.
-S.ui.status.addEventListener('click', () => { if (!S.workshop || S.workshop.root.hidden) showMaps() })
+S.ui.status.addEventListener('click', () => S.go('maps'))
 S.ui.status.title = 'tap for the module\'s maps'
+
+// --- the module's sections (app/router.js, app/shell.js) ---------------------------
+//
+// THE STUDIO IS A MODULE EDITOR. Its home is the module; the map editor is one
+// section, opened from Maps. A section that used to be a sheet draws its rows
+// into the page (Ui.showSheet routes a matching title there while it is up);
+// one that used to be a full-screen window moves its root into the page.
+S.router = new Router({ onChange: () => { refreshBadges(); S.shell.drawRail() } })
+/** The rail's counts of what is wrong, by section (app/problems.js). */
+function refreshBadges () {
+  try { S.shell.badges = new Map(Object.entries(badgeCounts(moduleProblems(S)))) } catch (e) { console.warn('[studio] problems', e) }
+}
+const badgesSoon = debounce(() => { refreshBadges(); S.shell.drawRail() }, 400)
+S.shell = new Shell({ router: S.router, on: { play: () => play(), exportPack: () => exportPack(), undo: () => restoreModule(S.moduleHistory?.undo()), redo: () => restoreModule(S.moduleHistory?.redo()) } })
+S.go = (id, arg = null) => S.router.go(id, arg)
+S.ui.pageSink = (title, rows, onClose) => S.shell.showRows(title, rows, onClose)
+S.route = () => S.router.current?.id ?? null
+// Back from a window-section: to the map when it was opened from there.
+S.leave = () => S.go(S.cameFrom === 'map' ? 'map' : 'home', S.cameFrom === 'map' ? S.docName : null)
+
+/** A section that was a sheet: its rows on a page. */
+const pageSection = (id, label, icon, titles, show, extra = {}) => S.router.register({
+  id, label, icon, ...extra,
+  mount: (arg, from) => {
+    S.cameFrom = from?.id ?? null
+    S.shell.openPage(label)
+    S.ui.layer.dataset.page = '1'
+    S.ui.hideSheet()
+    S.ui.pageTitles = titles
+    show(arg)
+  },
+  unmount: () => { S.ui.pageTitles = null; S.shell.closePageContent() }
+})
+/** A section that was a full-screen window: its root moved into the page. */
+const windowSection = (id, label, icon, open, extra = {}) => S.router.register({
+  id, label, icon, ...extra,
+  mount: (arg, from) => {
+    S.cameFrom = from?.id ?? null
+    const body = S.shell.openPage(label, { kind: 'window' })
+    S.ui.layer.dataset.page = '1'
+    S.ui.hideSheet()
+    const w = open(arg)
+    body.appendChild(w.root)
+    w.root.hidden = false
+    S.window = w
+  },
+  unmount: () => { S.window?.close(); S.window = null; S.ui.layer.dataset.workshop = '0' }
+})
+pageSection('home', 'Home', '◆', /^Home$/, () => S.showHome(), { rail: false })
+pageSection('maps', 'Maps', '🗺', /^Maps$/, () => S.showMaps())
+// The old entry points go to their sections; called from inside one, they draw it.
+const sectionAlias = (id, fn) => (...a) => (S.route() === id ? fn(...a) : S.go(id, a[0] ?? null))
+S.sectionAlias = sectionAlias
+// The verbs the sections share, published before they are installed.
+// `save` is a const further down; reached through a wrapper so this runs first.
+S.save = () => save()
+Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starterDoc, showInspector, emitAll })
+for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installCamera, installNeighbours]) install(S)
+await S.loadPacks()
+S.router.register({
+  id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
+  mount: async (arg) => {
+    S.shell.hidePage()
+    S.ui.layer.dataset.page = '0'
+    S.ui.layer.dataset.workshop = '0'
+    if (arg && S.docs[arg] && arg !== S.docName) await openDoc(arg)
+    S.viewport.resize?.()
+    redraw()
+    S.viewport.dirty = true
+    S.refreshNeighbours?.()
+  },
+  unmount: () => { S.ui.hideSheet(); if (S.tool === 'room') tools.cancelRoom(S) }
+})
+windowSection('monsters', 'Monsters', '☠', (name) => openWorkshop(S, name))
+windowSection('player', 'Player', '🧍', () => openPlayer(S))
+windowSection('weapons', 'Weapons', '🔫', (name) => openArsenal(S, name))
+pageSection('props', 'Props', '📦', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
+pageSection('particles', 'Particles', '✨', /^Particles/, (id) => S.showVfx(id ?? undefined))
+pageSection('textures', 'Textures', '🧱', /^Textures$/, (n) => S.showTextures(n))
+pageSection('music', 'Music', '♪', /^Soundtrack/, () => S.showMusic())
+pageSection('sounds', 'Sounds', '🔊', /^Sounds$/, () => S.showSounds())
+windowSection('screens', 'Screens', '▣', () => openScreens(S))
+pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
+windowSection('graph', 'Graph', '◇', () => openGraph(S), { rail: false, parent: 'maps' })
+pageSection('settings', 'Settings', '⚙', /^Module settings$/, () => S.showSettings())
 new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
   dragStart: (i) => tools.onDragStart(S, i),
@@ -123,11 +259,31 @@ new Gestures(S.viewport.canvas, {
 frameToDoc()
 redraw()
 previewNow()
+S.shell.moduleName = S.module.name || S.module.id
+// Back from Play: no address of our own, and a note saying where we were.
+const back = parseHash(location.hash) ? null : takeReturn()
+if (back) {
+  if (back.module !== S.module.id && await S.store.load(back.module)) await openModule(back.module)
+  if (S.docs[back.map]) {
+    await S.go('map', back.map)
+    const v = back.view
+    if (v) {
+      if (v.mode && v.mode !== S.viewport.mode) { S.viewport.setMode(v.mode); S.ui.setView(v.mode) }
+      if (v.target) S.viewport.lookAt(v.target.x, v.target.y, v.target.z)
+      if (v.viewHeight) S.viewport.viewHeight = v.viewHeight
+      if (typeof v.yaw === 'number') S.viewport.yaw = v.yaw
+      S.viewport.resize()
+    }
+    S.status(`back from playing ${back.map}`, 'ok')
+  }
+}
+if (!S.router.current) await S.router.follow()
+addEventListener('hashchange', () => S.router.follow())
 boot.hidden = true
 // For the page test and for poking at a live session from the console.
 globalThis.__studio = S
 requestAnimationFrame(function loop () {
-  if (S.viewport.dirty) S.viewport.render()
+  if (S.viewport.dirty || S.viewport.animating) S.viewport.render()
   requestAnimationFrame(loop)
 })
 
@@ -138,6 +294,10 @@ requestAnimationFrame(function loop () {
  * and the pictures. Paths relative to the module root. Null when it is not a
  * studio module (no documents).
  */
+// What emitModule writes into assets/ from the documents, and must not be read
+// back as if it were the module's own: the merged sound bank, the screens.
+const GENERATED = /^assets\/(sounds\/bank\.sfxproj|ui\/[^/]+\.json)$/
+
 function recordFromEntries (entries) {
   const dec = new TextDecoder()
   const modEntry = entries.find((e) => e.path === 'module.studio.json')
@@ -148,7 +308,9 @@ function recordFromEntries (entries) {
   for (const e of entries) {
     const m = /^maps\/(.+)\.studio\.json$/.exec(e.path)
     if (m) docs[m[1]] = JSON.parse(dec.decode(e.bytes))
-    else if (e.path.startsWith('assets/') && !/(^|\/)(props\.txt|index\.json)$/.test(e.path)) assets[e.path.slice(7)] = new Blob([e.bytes])
+    else if (e.path.startsWith('assets/') && !/(^|\/)(props\.txt|index\.json)$/.test(e.path) && !GENERATED.test(e.path)) assets[e.path.slice(7)] = new Blob([e.bytes])
+    // Sources (sound packs) are kept under their own path, as written.
+    else if (e.path.startsWith('sources/')) assets[e.path] = new Blob([e.bytes])
   }
   return Object.keys(docs).length ? { id: module.id, module, docs, assets } : null
 }
@@ -168,7 +330,7 @@ async function seedFromShell () {
     for (const f of files) {
       if (!f.startsWith(`modules/${id}/`)) continue
       const rel = f.slice(`modules/${id}/`.length)
-      if (!(rel.endsWith('.studio.json') || (rel.startsWith('assets/') && /\.(png|json|mstk)$/.test(rel)))) continue
+      if (!(rel.endsWith('.studio.json') || (rel.startsWith('assets/') && /\.(png|json|mstk|sfxproj)$/.test(rel)) || rel.startsWith('sources/'))) continue
       const bytes = await shell.readFile(f)
       if (bytes) entries.push({ path: rel, bytes })
     }
@@ -210,6 +372,15 @@ async function openModule (id) {
   S.rec = rec
   S.module = rec.module
   S.docs = rec.docs
+  // Maps written when the player's size was each map's own: the module takes
+  // the common size, a map that differs keeps its own as an override.
+  // Documents from earlier studios, brought up to date (migrate.js).
+  const did = migrateModule(rec)
+  if (migratePlayer(S.module, S.docs) || did.length) await S.store.save(rec)
+  if (did.length) console.log('[studio] updated:', did.join('; '))
+  S.moduleHistory = new History({ module: S.module, docs: S.docs })
+  S.shell?.setHistory(false, false)
+  if (S.shell) { S.shell.moduleName = S.module.name || S.module.id; S.shell.drawRail() }
   for (const [name, url] of S.imageUrls) { URL.revokeObjectURL(url); S.textures?.forget(name) }
   S.imageUrls.clear()
   for (const src of S.sheets.values()) URL.revokeObjectURL(src.imageUrl)
@@ -220,6 +391,10 @@ async function openModule (id) {
   S.music?.stop()
   for (const url of S.trackUrls.values()) URL.revokeObjectURL(url)
   S.trackUrls.clear()
+  S.moduleSounds = []
+  // The module's sound packs, read and merged (sections/sounds.js); at boot
+  // the section is installed after the first module opens and loads them then.
+  await S.loadPacks?.()
   for (const [path, blob] of Object.entries(rec.assets ?? {})) {
     if (path.startsWith('textures/') && path.endsWith('.png')) S.imageUrls.set(path.slice(9, -4), URL.createObjectURL(blob))
     if (path.startsWith('sprites/') && path.endsWith('.png')) S.spriteUrls.set(path.slice(8, -4), URL.createObjectURL(blob))
@@ -246,7 +421,7 @@ async function openDoc (name) {
   S.history = new History(S.doc)
   S.selection = null
   S.draw = { corners: [], rect: null }
-  if (S.ui) { S.ui.hideSheet(); S.ui.setHistory(false, false); frameToDoc(); applyCamera(); redraw(); previewNow() }
+  if (S.ui) { S.ui.hideSheet(); S.ui.setHistory(false, false); frameToDoc(); S.applyCamera(); redraw(); previewNow() }
 }
 
 function starterDoc (name) {
@@ -276,8 +451,11 @@ function frameToDoc () {
 
 // --- the shared verbs ------------------------------------------------------------------------
 S.commit = () => {
+  badgesSoon?.()
   normalize(S.doc)
   S.history.commit(S.doc)
+  // The module's history follows the maps without making a step of its own.
+  S.moduleHistory?.replace({ module: S.module, docs: S.docs })
   S.ui.setHistory(S.history.canUndo, S.history.canRedo)
   save()
   redraw()
@@ -302,7 +480,7 @@ S.pickTexture = (current, onPick) => {
 }
 S.openPalette = () => S.ui.showSheet('Place', placePalette({
   mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: [...moduleProps(S.module).map((p) => p.name), ...S.catalogue], armed: S.place
-}, (armed) => { S.place = armed; S.openPalette(); if (armed) S.status(`tap the floor to place ${armed.name}`, 'ok') }, () => showProps()))
+}, (armed) => { S.place = armed; S.openPalette(); if (armed) S.status(`tap the floor to place ${armed.name}`, 'ok') }, () => S.showProps()))
 S.duplicateSector = (id) => {
   const s = S.doc.sectors[id]
   const copy = addSector(S.doc, s.verts.map((v) => ({ x: v.x + 2, y: v.y + 2 })),
@@ -317,21 +495,95 @@ S.pickInViewport = (kinds, prompt) => new Promise((resolve) => {
   S.ui.hideSheet()
   redraw()
 })
+/** A room's tag, giving it the next free one if it has none: what a tag argument picked on the map is. */
+S.ensureTag = (sectorId) => {
+  const s = S.doc.sectors[sectorId]
+  if (!s) return null
+  if (!s.tag) {
+    const used = new Set(Object.values(S.doc.sectors).map((x) => x.tag).filter(Boolean))
+    let t = 1
+    while (used.has(t)) t++
+    s.tag = t
+    S.commit()
+  }
+  return s.tag
+}
+/**
+ * Picking on the map for a form's arguments (argform.js): a room for a tag, a
+ * point for x/y/z, a placed thing for a name. `around` wraps the pick for a
+ * window that covers the map (the graph steps aside while it is done).
+ */
+S.mapPickers = (around = (f) => f()) => ({
+  pickSector: (cb) => around(() => S.pickInViewport(['sector'], 'tap a room')).then((hit) => cb(hit)),
+  pickTag: (cb) => around(() => S.pickInViewport(['sector'], 'tap the room (it is given a tag if it has none)')).then((hit) => cb(S.ensureTag(hit.id))),
+  pickPoint: (cb) => around(() => S.pickInViewport(['point'], 'tap the floor where it should be')).then((hit) => cb(hit)),
+  pickThing: (cb) => around(() => S.pickInViewport(['entity'], 'tap a placed monster or prop')).then((hit) => cb(S.doc.entities.find((e) => e.id === hit.id))),
+  pickEdge: (cb) => around(() => S.pickInViewport(['edge'], 'tap the wall')).then((hit) => cb(hit))
+})
 // What an open trigger touches: [{ kind: 'edge'|'sector'|'point', id|x,y, tone, label }],
 // drawn in the viewport in the colour of the section that uses it.
 S.setHighlights = (refs) => { S.highlights = refs; redraw() }
 S.reopen = (title, body, onClose = null) => S.ui.showSheet(title, body, onClose)
 // The module changed (a monster, a body, a texture): save, and re-bake so the
 // module's mobs.lua the map declares is current.
-S.moduleChanged = () => { save(); previewNow() }
+S.moduleChanged = () => {
+  save()
+  previewNow()
+  badgesSoon()
+  S.moduleHistory?.commit({ module: S.module, docs: S.docs })
+  S.shell?.setHistory(S.moduleHistory?.canUndo, S.moduleHistory?.canRedo)
+}
+
+/**
+ * The module as it was: an undo or a redo on a page. The maps come back with
+ * it, because a module edit can reach into them -- a texture renamed on every
+ * surface that named it -- and restoring one without the other would leave a
+ * map naming something the module no longer has.
+ */
+function restoreModule (snap) {
+  if (!snap) return
+  const m = snap.module
+  S.module = m
+  S.rec.module = m
+  S.docs = snap.docs
+  S.rec.docs = snap.docs
+  if (!S.docs[S.docName]) S.docName = Object.keys(S.docs)[0]
+  S.doc = S.docs[S.docName]
+  S.history.commit(S.doc)
+  S.ui.setHistory(S.history.canUndo, S.history.canRedo)
+  S.sprites?.forgetAll()
+  S.shell.moduleName = m.name || m.id
+  S.shell.setHistory(S.moduleHistory.canUndo, S.moduleHistory.canRedo)
+  save()
+  previewNow()
+  S.router.remount()
+}
+S.undoModule = () => restoreModule(S.moduleHistory?.undo())
+S.redoModule = () => restoreModule(S.moduleHistory?.redo())
+// ⌘Z on a page is the module's; in the map editor it is the map's (onKey).
+addEventListener('keydown', (e) => {
+  if (S.route() === 'map' || !S.route()) return
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? S.redoModule() : S.undoModule() }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); S.redoModule() }
+})
 
 const ctx = {
   commit: () => S.commit(), preview: () => previewNow(), select: (sel) => S.select(sel),
   otherSide: (edgeId) => tools.otherSide(S, edgeId),
   status: (t, l) => S.status(t, l), refreshSheet: () => S.refreshSheet(),
   pickTexture: (c, cb) => S.pickTexture(c, cb), duplicateSector: (id) => S.duplicateSector(id),
-  editProp: (name) => { if (S.module.props?.some((p) => p.name === name)) showProp(name); else S.status(`${name} is the catalogue's, not this module's`, 'warn') }
+  editProp: (name) => { if (S.module.props?.some((p) => p.name === name)) S.showProp(name); else S.status(`${name} is the catalogue's, not this module's`, 'warn') },
+  fxSchema: () => S.fxSchema ?? null,
+  problems: (sectorId) => (S.problems ?? []).filter((p) => p.sector === sectorId),
+  seamFor: (edgeId) => S.seamFor?.(edgeId) ?? null
 }
+// The sector effects' keys and defaults, read from the engine by a probe bake
+// (fxlib.js) once the studio is up; the inspector shows them when they land.
+fxSchema({ core: S.core, bake: S.bake })
+  .then((r) => { S.fxSchema = r; if (S.selection?.kind === 'sector') showInspector() })
+  .catch((e) => console.warn('[studio] effects schema:', e.message))
 
 function showInspector () {
   const body = inspector(S.selection, S.doc, ctx)
@@ -351,6 +603,7 @@ function restore (doc) {
   if (!doc) return
   S.docs[S.docName] = doc
   S.doc = doc
+  S.moduleHistory?.replace({ module: S.module, docs: S.docs })
   S.selection = null
   S.ui.hideSheet()
   S.ui.setHistory(S.history.canUndo, S.history.canRedo)
@@ -364,31 +617,40 @@ function previewNow () { S.preview.refresh(S.module, S.doc) }
 function chooseTool (id) {
   if (id === 'play') return play()
   if (id === 'menu') return showMenu()
+  if (id === 'graph') return S.go('graph')
   if (S.tool === 'room' && id !== 'room') tools.cancelRoom(S)
+  if ((S.tool === 'path' || S.tool === 'camera') && id !== 'path' && id !== 'camera') { S.pathEdit = null; S.pathPointSel = null; redraw() }
   S.tool = id
   S.ui.setTool(id)
   S.pick = null
   if (id === 'place') S.openPalette()
   else if (id === 'trigger') { S.triggerOpen = null; S.ui.showSheet('Triggers', triggersSheet(S), () => S.setHighlights([])) }
-  else if (id === 'mobs') openWorkshop(S)
+  else if (id === 'camera') S.showCamera()
   else if (id === 'room') { S.ui.hideSheet(); S.status('tap corners, tap the first one again to close -- or drag a rectangle', 'ok') }
   else S.ui.hideSheet()
 }
 
 function onKey (e) {
+  // The map editor's keys, only while it is the section showing.
+  if (S.route() !== 'map') return
   if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'SELECT') return
   const mod = e.ctrlKey || e.metaKey
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(e.shiftKey ? S.history.redo() : S.history.undo()); return }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); restore(S.history.redo()); return }
   switch (e.key) {
-    case 'Escape': if (S.draw.corners.length) tools.cancelRoom(S); else { S.pick = null; S.select(null) } break
+    case 'Escape':
+      if (S.draw.corners.length) tools.cancelRoom(S)
+      else if (S.tool === 'path') chooseTool('select')
+      else { S.pick = null; S.select(null) }
+      break
     case 'Enter': if (S.tool === 'room') tools.finishRoom(S); break
     case 'Delete': case 'Backspace': deleteSelection(); break
     case '1': chooseTool('select'); break
     case '2': chooseTool('room'); break
     case '3': chooseTool('place'); break
     case '4': chooseTool('trigger'); break
-    case '5': chooseTool('mobs'); break
+    case '5': chooseTool('graph'); break
+    case '6': chooseTool('camera'); break
     case '+': case '=': S.viewport.zoomBy(1.2); break
     case '-': S.viewport.zoomBy(1 / 1.2); break
     case 'q': S.viewport.rotate(-Math.PI / 4); break
@@ -486,6 +748,58 @@ function redraw () {
       badges.push({ x: r.x, y: r.y, z: r.z ?? 0, label: r.label, color })
     }
   }
+  // THE METAMAP: this map's cell, its neighbours' names, and its boundary
+  // sides by how they meet a neighbour's (metamap.js seamCheck).
+  const mm = S.module.metamap
+  if (mm?.enabled && mm.pitch && mm.cells?.[S.docName]) {
+    const [pw, ph] = mm.pitch
+    lines.push({ points: [{ x: 0, y: 0, z: 0 }, { x: pw, y: 0, z: 0 }, { x: pw, y: ph, z: 0 }, { x: 0, y: ph, z: 0 }], closed: true, color: COLORS.cell })
+    for (const nb of S.neighbourInfo ?? []) {
+      badges.push({ x: nb.offset.x + pw / 2, y: nb.offset.y + ph / 2, z: 0, label: `${nb.name}${nb.failed ? ' (does not bake)' : ''}`, color: COLORS.cell })
+      // Dimmed, so the one map under a finger is the one that looks it.
+      for (const p of nb.polys ?? []) lines.push({ points: p.pts.map((v) => ({ x: v.x + nb.offset.x, y: v.y + nb.offset.y, z: p.floor + 0.04 })), closed: true, color: COLORS.neighbourShade, fill: 0.5 })
+    }
+    for (const sm of S.seams ?? []) {
+      const e = findEdge(d, sm.edgeId)
+      if (!e) continue
+      lines.push({ points: insetEdge(e, 0.15, e.sector.floor + 0.12), color: COLORS[`seam_${sm.state.replace('-', '')}`] ?? COLORS.cell })
+    }
+  }
+  // WHAT IS WRONG, on the map: each room a bake or a check complained about,
+  // outlined in red (amber for a warning) with a badge, and the wall itself
+  // when the complaint named one.
+  const marked = new Set()
+  for (const p of S.problems ?? []) {
+    const o = d.sectors[p.sector]
+    if (!o) continue
+    const color = p.level === 'warn' ? COLORS.problemWarn : COLORS.problem
+    if (p.edge) {
+      const e = findEdge(d, p.edge)
+      if (e) lines.push({ points: insetEdge(e, 0.2, o.floor + 0.1), color })
+    }
+    if (marked.has(p.sector)) continue
+    marked.add(p.sector)
+    lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor + 0.08 })), closed: true, color, fill: p.level === 'warn' ? 0.18 : 0.3 })
+    const n = o.verts.length
+    badges.push({ x: o.verts.reduce((a, v) => a + v.x, 0) / n, y: o.verts.reduce((a, v) => a + v.y, 0) / n, z: o.floor, label: p.level === 'warn' ? '⚠' : '✖ wrong', color })
+  }
+  // Camera paths: the CURVE the camera rides, which is not the polyline through
+  // the points (docs/MAP_AUTHOR.md) -- so the one being edited shows both, the
+  // way the game's own ?paths=1 overlay does, because that is the only way to
+  // tell a deliberate bulge from a point in the wrong place.
+  for (const p of d.paths ?? []) {
+    const hot = p.id === S.pathEdit
+    const curve = S.pathCurve(p)
+    if (curve) lines.push({ points: curve.points, color: hot ? COLORS.pathHot : COLORS.path })
+    if (hot) {
+      if (curve) lines.push({ points: p.points.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })), closed: p.loop, color: COLORS.pathChord })
+      handles.push(...p.points.map((pt) => ({ id: pt.id, kind: 'pathpoint', x: pt.x, y: pt.y, z: pt.z,
+                                             hot: pt.id === S.pathPointSel, color: pt.id === S.pathPointSel ? undefined : COLORS.pathHot })))
+      // NUMBERED, because the order is the shape and moving a waypoint along
+      // the curve has no visible effect otherwise.
+      p.points.forEach((pt, n) => badges.push({ x: pt.x, y: pt.y, z: pt.z, label: String(n + 1), color: COLORS.pathHot }))
+    }
+  }
   if (S.draw.corners.length) {
     const z = S.workZ()
     lines.push({ points: S.draw.corners.map((c) => ({ ...c, z })), closed: false, color: COLORS.rubber })
@@ -513,35 +827,6 @@ function insetEdge (e, by, z) {
   return [{ x: e.vert.x + nx, y: e.vert.y + ny, z }, { x: q.x + nx, y: q.y + ny, z }]
 }
 
-/** A monster's or prop's pictures: a .tsprite project, or an atlas .json and its .png. */
-async function importSheet () {
-  const f = await shell.importFile('.tsprite,.json,.png')
-  if (!f) return null
-  S.status('composing…', 'ok')
-  let r
-  try {
-    r = await importSheetFile(f, {
-      parseAtlas,
-      pickPng: async (image) => { S.status(`now pick ${image}`, 'ok'); return shell.importFile('.png') }
-    })
-  } catch (e) { S.status(String(e.message ?? e), 'error'); return null }
-  const json = new Blob([JSON.stringify(r.manifest)], { type: 'application/json' })
-  const png = new Blob([r.png], { type: 'image/png' })
-  S.rec.assets ??= {}
-  S.rec.assets[`sprites/${r.name}.json`] = json
-  S.rec.assets[`sprites/${r.name}.png`] = png
-  S.module.sprites ??= {}
-  S.module.sprites[r.name] = sheetRecord(r.manifest)
-  const old = S.sheets.get(r.name)
-  if (old) URL.revokeObjectURL(old.imageUrl)
-  S.sheets.set(r.name, { atlas: parseAtlas(r.manifest, r.name), imageUrl: URL.createObjectURL(png) })
-  S.sprites.forgetAll()
-  S.moduleChanged()
-  redraw()
-  S.status(`sheet ${r.name} imported: ${r.manifest.animations.length} animation(s)${r.warnings.length ? ' -- ' + r.warnings.join('; ') : ''}`, 'ok')
-  return r.name
-}
-S.importSheet = importSheet
 
 /**
  * How tall a module sheet stands in the world. It is the manifest's
@@ -570,286 +855,82 @@ S.setSheetHeight = async (name, h) => {
   return true
 }
 
-async function importTexture () {
-  const f = await shell.importFile('image/png')
-  if (!f) return
-  const name = f.name.replace(/\.[^.]*$/, '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
-  if (!name) { S.status('the file needs a name made of letters and digits', 'error'); return }
-  const blob = new Blob([f.bytes], { type: 'image/png' })
-  let bmp
-  try { bmp = await createImageBitmap(blob) } catch { S.status('that is not a PNG the browser can read', 'error'); return }
-  S.module.textures ??= {}
-  S.module.textures[name] = { w: bmp.width, h: bmp.height }
-  S.rec.assets ??= {}
-  S.rec.assets[`textures/${name}.png`] = blob
-  if (S.imageUrls.has(name)) URL.revokeObjectURL(S.imageUrls.get(name))
-  S.imageUrls.set(name, URL.createObjectURL(blob))
-  S.textures.forget(name)
-  bmp.close?.()
-  save.flush?.(); save()
-  S.status(`texture ${name} added (${bmp.width}x${bmp.height})`, 'ok')
+
+S.openDoc = openDoc
+S.bankNames = bankNames
+S.soundNames = () => [...new Set([...(S.moduleSounds ?? []), ...(S.servedSounds ?? [])])]
+S.spriteNames = () => [...new Set([...S.spriteUrls.keys(), ...(S.servedSprites ?? [])])].sort()
+
+/**
+ * What a string field might hold, by its name and whose field it is: the
+ * studio offers these as it is typed in (argform's `suggest`) and never
+ * insists, because another module loaded beside this one has names too.
+ */
+S.suggest = (arg, owner) => {
+  if (arg === 'sound' || (arg === 'name' && owner === 'sound')) return S.soundNames()
+  if (arg === 'icon' || arg === 'frame') return S.spriteNames()
+  if (arg === 'item') return S.propNames()
+  if (arg === 'cue') return [...new Set(['default', ...Object.keys(S.doc?.music ?? {})])]
+  if (arg === 'panel') return Object.keys(S.doc?.panels ?? {})
+  if (arg === 'param' && owner === 'add_effect') return paramNames()
+  return null
+}
+/**
+ * A sound's field, wherever one is: the module's sounds grouped by pack, a ▶
+ * to hear the one chosen, and a red mark when no pack has the name -- which
+ * the game would play as silence. Any name can still be typed ("other…"), for
+ * a sound another module loaded beside this one provides.
+ */
+S.soundField = (label, value, onChange) => {
+  const groups = S.soundsByPack?.() ?? new Map()
+  const known = new Set([...groups.values()].flat())
+  const sel = el('select', { class: 'st-sound' })
+  sel.append(el('option', { value: '', text: '(none)' }))
+  if (value && !known.has(value)) sel.append(el('option', { value, text: `${value} -- in no pack` }))
+  for (const [pack, names] of groups) sel.append(el('optgroup', { label: pack }, names.map((n) => el('option', { value: n, text: n }))))
+  sel.append(el('option', { value: '\u0000other', text: 'other… (type a name)' }))
+  sel.value = value ?? ''
+  const missing = !!value && !known.has(value)
+  sel.dataset.missing = missing ? '1' : '0'
+  sel.addEventListener('change', async () => {
+    if (sel.value === '\u0000other') {
+      const v = await ask('sound name', value ?? '')
+      if (v !== null) onChange(v.trim())
+      else sel.value = value ?? ''
+      return
+    }
+    onChange(sel.value)
+  })
+  const play = button('▶', () => { if (sel.value && sel.value !== '\u0000other') S.hear(sel.value) })
+  return row(label, sel, play)
 }
 
-/** One picture (a PNG) for a prop: assets/sprites/NAME.png, served to the game as /sprites/NAME.png. */
-async function importPicture () {
-  const f = await shell.importFile('image/png')
-  if (!f) return null
-  const name = f.name.replace(/\.[^.]*$/, '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
-  if (!name) { S.status('the file needs a name made of letters and digits', 'error'); return null }
-  if (S.module.sprites?.[name]) { S.status(`${name} is a sheet already; pick another name`, 'error'); return null }
-  const blob = new Blob([f.bytes], { type: 'image/png' })
-  try { (await createImageBitmap(blob)).close?.() } catch { S.status('that is not a PNG the browser can read', 'error'); return null }
-  S.rec.assets ??= {}
-  S.rec.assets[`sprites/${name}.png`] = blob
-  if (S.spriteUrls.has(name)) URL.revokeObjectURL(S.spriteUrls.get(name))
-  S.spriteUrls.set(name, URL.createObjectURL(blob))
-  S.sprites.forgetAll()
-  save()
-  S.status(`picture ${name} added`, 'ok')
-  return name
-}
-S.importPicture = importPicture
+/** Where a texture's picture is: the module's own, else the app's. */
+S.imageFor = (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`
 
 /** Every prop name a brain or a trigger may name: the module's bodies and props, then the served catalogue. */
 S.propNames = () => [...new Set([...(S.module?.props ?? []).map((p) => p.name), ...S.catalogue])].sort()
 
-/** The module's single pictures: sprite PNGs with no manifest beside them. */
-function pictureNames () {
-  return Object.keys(S.rec.assets ?? {})
-    .filter((p) => /^sprites\/[^/]+\.png$/.test(p) && !S.rec.assets[p.replace(/\.png$/, '.json')])
-    .map((p) => p.slice(8, -4)).sort()
-}
+/** Every particle kind anything may name: the module's own, then the served ones. */
+S.vfxChoices = () => vfxChoices(S.module ?? {}, S.servedVfx ?? new Map())
 
-// --- the soundtrack: baked tracks in the module, cues per map, and a way to hear them ------------
-//
-// A track is a .mstk the synth project bakes (midisynth/docs/TRACK_FORMAT.md):
-// the song, its instruments and its loop points in one sealed file. The game
-// finds a map's music by the map's content hash in assets/music/index.json,
-// which the emitter writes from doc.music beside each bake (module_emit.js).
-async function importTrack () {
-  const f = await shell.importFile('.mstk,application/octet-stream')
-  if (!f) return null
-  const name = f.name.replace(/\.mstk$/i, '').toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 40)
-  if (!name) { S.status('the file needs a name made of letters and digits', 'error'); return null }
-  if (f.bytes.length < 16 || String.fromCharCode(...f.bytes.slice(0, 4)) !== 'MSTK') { S.status(`${f.name} is not a baked track (.mstk from the synth's Bake)`, 'error'); return null }
-  const blob = new Blob([f.bytes], { type: 'application/octet-stream' })
-  S.rec.assets ??= {}
-  S.rec.assets[`music/${name}.mstk`] = blob
-  if (S.trackUrls.has(name)) URL.revokeObjectURL(S.trackUrls.get(name))
-  S.trackUrls.set(name, URL.createObjectURL(blob))
-  save()
-  S.status(`track ${name} added (${(f.bytes.length / 1024).toFixed(0)} KB)`, 'ok')
-  return name
-}
-S.importTrack = importTrack
-
-function trackNames () { return [...S.trackUrls.keys()].sort() }
-
-/** Hear a track here, through the same synth the game uses. */
-async function listen (name) {
-  const url = S.trackUrls.get(name)
-  if (!url) { S.status(`no track called ${name}`, 'warn'); return }
-  if (!S.music) {
-    const { Music } = await import('/src/audio/music.js')
-    S.music = new Music({ log: (m) => console.log(m) })
-  }
-  try { await S.music.start() } catch (e) { S.status(`the synth did not start: ${e.message ?? e}`, 'error'); return }
-  await S.music.play(url, { loop: true, fadeMs: 0 })
-  S.status(`♪ ${name}`, 'ok')
-  if (soundtrackOpen()) showMusic()
-}
-const soundtrackOpen = () => S.ui.sheetOpen && /^Soundtrack/.test(document.querySelector('.st-sheet-title')?.textContent ?? '')
-S.listen = listen
-
-function stopListening () {
-  S.music?.stop()
-  S.status('♪ stopped', 'ok')
-  if (soundtrackOpen()) showMusic()
-}
-S.stopListening = stopListening
-
-function showMusic () {
-  S.doc.music ??= {}
-  const tracks = trackNames()
-  const playing = (t) => !!S.music?.current && S.music.current === S.trackUrls.get(t)
-  const usedBy = (t) => Object.values(S.docs).reduce((n, d) => n + Object.values(d.music ?? {}).filter((x) => x === t).length, 0)
-  const cueRows = Object.entries(S.doc.music).map(([cue, track]) => el('div', { class: 'st-row', 'data-cue': cue }, [
-    el('span', { class: 'st-entry', text: cue }),
-    select('', track, [['', '(choose a track)'], ...tracks], (v) => { if (v) S.doc.music[cue] = v; else delete S.doc.music[cue]; S.commit(); showMusic() }).lastChild,
-    button(playing(track) ? '■' : '▶', () => (playing(track) ? stopListening() : listen(track))),
-    button('✕', () => { delete S.doc.music[cue]; S.commit(); showMusic() })
-  ]))
-  const trackRows = tracks.map((t) => el('div', { class: 'st-trow', 'data-track': t }, [
-    el('div', { class: 'st-trow-text' }, [
-      el('div', { class: 'st-trow-name', text: t }),
-      el('div', { class: 'st-muted', text: `${(S.rec.assets[`music/${t}.mstk`].size / 1024).toFixed(0)} KB · in ${usedBy(t)} cue(s)` })
-    ]),
-    button(playing(t) ? '■' : '▶', () => (playing(t) ? stopListening() : listen(t))),
-    button('✕', async () => {
-      const n = usedBy(t)
-      if (!await confirmDialog(`delete track ${t}?${n ? ` ${n} cue(s) use it; they go too.` : ''}`)) return
-      if (playing(t)) stopListening()
-      delete S.rec.assets[`music/${t}.mstk`]
-      URL.revokeObjectURL(S.trackUrls.get(t)); S.trackUrls.delete(t)
-      for (const d of Object.values(S.docs)) for (const [cue, x] of Object.entries(d.music ?? {})) if (x === t) delete d.music[cue]
-      S.commit(); S.moduleChanged(); showMusic()
-    }, 'st-danger')
-  ]))
-  S.ui.showSheet('Soundtrack', [
-    el('div', { class: 'st-section-head', text: `♪ ${S.docName}: cues` }),
-    ...cueRows,
-    cueRows.length ? null : muted('No music for this map yet. The game starts the cue called default; a script can switch to another.'),
-    button('+ cue', async () => {
-      const raw = await ask('cue name', S.doc.music.default ? 'fight' : 'default')
-      const cue = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_]/g, '')
-      if (!cue) return
-      if (S.doc.music[cue]) { S.status(`there is a cue called ${cue} already`, 'warn'); return }
-      S.doc.music[cue] = tracks[0] ?? ''
-      S.commit(); showMusic()
-    }),
-    el('div', { class: 'st-section-head', text: '♫ tracks in the module' }),
-    ...trackRows,
-    trackRows.length ? null : muted('No tracks yet. Bake one in the synth project (midisynth/tool/daw.html, "Bake .mstk") and import it here.'),
-    button('+ import track (.mstk)', async () => {
-      const n = await importTrack()
-      if (!n) return
-      if (!S.doc.music.default) { S.doc.music.default = n; S.commit() }
-      showMusic()
-    }),
-    S.music ? muted(S.music.health() ?? 'synth starting…') : null,
-    muted('Cues cut from one parent track crossfade into each other; unrelated tracks swap. Every map of the module keeps its own cues.')
-  ])
-}
-S.showMusic = showMusic
-
-// --- the camera: where the game looks at this map from, previewed here ------------------------
-const TURN = Math.PI * 2
-const ENGINE_YAW_TURNS = 0.125          // the client's START_YAW, 45 degrees
-const ENGINE_PITCH_TURNS = ISO_ELEVATION / TURN
-
-function cameraOf (doc) {
-  doc.camera ??= { yaw: null, pitch: null, distance: null, lockYaw: false, lockZoom: false }
-  return doc.camera
-}
-
-/** The level view takes the map's camera while one is set, and the engine's otherwise. */
-function applyCamera () {
-  if (!S.doc || !S.viewport) return
-  const c = cameraOf(S.doc)
-  S.viewport.setCamera({
-    yaw: c.yaw !== null ? c.yaw * TURN : null,
-    elevation: c.pitch !== null ? c.pitch * TURN : null,
-    distance: c.distance
-  })
-  redraw()
-}
-S.applyCamera = applyCamera
-
-function showCamera () {
-  const c = cameraOf(S.doc)
-  const deg = (t) => `${Math.round(t * 360)}°`
-  const live = (done) => { applyCamera(); if (done) S.commit() }
-  const angled = c.yaw !== null || c.pitch !== null
-  S.ui.showSheet('Camera', [
-    muted(`How the game looks at ${S.docName}. Off is the engine's own: ${deg(ENGINE_YAW_TURNS)} around, ${deg(ENGINE_PITCH_TURNS)} down, free to turn and zoom.`),
-    toggle('set the angle', angled, (v) => {
-      c.yaw = v ? ENGINE_YAW_TURNS : null
-      c.pitch = v ? ENGINE_PITCH_TURNS : null
-      if (v && S.viewport.mode !== 'iso') { S.viewport.setMode('iso'); S.ui.setView('iso') }
-      live(true); showCamera()
-    }),
-    angled ? slider(`around (${deg(c.yaw ?? ENGINE_YAW_TURNS)})`, c.yaw ?? ENGINE_YAW_TURNS, { min: 0, max: 1, step: 1 / 32 }, (v, done) => { c.yaw = v; live(done); if (done) showCamera() }) : null,
-    angled ? slider(`down (${deg(c.pitch ?? ENGINE_PITCH_TURNS)})`, c.pitch ?? ENGINE_PITCH_TURNS, { min: 0.02, max: 0.25, step: 0.005 }, (v, done) => { c.pitch = v; live(done); if (done) showCamera() }) : null,
-    toggle('set the distance', c.distance !== null, (v) => { c.distance = v ? 38 : null; live(true); showCamera() }),
-    c.distance !== null ? slider('distance', c.distance, { min: 8, max: 80, step: 1 }, (v, done) => { c.distance = v; live(done) }) : null,
-    toggle('lock turning', !!c.lockYaw, (v) => { c.lockYaw = v; S.commit() }),
-    toggle('lock zoom', !!c.lockZoom, (v) => { c.lockZoom = v; S.commit() }),
-    muted('The level view follows these while they are set. Sprites stand upright in the world, so the steeper the camera looks down, the shorter they show -- here and in the game.')
-  ].filter(Boolean))
-}
-S.showCamera = showCamera
-
-// --- props: the sheet that lists them, and the one that edits one --------------------------------
-function showProps () {
-  const props = moduleProps(S.module)
-  const rows = props.map((p) => {
-    const r = el('div', { class: 'st-trow', 'data-prop': p.name }, [
-      propThumb(p),
-      el('div', { class: 'st-trow-text' }, [
-        el('div', { class: 'st-trow-name', text: p.name }),
-        el('div', { class: 'st-muted', text: `${p.radius} × ${p.height} · ${p.solid ? 'solid' : 'walk-through'} · ${p.art ? (p.art.kind === 'atlas' ? p.art.sheet : p.art.states?.[0]?.frames?.[0]) : 'no picture'} · placed ${placementsOf(S.docs, p.name).length}` })
-      ])
-    ])
-    r.addEventListener('click', () => showProp(p.name))
-    return r
-  })
-  S.ui.showSheet('Props', [
-    ...rows,
-    props.length ? null : muted('No props yet. A prop is a thing without a brain: a barrel, a torch, a tree.'),
-    button('+ new prop', async () => {
-      const raw = await ask('prop name (letters, digits, underscore)', 'barrel')
-      if (!raw) return
-      const name = newProp(S.module, raw)
-      if (!name) { S.status('that name is empty or taken', 'warn'); return }
-      S.moduleChanged()
-      showProp(name)
-    }),
-    muted('Tap one to edit it. Monsters are in the workshop (Mobs tool).')
-  ])
-}
-S.showProps = showProps
-
-function propThumb (p) {
-  const box = el('div', { class: 'st-thumb', text: '?' })
-  const icon = S.sprites.iconFor(p.name)
-  const img = icon?.texture?.image
-  if (img?.src) { box.textContent = ''; box.appendChild(el('img', { src: img.src })) }
-  return box
-}
-
-function showProp (name) {
-  const p = S.module.props.find((x) => x.name === name)
-  if (!p) { showProps(); return }
-  const ctx = {
-    pictures: pictureNames(),
-    sheets: Object.keys(S.module.sprites ?? {}),
-    placements: placementsOf(S.docs, name).length,
-    pictureUrl: (n) => S.spriteUrls.get(n) ?? null,
-    sheetFrame: (sheet, anim) => {
-      const src = S.sheets.get(sheet)
-      const a = anim ? src?.atlas.byName.get(anim) : null
-      const f = a ? src.atlas.frames[frameKey(src.atlas, a.name, 0, 1)] : null
-      return f ? { url: src.imageUrl, rect: f.rect } : null
-    },
-    importPicture,
-    importSheet,
-    changed: () => { S.sprites.forget(name); S.moduleChanged(); redraw(); showProp(name) },
-    rename: (raw) => {
-      const to = renameProp(S.module, S.docs, name, raw)
-      if (!to) { S.status('that name is empty or taken', 'warn'); showProp(name); return }
-      S.sprites.forgetAll(); S.commit(); S.moduleChanged(); showProp(to)
-    },
-    remove: async () => {
-      const n = placementsOf(S.docs, name).length
-      if (!await confirmDialog(`delete prop ${name}?${n ? ` It stands in the maps ${n} time(s); those go too.` : ''}`)) return
-      deleteProp(S.module, S.docs, name)
-      S.sprites.forget(name); S.commit(); S.moduleChanged(); showProps()
-    },
-    place: () => { S.place = { kind: 'prop', name }; S.ui.setTool('place'); S.tool = 'place'; S.ui.hideSheet(); S.status(`tap the floor to place ${name}`, 'ok') }
-  }
-  S.ui.showSheet(`Prop ${name}`, propRows(S.module, p, ctx).filter(Boolean))
-}
-S.showProp = showProp
 
 // --- play, export, import -----------------------------------------------------------------------
 async function emitAll () {
   const problems = validate(S.doc)
   if (problems.length) { S.status(problems.map((p) => (p.sector ? `${p.sector}: ` : '') + p.msg).join('\n'), 'error'); return null }
+  // A graph the runtime would refuse does not load at all, so it is said here
+  // rather than discovered as a level where nothing happens.
+  for (const d of Object.values(S.docs)) {
+    const gp = S.vocab.graph ? graphProblems(d.graph, S.vocab.graph, S.vocab.trigger) : []
+    if (gp.length) { S.status(`${d.name}'s graph: ${gp.join('; ')}`, 'error'); return null }
+  }
   const sizes = { ...S.textureSizes }
   const assets = {}
   for (const [path, blob] of Object.entries(S.rec.assets ?? {})) assets[path] = new Uint8Array(await blob.arrayBuffer())
   const r = await emitModule(S.module, Object.values(S.docs), {
-    bake: S.bake, runtime: S.runtime, assets,
+    // The hook names the server harvests, from the vocabulary that lists them.
+    bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name), assets,
     textureSizes: (n) => (sizes[n] ? { w: sizes[n][0], h: sizes[n][1], cutout: !!texIndex.cutout?.[n] } : null)
   })
   if (!r.ok) {
@@ -870,8 +951,34 @@ async function play () {
     await shell.writeFile(`${root}/${f.path}`, bytes)
   }
   S.status('starting the game…', 'ok')
-  try { await shell.launch({ module: root, map: `${S.docName}.dnpm` }) } catch (e) { S.status(String(e.message ?? e), 'error') }
+  rememberReturn()
+  try { await shell.launch({ module: root, map: `${S.docName}.dnpm` }) } catch (e) { forgetReturn(); S.status(String(e.message ?? e), 'error') }
 }
+
+// BACK FROM PLAY, to the map that was being tested. The game's "◀ Studio" link
+// opens /studio/ with no address of its own, so before Play the studio notes
+// where it was -- the module, the map, and the view onto it -- and the next
+// boot with no address goes back there. Per device (localStorage), and only
+// for a while: an hour later, the studio opening on Home is what is expected.
+
+function rememberReturn () {
+  const v = S.viewport
+  try {
+    localStorage.setItem(RETURN_KEY, JSON.stringify({ module: S.module.id, map: S.docName, at: Date.now(),
+      view: { target: v.target, viewHeight: v.viewHeight, mode: v.mode, yaw: v.yaw } }))
+  } catch {}
+}
+function forgetReturn () { try { localStorage.removeItem(RETURN_KEY) } catch {} }
+
+/** Where Play left from, if this boot is the way back: { module, map, view } or null. */
+function takeReturn () {
+  let r = null
+  try { r = JSON.parse(localStorage.getItem(RETURN_KEY) ?? 'null') } catch {}
+  forgetReturn()
+  if (!r || !(Date.now() - r.at < RETURN_MS)) return null
+  return r
+}
+S.rememberReturn = rememberReturn
 
 async function exportPack () {
   S.status('baking…', 'ok')
@@ -897,93 +1004,56 @@ async function importPack () {
   S.status(`opened ${rec.id}`, 'ok')
 }
 
-/** The module's maps, one sheet: tap one to edit it, ✕ to delete it, + for a new one. */
-function showMaps () {
-  const names = Object.keys(S.docs)
-  const rows = names.map((n) => {
-    const d = S.docs[n]
-    const on = n === S.docName
-    const r = el('div', { class: 'st-trow', 'data-on': on ? '1' : '0', 'data-map': n }, [
-      el('div', { class: 'st-trow-text' }, [
-        el('div', { class: 'st-trow-name', text: `${on ? '▶ ' : ''}${n}` }),
-        el('div', { class: 'st-muted', text: `${d.order.length} sectors · ${d.entities.length} things · ${d.triggers.length} triggers${on ? ' · editing' : ''}` })
-      ]),
-      button('✕', async (e) => {
-        e.stopPropagation()
-        if (Object.keys(S.docs).length < 2) { S.status('a module keeps at least one map', 'warn'); return }
-        if (!await confirmDialog(`delete map ${n}? There is no undo for this.`)) return
-        delete S.docs[n]
-        save()
-        if (n === S.docName) await openDoc(Object.keys(S.docs)[0])
-        S.status(`deleted map ${n}`, 'ok')
-        showMaps()
-      }, 'st-danger')
-    ])
-    r.addEventListener('click', () => { S.ui.hideSheet(); openDoc(n) })
-    return r
-  })
-  S.ui.showSheet('Maps', [
-    ...rows,
-    button('+ new map', async () => {
-      const name = await ask('map name (letters, digits, dashes)', `map${names.length + 1}`)
-      if (!name) return
-      const clean = name.toLowerCase().replace(/[^a-z0-9_-]/g, '')
-      if (!clean || S.docs[clean]) { S.status('that name is taken or empty', 'warn'); return }
-      S.docs[clean] = starterDoc(clean)
-      save()
-      await openDoc(clean)
-      S.status(`${clean}: a new map, one room`, 'ok')
-    }),
-    muted('Tap a map to edit it. Every map ships in the pack; Play starts the one being edited.')
-  ])
-}
-S.showMaps = showMaps
 
+/**
+ * How many of a map's script slots this module spends, and on what.
+ *
+ * Said here because the alternative is finding out at the bake.
+ */
+function scriptBudget () {
+  const decls = scriptDecls(S.module, {
+    hasMobs: Object.keys(S.module.mobs?.mobs ?? {}).length > 0 || Object.keys(S.module.mobs?.missiles ?? {}).length > 0,
+    hasTriggers: (S.doc?.triggers?.length ?? 0) > 0,
+    hasWeapons: hasWeapons(S.module),
+    graph: (S.doc?.graph?.nodes?.length ?? 0) > 0 ? `${S.docName}.graph.json` : null
+  })
+  const used = decls.length + 1
+  const game = gameScripts(S.module)
+  return `Scripts: ${used} of the ${CAP.scripts} a map may declare -- ${decls.map((d) => d.split('/').pop()).join(', ')}, and ${S.docName}.lua.` +
+         (game.length ? ` The weapons are not among them: they run once for the whole game (${game.join(', ')}).` : '')
+}
+
+/** The map editor's ⋯: what is about this map, not the module. */
 function showMenu () {
-  const items = [
-    ['Maps…', showMaps],
-    ['Props…', showProps],
-    ['Soundtrack…', showMusic],
-    ['Camera…', showCamera],
-    ['Module settings…', () => S.ui.showSheet('Module', [
-      text('id', S.module.id, (v) => { const id = v.toLowerCase().replace(/[^a-z0-9_-]/g, ''); if (id) { S.module.id = id; S.rec.id = id; save() } }),
-      text('name', S.module.name, (v) => { S.module.name = v; save() }),
-      text('about', S.module.about, (v) => { S.module.about = v; save() }, { multiline: true }),
-      text('extra Lua for this map', S.doc.extraLua, (v) => { S.doc.extraLua = v; S.commit() }, { multiline: true, placeholder: '-- hand-written Lua, kept verbatim' }),
-      muted(`Prop ids start at ${S.module.propIdBase}. Every map declares the module's monsters and scripts.`)
-    ])],
-    ['New module (from the starter)', async () => {
-      const id = await ask('module id (letters, digits, dashes)', 'my-level')
-      if (!id) return
-      const clean = id.toLowerCase().replace(/[^a-z0-9_-]/g, '')
-      if (!clean) return
-      if (await S.store.load(clean)) { S.status(`a module called ${clean} already exists`, 'warn'); return }
-      // The starter module, when the app shipped one, is the base: a level
-      // with a door, a monster with a sheet, textures. Otherwise a blank room.
-      const copied = await copyModule('starter', clean, id)
-      if (!copied) {
-        const rec = { id: clean, module: newModule(clean, id), docs: { first: starterDoc('first') }, assets: {} }
-        await S.store.save(rec)
-      }
-      await openModule(clean)
-      S.status(copied ? `${clean}: a copy of the starter module (prop ids from ${copied.module.propIdBase})` : `${clean}: no starter module here, so a blank room`, 'ok')
-    }],
-    ['Open module…', async () => {
-      const list = await S.store.list()
-      S.ui.showSheet('Modules', [chips(list.map((r) => ({ id: r.id, label: r.id, on: r.id === S.rec.id })), (it) => { S.ui.hideSheet(); openModule(it.id) })])
-    }],
-    ['Import texture (PNG)', importTexture],
-    ['Import sprite sheet (.tsprite / .json+.png)', importSheet],
-    ['Export pack (zip)', exportPack],
-    ['Import pack (zip)', importPack],
+  S.ui.showMenu([
+    ['Map settings…', showMapSettings],
+    ['Camera…', () => S.showCamera()],
+    ['Import texture (PNG)', () => S.importTexture()],
     ['Fit view', frameToDoc],
     ['Help', () => S.ui.showSheet('Help', [
       muted('Room: tap corners and close on the first, or drag a rectangle. Rooms that touch share a wall; a room inside a room is a platform when its floor is higher and a pit when it is lower.'),
       muted('Select: tap a room, a wall or a corner. Drag corners to reshape, drag a selected room to move it. Long-press a wall to add a corner, a corner to remove it.'),
       muted('Place: monsters, props, spawns and lights, on the floor you tap.'),
       muted('Triggers: doors, lifts, switches, teleports, ambushes and exits in one tap, then change any detail on the card.'),
-      muted('Keys: 1-5 tools · Enter closes a room · Esc cancels · Del deletes · Q/E rotate · V plan/game view · +/- zoom · arrows pan.')
+      muted('Graph: node scripting for this map. The module\'s monsters, player, weapons and everything else are in the rail on the left (or ‹ on a phone).'),
+      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Q/E rotate · V plan/game view · +/- zoom · arrows pan.')
     ])]
-  ]
-  S.ui.showMenu(items)
+  ])
 }
+
+/** Everything that belongs to this map and not to a room in it. */
+function showMapSettings () {
+  const own = overrides(S.doc)
+  S.ui.showSheet(`Map ${S.docName}`, [
+    text('extra Lua', S.doc.extraLua, (v) => { S.doc.extraLua = v; S.commit() }, { multiline: true, placeholder: '-- hand-written Lua, kept verbatim' }),
+    el('div', { class: 'st-row' }, [button('🎥 camera…', () => S.showCamera()), button('◇ graph…', () => S.go('graph')), button('♪ music cues…', () => S.go('music'))]),
+    el('div', { class: 'st-row' }, [
+      button(`🧍 player${own.length ? ` (own ${own.join(', ')})` : ''}…`, () => { S.playerScope = 'map'; S.go('player') }),
+      button(`▣ screens${S.doc.ui ? ' (own)' : ''}…`, () => { S.screensScope = 'map'; S.go('screens') })
+    ]),
+    muted(scriptBudget())
+  ])
+}
+S.showMapSettings = showMapSettings
+
+

@@ -211,6 +211,9 @@ export function derive (doc) {
       if (twin) { kind = 'neighbor'; neighbor = twin.sid }
       else if (kinds[sid] === 'platform') kind = 'open'
       else if (kinds[sid] === 'cut') { kind = 'neighbor'; neighbor = parents[sid] }
+      // An outer side the author opened: the room ends there (a ledge), which
+      // is how a map meets the next one on the metamap.
+      else if (v.edge.force === 'open') kind = 'open'
       // A forced wall is a wall from both sides: a door you can open from
       // one room and not the other is a bug, not a feature.
       if (v.edge.force === 'wall' || (twin && twin.edge.force === 'wall')) { kind = 'wall'; neighbor = null }
@@ -243,7 +246,14 @@ export function derive (doc) {
       }
     }
     return { id: sid, floor: s.floor, ceil: s.ceil, tag: s.tag, light: s.light, thickness: s.thickness,
-             floorTex: s.floorTex, ceilTex: s.ceilTex, verts, holes }
+             floorTex: s.floorTex, ceilTex: s.ceilTex,
+             // How each flat is painted travels with the sector: the emitter
+             // writes from what derive hands it, so a style left behind here
+             // is a style the author set and the map never says.
+             floorStyle: s.floorStyle, ceilStyle: s.ceilStyle,
+             // Its weather and fog (docs/SECTOR_FX.md), likewise.
+             fx: s.fx,
+             verts, holes }
   })
 
   return { sectors, parents, kinds, warnings }

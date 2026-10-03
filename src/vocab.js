@@ -29,6 +29,7 @@ const TYPES = {
   int: (v) => isInt(v),
   fx: (v) => isFx(v),
   string: (v) => typeof v === 'string',
+  string_list: (v) => Array.isArray(v) && v.every((x) => typeof x === 'string'),
   bool: (v) => typeof v === 'boolean',
   value: (v) => typeof v === 'string' || typeof v === 'boolean' || isInt(v),
   enum: (v, a) => a.values.includes(v),
@@ -42,6 +43,10 @@ const TYPES = {
   var: (v, a, ctx) => typeof v === 'string' && ctx.hasVar(v),
   missile: (v, a, ctx) => typeof v === 'string' && ctx.hasMissile(v),
   mob: (v, a, ctx) => typeof v === 'string' && ctx.hasMob(v),
+  // The weapon vocabulary's own references.
+  ammo: (v, a, ctx) => typeof v === 'string' && (ctx.hasAmmo ? ctx.hasAmmo(v) : true),
+  weapon: (v, a, ctx) => typeof v === 'string' && (ctx.hasWeapon ? ctx.hasWeapon(v) : true),
+  phase: (v, a, ctx) => typeof v === 'string' && (ctx.hasPhase ? ctx.hasPhase(v) : true),
   // A catalogue record. The runtime leaves whether it exists to the editor,
   // "because the editor is the one holding the catalogue" (mobs.lua); without
   // one to hand, any name passes and the server decides at load.
@@ -89,6 +94,9 @@ function describe (a) {
     case 'var': return 'a declared var'
     case 'missile': return 'the name of a missile'
     case 'mob': return 'the name of a mob'
+    case 'ammo': return 'the name of an ammunition pool'
+    case 'weapon': return 'the name of a weapon'
+    case 'phase': return 'the name of a phase'
     case 'prop': return 'the name of a prop in the catalogue'
     case 'bool': return 'true or false'
     default: return `a ${a.type}`
@@ -96,15 +104,80 @@ function describe (a) {
 }
 
 export class Vocab {
-  /** @param trigger  parsed trigger_vocab.json  @param mob  parsed mob_vocab.json */
-  constructor (trigger, mob) {
+  /**
+   * @param trigger  parsed trigger_vocab.json
+   * @param mob      parsed mob_vocab.json
+   * @param weapon   parsed weapon_vocab.json, when the studio has it
+   */
+  constructor (trigger, mob, weapon = null) {
     this.trigger = trigger
     this.mob = mob
+    this.weapon = weapon
     this.events = new Map(trigger.events.map((e) => [e.name, e]))
     this.conditions = new Map(trigger.conditions.map((c) => [c.name, c]))
     this.actions = new Map(trigger.actions.map((a) => [a.name, a]))
     this.mobConditions = new Map(mob.conditions.map((c) => [c.name, c]))
     this.mobActions = new Map(mob.actions.map((a) => [a.name, a]))
+    this.weaponConditions = new Map((weapon?.conditions ?? []).map((c) => [c.name, c]))
+    this.weaponActions = new Map((weapon?.actions ?? []).map((a) => [a.name, a]))
+  }
+
+  /**
+   * The arsenal's problems, in the runtime's own terms.
+   *
+   * A weapon is a phase machine and the rules are the ones a state machine
+   * always has -- a phase that runs out with nowhere to go, a transition to a
+   * phase that does not exist -- plus the two the weapon runtime adds: a pool
+   * it eats must be declared, and `swing` damage is required because a swing
+   * without it is a collider that costs nothing.
+   */
+  validateWeapons (module) {
+    const problems = []
+    const V = this.weapon
+    const arsenal = module.weapons
+    if (!V || !arsenal) return problems
+    const ammo = arsenal.ammo ?? {}
+    const weapons = arsenal.weapons ?? {}
+    const base = { hasAmmo: (n) => n in ammo, hasWeapon: (n) => n in weapons, hasMissile: (n) => n in (module.mobs?.missiles ?? {}) }
+    for (const [name, a] of Object.entries(ammo)) checkArgs(V.ammo_fields, a, `ammo "${name}"`, problems, base)
+    if (arsenal.health) checkArgs(V.health_fields, arsenal.health, 'health', problems, base)
+    for (const [name, w] of Object.entries(weapons)) {
+      const where = `weapon "${name}"`
+      const phases = w.phases ?? {}
+      const ctx = { ...base, hasVar: (n) => n in (w.vars ?? {}), hasPhase: (n) => n in phases, hasState: (n) => n in phases }
+      checkArgs(V.weapon_fields, w, where, problems, ctx)
+      if (!Object.keys(phases).length) problems.push(`${where}: needs at least one phase`)
+      if (w.initial !== undefined && !(w.initial in phases)) problems.push(`${where}: \`initial\` names no phase`)
+      if (w.swing) checkArgs(V.swing_fields, w.swing, `${where}, swing`, problems, ctx)
+      for (const [pname, p] of Object.entries(phases)) {
+        const pw = `${where}, phase "${pname}"`
+        checkArgs(V.phase_fields, p, pw, problems, ctx)
+        // A phase with no `ticks` WAITS, so it needs no `next`; one that runs
+        // out and names nowhere falls back to the weapon's initial phase.
+        if (p.swing) checkArgs(V.swing_fields, p.swing, `${pw}, swing`, problems, ctx)
+        if (p.next !== undefined && !(p.next in phases)) problems.push(`${pw}: \`next\` names no phase`)
+        for (const [i, tr] of (p.transitions ?? []).entries()) {
+          const tw = `${pw}, transition ${i + 1}`
+          if (typeof tr.to !== 'string' || !(tr.to in phases)) problems.push(`${tw}: \`to\` must name a phase`)
+          for (const [j, c] of (tr.when ?? []).entries()) {
+            const spec = this.weaponConditions.get(c.cond)
+            if (!spec) { problems.push(`${tw}, condition ${j + 1}: unknown condition "${c.cond}"`); continue }
+            checkArgs(spec.args ?? [], c, `${tw}, condition ${j + 1}`, problems, ctx, ['cond', 'negate'])
+          }
+        }
+        for (const [i, step] of (p.sequence ?? []).entries()) {
+          const sw = `${pw}, step ${i + 1}`
+          if (!isInt(step.at)) problems.push(`${sw}: needs \`at\`, a whole number of ticks`)
+          const spec = this.weaponActions.get(step.action)
+          if (!spec) { problems.push(`${sw}: unknown action "${step.action}"`); continue }
+          checkArgs(spec.args ?? [], step, sw, problems, ctx, ['at', 'action'])
+        }
+      }
+    }
+    for (const [name, p] of Object.entries(arsenal.pickups ?? {})) {
+      checkArgs(V.pickup_fields, p, `pickup "${name}"`, problems, base)
+    }
+    return problems
   }
 
   /** Problems with a document's triggers, as sentences naming the trigger. Empty is clean. */
@@ -156,6 +229,11 @@ export class Vocab {
         const obj = { ...a }
         delete obj.expect_tag
         checkArgs(spec.args ?? [], obj, aw, problems, ctx, ['a', 'expect_tag'])
+        // A panel the table does not define is a silent `false` forever at
+        // fire time, so the runtime refuses it at load; say it here first.
+        if ((a.a === 'ui_open' || a.a === 'ui_close') && typeof a.panel === 'string' && !(doc.panels && a.panel in doc.panels)) {
+          problems.push(`${aw}: no panel called "${a.panel}" on this map (Triggers → panels)`)
+        }
       }
     }
     return problems
@@ -187,6 +265,10 @@ export class Vocab {
         hasVar: (n) => n in (m.vars ?? {}), hasState: (n) => n in states, hasProp
       }
       checkArgs(this.mob.mob_fields, m, where, problems, ctx)
+      // The swept collider, if it declares one. The same fields a weapon's
+      // swing has, and the same rule: a swing with no damage is a collider
+      // that costs nothing.
+      if (m.swing) checkArgs(this.mob.swing_fields ?? [], m.swing, `${where}, swing`, problems, ctx)
       if (m.initial === undefined) problems.push(`${where}: needs \`initial\``)
       if (m.corpse && !('death' in states)) problems.push(`${where}: has corpse = true and no death state`)
       for (const [sname, s] of Object.entries(states)) {
@@ -225,9 +307,12 @@ export class Vocab {
 
 /** Load both vocabularies from a base URL (the studio's runtime directory). */
 export async function loadVocab (baseUrl = '/studio/runtime') {
-  const [t, m] = await Promise.all([
+  const [t, m, w] = await Promise.all([
     fetch(`${baseUrl}/trigger_vocab.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/mob_vocab.json`).then((r) => r.json())
+    fetch(`${baseUrl}/mob_vocab.json`).then((r) => r.json()),
+    // The weapon vocabulary is the newest of the three; a studio staged before
+    // it existed still runs, with the arsenal window saying what is missing.
+    fetch(`${baseUrl}/weapon_vocab.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
   ])
-  return new Vocab(t, m)
+  return new Vocab(t, m, w)
 }

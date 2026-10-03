@@ -20,32 +20,115 @@
 import { el, row, slider, select, button, chips, muted, text, ask, confirmDialog } from './ui.js'
 import { parseAtlas, frameKey, quadFor } from '/src/render/atlas.js'
 import { rotationFor, frameAt } from '/src/render/props.js'
-import { edgesOf, autoLayout, problemsByState, NODE_W, NODE_H } from './graph.js'
+import { edgesOf, autoLayout, problemsByState, NODE_W, NODE_H, MOB_SHAPE, WEAPON_SHAPE } from './graph.js'
 import { newMonster, deleteMonster, bodyRows, brainRows, varsRows, stateRows, missilesSection, STATE_NAMES } from './brain.js'
+import { newWeapon, deleteWeapon, newArsenal } from './weapons_emit.js'
+import { swingRows, newSwing, SwingPreview } from './swing.js'
+import { avatarRows, weaponRows, arsenalRows } from './arms.js'
+import { bodyRows as playerBodyRows, moveRows, kitRows, newPlayer, soundRows as playerSoundRows } from './player.js'
 
 /** Pointer capture that does not throw for a pointer the browser has already let go of. */
 function capture (node, e) {
   try { node.setPointerCapture(e.pointerId) } catch {}
 }
 
-export function openWorkshop (S, mobName = null) {
-  if (S.workshop) { S.workshop.open(mobName); return S.workshop }
-  S.workshop = new Workshop(S)
-  S.workshop.open(mobName)
+/**
+ * The two windows, which are one window.
+ *
+ * A monster's brain and a weapon are the same graph -- named nodes with
+ * `ticks`, a `next`, a `sequence` and `transitions` checked in order -- so
+ * they are edited by the same machine with two sets of bindings. What differs
+ * is the vocabulary each validates against, the word for a node, and what the
+ * detail tabs show. See graph.js.
+ */
+export function openWorkshop (S, mobName = null) { return open(S, 'mob', mobName) }
+export function openArsenal (S, name = null) { return open(S, 'weapon', name) }
+export function openPlayer (S) { return open(S, 'player', null) }
+
+function open (S, kind, name) {
+  S.workshop ??= new Workshop(S)
+  S.workshop.open(kind, name)
   return S.workshop
+}
+
+// What each window is made of. Everything the editor does that depends on
+// WHICH kind of thing is being edited is a line in here.
+const SPECS = {
+  mob: {
+    kind: 'mob',
+    word: 'monster',
+    node: 'state',
+    shape: MOB_SHAPE,
+    sibling: { label: '🧍 player', kind: 'player' },
+    home: (S) => { S.module.mobs ??= { missiles: {}, mobs: {} }; return S.module.mobs.mobs },
+    layoutKey: (name) => name,
+    vocab: (S) => S.vocab.mob,
+    conditionSpec: (S, n) => S.vocab.mobConditions.get(n),
+    actionSpec: (S, n) => S.vocab.mobActions.get(n),
+    problems: (S) => S.vocab.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }),
+    make: (S, raw) => newMonster(S, raw),
+    remove: (S, name) => deleteMonster(S, name),
+    // The body that draws it: its own prop record.
+    prop: (S, name, subject) => (S.module.props ?? []).find((p) => p.name === (subject?.prop ?? name)),
+    tabs: [['node', '⬡'], ['brain', '🧠 brain'], ['swing', '🌀 swing'], ['body', '👤 body'], ['vars', '# vars'], ['missiles', '☄ missiles']]
+  },
+  weapon: {
+    kind: 'weapon',
+    word: 'weapon',
+    node: 'phase',
+    shape: WEAPON_SHAPE,
+    sibling: { label: '☠ monsters', kind: 'mob' },
+    home: (S) => { S.module.weapons ??= newArsenal(); return S.module.weapons.weapons },
+    // Namespaced, because a weapon and a monster may share a name and their
+    // graphs are laid out separately.
+    layoutKey: (name) => `weapon:${name}`,
+    vocab: (S) => S.vocab.weapon,
+    conditionSpec: (S, n) => S.vocab.weaponConditions.get(n),
+    actionSpec: (S, n) => S.vocab.weaponActions.get(n),
+    problems: (S) => S.vocab.validateWeapons(S.module),
+    make: (S, raw) => newWeapon(S.module, raw),
+    remove: (S, name) => deleteWeapon(S.module, name),
+    // A weapon is held by the PLAYER, so the preview shows the player's art.
+    prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
+    tabs: [['node', '⬡'], ['weapon', '🔫 weapon'], ['swing', '🌀 swing'], ['vars', '# vars'], ['arsenal', '🎒 arsenal']]
+  },
+  // The player, who has no graph: nothing about them is a state machine, so
+  // the window is its preview and its forms.
+  player: {
+    kind: 'player',
+    word: 'player',
+    node: null,
+    graph: false,
+    shape: MOB_SHAPE,
+    sibling: { label: '⚔ weapons', kind: 'weapon' },
+    home: (S) => { S.module.player ??= newPlayer(); return { player: S.module.player } },
+    layoutKey: (name) => `player:${name}`,
+    vocab: (S) => S.vocab.mob,
+    conditionSpec: (S, n) => S.vocab.mobConditions.get(n),
+    actionSpec: (S, n) => S.vocab.mobActions.get(n),
+    problems: () => [],
+    make: () => null,
+    remove: () => {},
+    prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
+    tabs: [['skin', '🧍 skin'], ['size', '📏 size'], ['moves', '🏃 moves'], ['kit', '🎒 kit'], ['sounds', '🔊 sounds']]
+  }
 }
 
 class Workshop {
   constructor (S) {
     this.S = S
+    this.kind = 'mob'
     this.mob = null
     this.state = null
-    this.tab = 'state'
+    this.tab = 'node'
     this.pane = 'graph'
     this.view = { x: 0, y: 0, z: 1 }
     this.linking = false
     // `anim` is a body state (0..4) to play; `animName` plays a named animation of the sheet instead.
     this.play = { anim: 0, animName: null, playing: true, facing: 0, t0: performance.now(), frame: 0 }
+    // The swing, played rather than drawn still: a volume moving through time
+    // is the one thing a still picture cannot show.
+    this.swingPreview = new SwingPreview()
     this.images = new Map()        // url -> HTMLImageElement
     this.atlases = new Map()       // sheet -> parsed atlas (served ones)
     this.raf = 0
@@ -54,12 +137,19 @@ class Workshop {
     this.root.hidden = true
   }
 
-  open (mobName) {
+  open (kind, name) {
     const S = this.S
-    S.module.mobs ??= { missiles: {}, mobs: {} }
     S.module.props ??= []
-    const names = Object.keys(S.module.mobs.mobs)
-    this.mob = mobName && S.module.mobs.mobs[mobName] ? mobName : (this.mob && S.module.mobs.mobs[this.mob] ? this.mob : names[0] ?? null)
+    if (kind && kind !== this.kind) {
+      this.kind = kind
+      this.mob = null
+      this.state = null
+      this.tab = this.spec.tabs[0][0]
+      if (this.spec.graph === false && this.pane === 'graph') this.pane = 'details'
+    }
+    const home = this.spec.home(S)
+    const names = Object.keys(home)
+    this.mob = name && home[name] ? name : (this.mob && home[this.mob] ? this.mob : names[0] ?? null)
     this.state = null
     this.root.hidden = false
     S.ui.layer.dataset.workshop = '1'
@@ -69,6 +159,7 @@ class Workshop {
   }
 
   close () {
+    this.swingPreview.stop()
     this.root.hidden = true
     this.S.ui.layer.dataset.workshop = '0'
     cancelAnimationFrame(this.raf)
@@ -77,13 +168,18 @@ class Workshop {
     this.S.tool = 'select'
   }
 
-  get brain () { return this.mob ? this.S.module.mobs.mobs[this.mob] : null }
-  get prop () { return this.mob ? (this.S.module.props ?? []).find((p) => p.name === (this.brain?.prop ?? this.mob)) : null }
+  get spec () { return SPECS[this.kind] }
+  get brain () { return this.mob ? this.spec.home(this.S)[this.mob] : null }
+  /** The graph's nodes, whatever they are called for this kind. */
+  get nodes () { return this.brain?.[this.spec.shape.nodes] ?? {} }
+  get prop () { return this.spec.prop(this.S, this.mob, this.brain) }
   get layout () {
     const m = this.S.module
     m.layouts ??= {}
-    if (this.mob) m.layouts[this.mob] = autoLayout(this.brain, m.layouts[this.mob] ?? {})
-    return this.mob ? m.layouts[this.mob] : {}
+    if (!this.mob) return {}
+    const key = this.spec.layoutKey(this.mob)
+    m.layouts[key] = autoLayout(this.brain, m.layouts[key] ?? {}, this.spec.shape)
+    return m.layouts[key]
   }
 
   changed () {
@@ -95,36 +191,52 @@ class Workshop {
 
   render () {
     const S = this.S
-    const names = Object.keys(S.module.mobs.mobs)
+    const sp = this.spec
+    const names = Object.keys(sp.home(S))
     const problems = this.#problems()
     const top = el('div', { class: 'wk-top' }, [
-      button('‹ level', () => this.close()),
-      chips([...names.map((n) => ({ id: n, label: n, on: n === this.mob })), { id: '+', label: '+ new monster' }], async (it) => {
+      button('‹ back', () => (S.leave ? S.leave() : this.close())),
+      // Across to the sibling window. A monster's claw and a player's fist are
+      // the same facility, so moving between them should not be a trip out to
+      // the level and back in again.
+      button(sp.sibling.label, () => (S.go ? S.go({ mob: 'monsters', weapon: 'weapons', player: 'player' }[sp.sibling.kind]) : this.open(sp.sibling.kind, null))),
+      sp.graph === false ? el('span', { class: 'st-muted', text: 'one player for the module; a map may override parts' }) : null,
+      sp.graph === false ? null : chips([...names.map((n) => ({ id: n, label: n, on: n === this.mob })), { id: '+', label: `+ new ${sp.word}` }], async (it) => {
         if (it.id === '+') {
-          const raw = await ask('monster name (letters, digits, underscore)', 'grunt')
-          const name = raw ? newMonster(S, raw) : null
+          const raw = await ask(`${sp.word} name (letters, digits, underscore)`, sp.kind === 'mob' ? 'grunt' : 'pistol')
+          const name = raw ? sp.make(S, raw) : null
           if (raw && !name) S.status('that name is empty or taken', 'warn')
           if (name) { this.mob = name; this.state = null; this.changed() }
           return
         }
         this.mob = it.id; this.state = null; this.render()
       }),
+      // Said in the window, because the window is opened from a level and the
+      // thing being edited is not the level's. One monster, one weapon, one
+      // arsenal per MODULE -- both runtimes load them once per level.
+      sp.graph === false ? null : el('span', { class: 'st-muted', text: `${sp.word}s belong to the module, not to one map` }),
       el('span', { style: 'flex:1 1 auto' }),
       problems.length ? el('span', { class: 'st-danger', text: `${problems.length} problem(s)`, title: problems.join('\n') }) : el('span', { class: 'st-muted', text: 'loads clean' }),
       el('div', { class: 'wk-tabs' }, [
-        ['preview', '🎞 preview'], ['graph', '⬡ graph'], ['details', '☰ details']
+        ['preview', '🎞 preview'], ...(sp.graph === false ? [] : [['graph', '⬡ graph']]), ['details', '☰ details']
       ].map(([id, label]) => el('button', { text: label, 'data-on': this.pane === id ? '1' : '0', onclick: () => { this.pane = id; this.root.dataset.pane = id; this.#syncTabs() } })))
     ])
     const details = el('div', { class: 'wk-details' })
     const keep = this.root.querySelector('.wk-details')?.scrollTop ?? 0
-    this.root.replaceChildren(top, this.#previewPane(), this.#graphPane(problems), details)
+    this.root.dataset.nograph = sp.graph === false ? '1' : '0'
+    this.root.replaceChildren(top, this.#previewPane(), ...(sp.graph === false ? [] : [this.#graphPane(problems)]), details)
     this.#fillDetails(details, problems)
     details.scrollTop = keep
     this.#syncTabs()
   }
 
-  /** The brains' problems, with the catalogue to hand so a prop name is checked. */
-  #problems () { return this.S.vocab.validateMobs(this.S.module.mobs, { props: this.S.propNames?.() ?? null }) }
+  /** This kind's problems, in the runtime's own words. */
+  #problems () {
+    if (this.kind === 'weapon' && !this.S.vocab.weapon) {
+      return ['the weapon vocabulary is not staged with this studio, so nothing here can be checked (scripts/build_app.sh --studio)']
+    }
+    return this.spec.problems(this.S)
+  }
 
   #syncTabs () {
     for (const b of this.root.querySelectorAll('.wk-tabs button')) b.dataset.on = b.textContent.includes(this.pane) ? '1' : '0'
@@ -290,21 +402,21 @@ class Workshop {
     const m = this.brain
     const pane = el('div', { class: 'wk-graph' })
     const bar = el('div', { class: 'wk-bar' }, [
-      button('+ state', () => { this.#addState() }),
+      button(`+ ${this.spec.node}`, () => { this.#addState() }),
       this.state ? button('★ initial', () => { m.initial = this.state; this.changed() }) : null,
       this.state ? button(this.linking ? 'tap the target…' : '→ link', () => { this.linking = !this.linking; this.render() }) : null,
-      this.state ? button('✕ state', () => { delete m.states[this.state]; this.state = null; this.changed() }, 'st-danger') : null,
-      button('auto layout', () => { this.S.module.layouts[this.mob] = autoLayout(m, {}); this.S.moduleChanged(); this.render() }),
-      this.mob ? button('delete monster', async () => { if (await confirmDialog(`delete monster ${this.mob}?`)) { deleteMonster(this.S, this.mob); this.mob = null; this.state = null; this.changed() } }, 'st-danger') : null
+      this.state ? button(`✕ ${this.spec.node}`, () => { delete this.nodes[this.state]; this.state = null; this.changed() }, 'st-danger') : null,
+      button('auto layout', () => { this.S.module.layouts[this.spec.layoutKey(this.mob)] = autoLayout(m, {}, this.spec.shape); this.S.moduleChanged(); this.render() }),
+      this.mob ? button(`delete ${this.spec.word}`, async () => { if (await confirmDialog(`delete ${this.spec.word} ${this.mob}?`)) { this.spec.remove(this.S, this.mob); this.mob = null; this.state = null; this.changed() } }, 'st-danger') : null
     ])
     pane.appendChild(bar)
-    if (!m) { pane.appendChild(muted('No monster. Make one with "+ new monster".')); return pane }
+    if (!m) { pane.appendChild(muted(`No ${this.spec.word}. Make one with "+ new ${this.spec.word}".`)); return pane }
 
     const layout = this.layout
-    const bad = problemsByState(problems, this.mob)
+    const bad = problemsByState(problems, this.mob, { kind: this.spec.kind, node: this.spec.node })
     const world = el('div', { class: 'wk-world' })
     world.appendChild(this.#edgesSvg(m, layout))
-    for (const [name, st] of Object.entries(m.states)) {
+    for (const [name, st] of Object.entries(this.nodes)) {
       const pos = layout[name]
       const node = el('div', { class: 'wk-node' + (name === this.state ? ' wk-node-on' : '') + (bad.has(name) ? ' wk-node-bad' : ''),
                              style: `left:${pos.x}px;top:${pos.y}px`, title: bad.get(name)?.join('\n') ?? '' }, [
@@ -322,9 +434,9 @@ class Workshop {
     return pane
   }
 
-  /** The arrows between states, as one SVG: rebuilt on its own while a node is dragged. */
+  /** The arrows between nodes, as one SVG: rebuilt on its own while a node is dragged. */
   #edgesSvg (m, layout) {
-    const edges = edgesOf(m)
+    const edges = edgesOf(m, this.spec.shape)
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('class', 'wk-edges')
     svg.innerHTML = '<defs><marker id="wk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8fa6c4"/></marker></defs>'
@@ -353,7 +465,7 @@ class Workshop {
       label.setAttribute('x', lx); label.setAttribute('y', ly)
       label.setAttribute('class', 'wk-label')
       label.textContent = e.label
-      label.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); this.state = e.from; this.tab = 'state'; this.pane = 'details'; this.root.dataset.pane = 'details'; this.render(); this.#scrollToTransition(e) })
+      label.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); this.state = e.from; this.tab = 'node'; this.pane = 'details'; this.root.dataset.pane = 'details'; this.render(); this.#scrollToTransition(e) })
       svg.appendChild(label)
     }
     return svg
@@ -362,11 +474,13 @@ class Workshop {
   async #addState () {
     const m = this.brain
     if (!m) return
-    const n = await ask('state name', 'wander')
+    const n = await ask(`${this.spec.node} name`, this.kind === 'mob' ? 'wander' : 'reload')
     if (!n) return
     const name = n.toLowerCase().replace(/[^a-z0-9_]/g, '')
-    if (!name || m.states[name]) return
-    m.states[name] = { anim: 0, move: 'stop', face: 'hold', ticks: 30, next: m.initial ?? name }
+    if (!name || this.nodes[name]) return
+    this.nodes[name] = this.kind === 'mob'
+      ? { anim: 0, move: 'stop', face: 'hold', ticks: 30, next: m.initial ?? name }
+      : { anim: 0, ticks: 20, next: m.initial ?? name }
     this.state = name
     this.changed()
   }
@@ -394,13 +508,13 @@ class Workshop {
         const from = this.brain.states[this.state]
         ;(from.transitions ??= []).push({ to: name, when: [] })
         this.linking = false
-        this.tab = 'state'
+        this.tab = 'node'
         this.changed()
         return
       }
       this.linking = false
       this.state = name
-      this.tab = 'state'
+      this.tab = 'node'
       this.render()
     })
     node.addEventListener('pointercancel', () => { start = null })
@@ -434,48 +548,106 @@ class Workshop {
 
   #fillDetails (pane, problems) {
     const S = this.S
+    const sp = this.spec
     const m = this.brain
+    const weapon = this.kind === 'weapon'
     const changed = () => this.changed()
+    const nodeNames = Object.keys(this.nodes)
     const ctx = {
-      onChange: changed, status: (t, l) => S.status(t, l),
-      states: Object.keys(m?.states ?? {}), vars: Object.keys(m?.vars ?? {}),
-      missiles: Object.keys(S.module.mobs.missiles ?? {}), mobs: Object.keys(S.module.mobs.mobs), props: S.propNames?.() ?? []
+      onChange: changed, changed, status: (t, l) => S.status(t, l),
+      states: nodeNames, phases: nodeNames, vars: Object.keys(m?.vars ?? {}),
+      missiles: Object.keys(S.module.mobs?.missiles ?? {}), mobs: Object.keys(S.module.mobs?.mobs ?? {}),
+      props: S.propNames?.() ?? [],
+      ammo: Object.keys(S.module.weapons?.ammo ?? {}), weapons: Object.keys(S.module.weapons?.weapons ?? {}),
+      vfxChoices: () => S.vfxChoices?.() ?? [],
+      suggest: (n, o) => S.suggest?.(n, o) ?? null,
+      soundField: S.soundField
     }
-    const tabs = el('div', { class: 'wk-tabs' }, [['state', this.state ? `⬡ ${this.state}` : '⬡ state'], ['brain', '🧠 brain'], ['body', '👤 body'], ['vars', '# vars'], ['missiles', '☄ missiles']]
+    const nodeSpec = weapon
+      ? { fields: sp.vocab(S)?.phase_fields ?? [], conditions: sp.vocab(S)?.conditions ?? [], actions: sp.vocab(S)?.actions ?? [],
+          conditionSpec: (n) => sp.conditionSpec(S, n), actionSpec: (n) => sp.actionSpec(S, n) }
+      : null
+    const tabs = el('div', { class: 'wk-tabs' }, sp.tabs
+      .map(([id, label]) => [id, id === 'node' ? `⬡ ${this.state ?? sp.node}` : label])
       .map(([id, label]) => el('button', { text: label, 'data-on': this.tab === id ? '1' : '0', onclick: () => { this.tab = id; this.render() } })))
     const body = []
-    if (!m) body.push(muted('No monster.'))
-    else if (this.tab === 'state') {
-      const st = this.state ? m.states[this.state] : null
-      if (!st) body.push(muted('Tap a state in the graph, or an arrow, to edit it here.'))
+    if (!m && this.kind !== 'player') body.push(muted(`No ${sp.word}.`))
+    else if (this.tab === 'node') {
+      const st = this.state ? this.nodes[this.state] : null
+      if (!st) body.push(muted(`Tap a ${sp.node} in the graph, or an arrow, to edit it here.`))
       else {
         body.push(el('div', { class: 'st-row' }, [
-          text('name', this.state, (v) => this.#renameState(this.state, v)).lastChild.parentElement,
+          text('name', this.state, (v) => this.#renameState(this.state, v)).lastChild.parentElement
         ]))
-        body.push(...stateRows(S, m, this.state, st, ctx, changed, { onPickTarget: () => { this.linking = true; this.pane = 'graph'; this.root.dataset.pane = 'graph'; this.render() } }))
-        const mine = problemsByState(problems, this.mob).get(this.state)
+        body.push(...stateRows(S, m, this.state, st, ctx, changed, {
+          onPickTarget: () => { this.linking = true; this.pane = 'graph'; this.root.dataset.pane = 'graph'; this.render() },
+          vocab: nodeSpec, nodes: sp.shape.nodes, skip: weapon ? ['swing'] : []
+        }))
+        // A PHASE MAY CARRY ITS OWN SWING, replacing the weapon's while it is
+        // in it -- which is what makes a combo escalate rather than being three
+        // names for one blow.
+        if (weapon) body.push(...this.#swingSection(st, `this ${sp.node}`, ctx))
+        const mine = problemsByState(problems, this.mob, { kind: sp.kind, node: sp.node }).get(this.state)
         if (mine) body.push(el('div', { class: 'st-danger', text: mine.join('\n'), style: 'white-space:pre-wrap;font-size:12px' }))
       }
     } else if (this.tab === 'brain') body.push(...brainRows(S, m, ctx))
-    else if (this.tab === 'body') body.push(...bodyRows(S, this.prop, changed))
+    else if (this.tab === 'weapon') body.push(...weaponRows(S, this.mob, m, ctx))
+    else if (this.tab === 'swing') body.push(...this.#swingSection(m, `every ${sp.node}`, ctx))
+    else if (this.tab === 'body') body.push(...(weapon ? avatarRows(S, { changed }) : bodyRows(S, this.prop, changed)))
     else if (this.tab === 'vars') body.push(...varsRows(m, changed))
     else if (this.tab === 'missiles') body.push(...missilesSection(S, changed))
+    else if (this.tab === 'arsenal') body.push(...arsenalRows(S, { ...ctx, changed }))
+    else if (this.tab === 'skin') body.push(...avatarRows(S, { changed }))
+    else if (this.tab === 'sounds') body.push(...playerSoundRows(S, { changed }))
+    else if (this.tab === 'size' || this.tab === 'moves' || this.tab === 'kit') {
+      // Module-wide or this map's override: a module change re-bakes through
+      // moduleChanged, a map's through commit (so it is undoable with the map).
+      const pctx = { changed, commit: () => { S.commit(); this.render() }, render: () => this.render() }
+      body.push(...({ size: playerBodyRows, moves: moveRows, kit: kitRows })[this.tab](S, pctx))
+    }
     pane.replaceChildren(tabs, ...body.filter(Boolean))
+  }
+
+  /**
+   * The swept collider `owner` declares, with the picture of it.
+   *
+   * The same fields for a monster's claw and a player's fist, because they are
+   * the same engine facility -- there is no reason the player should be the
+   * only thing that can be dodged.
+   */
+  #swingSection (owner, whose, ctx) {
+    const S = this.S
+    const V = this.kind === 'weapon' ? S.vocab.weapon : S.vocab.mob
+    const radius = this.prop?.radius ?? 0.35
+    const changed = () => this.changed()
+    if (!owner.swing) {
+      return [
+        muted(`${whose[0].toUpperCase()}${whose.slice(1)} has no swing: a swept collider that moves through an arc over several ticks, so a target that steps aside is missed.`),
+        button('+ swing', () => { owner.swing = newSwing(); changed() })
+      ]
+    }
+    return swingRows(V, owner, { ...ctx, onChange: changed }, {
+      radius,
+      preview: this.swingPreview,
+      onRemove: () => { delete owner.swing; changed() }
+    })
   }
 
   #renameState (from, raw) {
     const to = String(raw).toLowerCase().replace(/[^a-z0-9_]/g, '')
     const m = this.brain
-    if (!to || to === from || m.states[to]) return
-    m.states[to] = m.states[from]
-    delete m.states[from]
+    const nodes = this.nodes
+    const gotoField = this.spec.shape.gotoField
+    if (!to || to === from || nodes[to]) return
+    nodes[to] = nodes[from]
+    delete nodes[from]
     if (m.initial === from) m.initial = to
-    for (const st of Object.values(m.states)) {
+    for (const st of Object.values(nodes)) {
       if (st.next === from) st.next = to
       for (const tr of st.transitions ?? []) if (tr.to === from) tr.to = to
-      for (const step of st.sequence ?? []) if (step.action === 'goto' && step.state === from) step.state = to
+      for (const step of st.sequence ?? []) if (step.action === 'goto' && step[gotoField] === from) step[gotoField] = to
     }
-    const lay = this.S.module.layouts?.[this.mob]
+    const lay = this.S.module.layouts?.[this.spec.layoutKey(this.mob)]
     if (lay?.[from]) { lay[to] = lay[from]; delete lay[from] }
     this.state = to
     this.changed()

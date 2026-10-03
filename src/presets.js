@@ -10,7 +10,7 @@
 // the geometry can do what is asked (a door needs rooms on both sides), and
 // either adds its triggers and flags and returns them, or returns the problem.
 //
-import { addTrigger, findEdge } from './doc.js'
+import { addTrigger, findEdge, newStyle } from './doc.js'
 import { derive } from './topology.js'
 import { num as fmt } from './mapfmt.js'
 
@@ -128,6 +128,74 @@ export function lift (doc, sectorId, { name = 'lift', waitTicks = 60 } = {}) {
     }))
   }
   return { ok: true, problems: [], triggers: made }
+}
+
+/**
+ * A platform that travels sideways, worked by a switch.
+ *
+ * A LIFT LEAVES ITS FOOTPRINT WHERE THE MAP SAYS IT IS AND A SLIDER STOPS
+ * BEING THERE, which is the whole difference: it pushes what is in its way and
+ * carries what stands on it. `speed` is along the line actually travelled, so
+ * a diagonal takes as long as it looks like it should.
+ *
+ * The flat is anchored to the sector at the same time. A pattern painted in
+ * world coordinates stays where the world is while the platform leaves, so a
+ * slider drawn the default way slides out from under its own floor -- which is
+ * a thing nobody asks for and everybody would report.
+ */
+export function slider (doc, edgeId, sectorId, { name = 'slider', dx = 4, dy = 0, waitTicks = 90 } = {}) {
+  const e = findEdge(doc, edgeId)
+  const s = doc.sectors[sectorId]
+  if (!e) return fail('no such wall')
+  if (!s) return fail('no such sector')
+  if (!dx && !dy) return fail(`${name}: a slider that travels nowhere is a sector`)
+  const base = uniqueName(doc, name)
+  ;(s.floorStyle ??= newStyle()).anchor = 'sector'
+  const back = addTrigger(doc, {
+    name: `${base}: back`,
+    actions: [{ a: 'sector_move', sector: { sector: sectorId }, surface: 'floor', dx: -dx, dy: -dy, speed: SPEED_LIFT }]
+  })
+  const out = addTrigger(doc, {
+    name: `${base}: out`,
+    event: 'on_interact',
+    conditions: [{ c: 'side_is', side: { edge: edgeId } },
+                 { c: 'sector_at_rest', sector: { sector: sectorId } }],
+    actions: [
+      { a: 'sector_move', sector: { sector: sectorId }, surface: 'floor', dx, dy, speed: SPEED_LIFT },
+      { a: 'run_after', trigger: { trigger: back.id }, after: { sector: sectorId }, ticks: waitTicks }
+    ]
+  })
+  e.edge.flags.usable = true
+  return { ok: true, problems: [], triggers: [back, out] }
+}
+
+/**
+ * A sector that turns, worked by a switch.
+ *
+ * `spin` is in DEGREES and is measured from where the sector is NOW rather
+ * than from its authored orientation, so pressing the switch twice turns it
+ * twice rather than snapping it back to square. The pivot defaults to the mean
+ * of the sector's own corners, which is what somebody means by "spin it" -- so
+ * this names none.
+ */
+export function turntable (doc, edgeId, sectorId, { name = 'turntable', spin = 90, speed = 1 } = {}) {
+  const e = findEdge(doc, edgeId)
+  const s = doc.sectors[sectorId]
+  if (!e) return fail('no such wall')
+  if (!s) return fail('no such sector')
+  const base = uniqueName(doc, name)
+  // Anchored for the same reason a slider is, and more so: a turntable painted
+  // in world coordinates is a window onto a floor somewhere else.
+  ;(s.floorStyle ??= newStyle()).anchor = 'sector'
+  const turn = addTrigger(doc, {
+    name: `${base}: turn`,
+    event: 'on_interact',
+    conditions: [{ c: 'side_is', side: { edge: edgeId } },
+                 { c: 'sector_at_rest', sector: { sector: sectorId } }],
+    actions: [{ a: 'sector_move', sector: { sector: sectorId }, surface: 'floor', spin, spin_speed: speed, speed: SPEED_LIFT }]
+  })
+  e.edge.flags.usable = true
+  return { ok: true, problems: [], triggers: [turn] }
 }
 
 /** A switch on the tapped edge that moves a target sector's floor or ceiling. */

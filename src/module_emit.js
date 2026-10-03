@@ -4,7 +4,7 @@
 // This is the one place that knows the layout of a module on disk
 // (docs/MODULES.md) and what the studio adds to it:
 //
-//   module.txt                     name / id / about
+//   module.txt                     name / id / about, controls, persist, game lines
 //   module.studio.json             the module document (props, mobs, textures)
 //   maps/<map>.studio.json         the map document -- THE source
 //   maps/<map>.map                 generated, so a checkout can re-bake it
@@ -12,9 +12,14 @@
 //   maps/<map>.lua                 generated: placed things and triggers
 //   maps/mobs.lua                  generated: the module's monsters (if any)
 //   maps/*.lua                     mapc's copies of the runtime scripts
+//   maps/arsenal.lua               generated: the weapons, run ONCE for the game
+//   maps/weapon_vocab.lua, weapons.lua   copies of the runtime, for the game lines
 //   assets/props.txt               generated: bodies for the module's kinds
 //   assets/textures/index.json     generated: sizes of every texture used
 //   assets/textures/*.png          the module's own pictures
+//   assets/ui/index.json, *.json   generated: the HUD, touch controls, panel templates
+//   maps/metamap.txt               generated: where the levels sit on the grid
+//   sources/sounds/*.sfxproj       the sound packs, merged into assets/sounds/bank.sfxproj
 //   assets/sprites/*               the module's own sheets
 //
 // Every map declares, in order: the mob vocabulary and runtime, the module's
@@ -24,12 +29,104 @@
 //
 import { normalize, derive } from './topology.js'
 import { emitMap } from './mapfmt.js'
-import { emitMapLua } from './lua_emit.js'
-import { emitMobsLua, MOBS_FILE } from './mobs_emit.js'
+import { emitMapLua, makeResolver } from './lua_emit.js'
+import { emitGraph, graphFile, hasGraph } from './graphs_emit.js'
+import { emitMobsLua } from './mobs_emit.js'
+import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
+import { emitPlayerLua, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
 import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
+import { uiFiles } from './ui_emit.js'
+import { metamapText, metamapProblems } from './metamap.js'
+import { mergeBanks, packPath } from './soundpacks.js'
+import { newMetamap, MODULE_VERSION } from './migrate.js'
 
-export const RUNTIME_SCRIPTS = ['mob_vocab.lua', 'mobs.lua', 'trigger_vocab.lua', 'triggers.lua']
+export const RUNTIME_SCRIPTS = ['mob_vocab.lua', 'mobs.lua', 'trigger_vocab.lua', 'triggers.lua',
+                               'weapon_vocab.lua', 'weapons.lua', 'graph_vocab.lua', 'graphs.lua', 'player_sounds.lua']
+
+/**
+ * ONE FILE FOR EVERYTHING THE MODULE DEFINES, and it is a budget that forces
+ * it rather than tidiness.
+ *
+ * A map may declare eight scripts (MAX_MAP_SCRIPTS) and the three runtimes
+ * cost two apiece -- six, before the module has said anything of its own. A
+ * file each for the monsters, the arsenal and every module script put a module
+ * with all three over the cap the moment a weapon was added, which is a studio
+ * making one of its own features unusable.
+ *
+ * So the module's Lua is one file: its mobs.load, its weapons.load and its own
+ * scripts, in that order, leaving six for the runtimes, one for this and one
+ * for the map's own -- exactly eight, whatever the module contains.
+ *
+ * Each of the module's own scripts is wrapped in `do ... end` so its locals
+ * stay its own, which is what being a separate chunk bought it. A trailing
+ * `return` is still legal there and still discarded, exactly as mapc running
+ * the file discarded it.
+ */
+export const MODULE_FILE = 'module.lua'
+
+export function emitModuleLua (module, { hooks = [] } = {}) {
+  const parts = []
+  const mobs = emitMobsLua(module)
+  if (mobs !== null) parts.push({ text: mobs, hooks: false })
+  // The player's pain and death, through the mob runtime in each level.
+  const hurt = emitPlayerHurtLua(module)
+  if (hurt !== null) parts.push({ text: hurt, hooks: false })
+  for (const [name, text] of Object.entries(module.scripts ?? {})) {
+    parts.push({ text: `-- >>> ${name}\ndo\n${String(text).trimEnd()}\nend\n-- <<< ${name}\n`, hooks: true })
+  }
+  if (!parts.length) return null
+
+  // HOOKS ARE HARVESTED PER CHUNK and this file is one chunk, so two parts
+  // that both define `on_tick` would leave one of them: the second assignment
+  // wins and the first is never seen. Before these shared a file they were
+  // separate chunks and both ran.
+  //
+  // So each part's hooks are taken as soon as it has run and chained at the
+  // end, which is what the server would have done for separate files. The
+  // names come from the trigger vocabulary's events -- the same list vm.cpp
+  // harvests -- rather than a second copy written here.
+  const names = hooks.filter((n) => /^on_/.test(n))
+  const chain = names.length > 1 || parts.filter((p) => p.hooks).length > 1
+  const L = [
+    '--',
+    `-- GENERATED by the studio: every definition module ${module.id} makes.`,
+    '-- One file because a map may declare eight scripts and three runtimes cost',
+    "-- six; edit the monsters, the weapons and the module's scripts in the studio.",
+    '--',
+    ''
+  ]
+  if (chain) {
+    L.push(`local __hook_names = { ${names.map((n) => `"${n}"`).join(', ')} }`)
+    L.push('local __chained = {}')
+    L.push('local function __take()')
+    L.push('  for _, n in ipairs(__hook_names) do')
+    L.push('    local f = _G[n]')
+    L.push('    if f ~= nil then')
+    L.push('      __chained[n] = __chained[n] or {}')
+    L.push('      __chained[n][#__chained[n] + 1] = f')
+    L.push('      _G[n] = nil')
+    L.push('    end')
+    L.push('  end')
+    L.push('end')
+    L.push('')
+  }
+  for (const p of parts) {
+    L.push(p.text)
+    if (chain && p.hooks) L.push('__take()')
+  }
+  if (chain) {
+    L.push('')
+    L.push('-- Re-installed, one handler or a chain of them. The engine calls a hook')
+    L.push('-- for no result (lua_pcall with zero returns), so running them in order')
+    L.push('-- is the whole of what a list of chunks did.')
+    L.push('for n, list in pairs(__chained) do')
+    L.push('  if #list == 1 then _G[n] = list[1]')
+    L.push('  else _G[n] = function(...) for i = 1, #list do list[i](...) end end end')
+    L.push('end')
+  }
+  return L.join('\n')
+}
 // Where the runtime lives, as a map declares it: the engine's folder in the
 // repository (engine/maps/scripts), and the same path in the virtual tree a
 // bake here is given, so the two agree.
@@ -37,7 +134,7 @@ const RUNTIME_DIR = 'engine/maps/scripts'
 
 export function newModule (id, name = id) {
   return {
-    version: 1,
+    version: MODULE_VERSION,
     id,
     name,
     about: '',
@@ -46,13 +143,79 @@ export function newModule (id, name = id) {
     mobs: { missiles: {}, mobs: {} },
     scripts: {},              // { 'name.lua': text } -- the module's own Lua, declared by every map
     textures: {},             // { NAME: { w, h, cutout } } -- pictures live as files beside this
-    sprites: {}               // { SHEET: { image: 'SHEET.png' } } -- ThreeSprite manifests
+    sprites: {},              // { SHEET: { image: 'SHEET.png' } } -- ThreeSprite manifests
+    // The arsenal, as weapons.load{} takes it: pools, ceilings, phase machines
+    // and pickups (maps/scripts/weapon_vocab.lua).
+    weapons: { ammo: {}, health: null, weapons: {}, pickups: {} },
+    // Which record draws a player, and which state each animation condition
+    // picks. `prop` names one of `props` above.
+    player: null,             // { prop, blend, when, body, moves, start } -- every map's; a map overrides with playerOverride
+    vfx: [],                  // [{ id, type: 'particles'|'tracer', ... }] -- bursts and tracers
+    controls: 'platformer',   // or 'fps' (module.txt `controls`)
+    persist: [],              // any of PERSIST (module.txt `persist`)
+    // Sound packs, highest first; each kept as sources/sounds/<id>.sfxproj and
+    // merged into assets/sounds/bank.sfxproj when written (soundpacks.js).
+    sounds: { packs: [] },    // [{ id, name, enabled }]
+    // Levels on a grid (maps/metamap.txt): off, or a pitch and cells.
+    metamap: newMetamap()
   }
 }
+
+/**
+ * THE WEAPONS RUN ONCE, FOR THE WHOLE GAME (docs/MODULES.md, Game scripts).
+ *
+ * Loaded per level, every level had its own inventory and its own weapon
+ * panel: walking into the next map handed the player a fresh pistol. A
+ * `game` line in module.txt runs a script once in the game VM instead, and
+ * the weapons follow the player.
+ *
+ * Game lines name files in the module's own maps/ -- a packaged build copies
+ * modules alone -- so the runtime travels as copies beside the generated
+ * arsenal, the same way mapc copies a map's scripts beside it.
+ */
+export const GAME_FILE = 'arsenal.lua'
+export const GAME_RUNTIME = ['weapon_vocab.lua', 'weapons.lua']
+
+// The player's jump and landing sounds: the runtime's game script, then the
+// file that sets them (player.js, emitPlayerSoundsLua).
+export const PLAYER_GAME_RUNTIME = 'player_sounds.lua'
+export const PLAYER_GAME_FILE = 'player_setup.lua'
+
+/** The module's game scripts, in load order; empty when it needs none. */
+export function gameScripts (module) {
+  const out = hasWeapons(module) ? [...GAME_RUNTIME, GAME_FILE] : []
+  if (hasMoveSounds(module)) out.push(PLAYER_GAME_RUNTIME, PLAYER_GAME_FILE)
+  return out
+}
+
+/** The game-wide file: the arsenal, and what every player starts holding. */
+export function emitGameLua (module) {
+  const arms = emitWeaponsLua(module)
+  if (arms === null) return null
+  const start = module.player?.start?.weapons
+  const L = [arms]
+  if (Array.isArray(start) && start.length) {
+    L.push('-- What every player starts holding (the Player window\'s kit).')
+    L.push(`weapons.initial_weapons = { ${start.map((n) => `"${n}"`).join(', ')} }`)
+  }
+  const pickups = emitPickupSoundsLua(module)
+  if (pickups) { L.push('-- What taking a pickup sounds like (the Player window\'s sounds).'); L.push(pickups.trimEnd()) }
+  return L.join('\n') + '\n'
+}
+
+// What module.txt may say about how the module is played and what it keeps
+// (docs/MODULES.md, docs/SAVING.md). The studio offers exactly these.
+export const CONTROLS = ['platformer', 'fps']
+export const PERSIST = ['levels', 'saves', 'server']
 
 export function moduleTxt (module) {
   const L = [`name    ${module.name}`, `id      ${module.id}`]
   for (const line of (module.about ?? '').split('\n')) if (line.trim()) L.push(`about   ${line}`)
+  // Platformer is the engine's default, so it goes unsaid; a module that says
+  // it would override an fps flavour stacked on top of it.
+  if (module.controls === 'fps') L.push('controls fps')
+  for (const p of PERSIST) if (module.persist?.includes(p)) L.push(`persist ${p}`)
+  for (const f of gameScripts(module)) L.push(`game ${f}`)
   return L.join('\n') + '\n'
 }
 
@@ -72,16 +235,23 @@ export function musicKey (dnpm) {
 }
 
 /**
- * assets/music/index.json: { mapKey: { cue: 'track.mstk' } } for every baked
- * map with cues (doc.music). `tracks` is the set of track names the module
- * holds, or null when unknown (the workstation tool); a cue naming a track
- * that is not there is a warning, and the entry is written anyway so the
- * game says which file it lacked.
+ * assets/music/index.json: { mapName: { cue: 'track.mstk' } } for every map
+ * with cues (doc.music).
+ *
+ * KEYED BY THE LEVEL'S NAME, which the client looks up first
+ * (engine/client/src/audio/musickey.js): the server names a level by its map
+ * file's stem, which is the document's name. A content hash also works, but a
+ * re-bake changes it and silently unmaps the soundtrack; a name survives.
+ *
+ * `tracks` is the set of track names the module holds, or null when unknown
+ * (the workstation tool); a cue naming a track that is not there is a
+ * warning, and the entry is written anyway so the game says which file it
+ * lacked.
  */
 export function musicIndex (baked, tracks = null) {
   const index = {}
   const warnings = []
-  for (const { doc, dnpm } of baked) {
+  for (const { doc } of baked) {
     const cues = Object.entries(doc.music ?? {}).filter(([, track]) => track)
     if (!cues.length) continue
     const table = {}
@@ -90,17 +260,33 @@ export function musicIndex (baked, tracks = null) {
       if (tracks && !tracks.has(track)) warnings.push({ map: doc.name, msg: `cue '${cue}' names track '${track}', which is not in the module` })
     }
     if (!table.default) warnings.push({ map: doc.name, msg: `no cue called 'default': the game starts with that one (has ${Object.keys(table).join(', ')})` })
-    index[musicKey(dnpm)] = table
+    index[doc.name] = table
   }
   return { index, warnings }
 }
 
-export function scriptDecls (module, hasMobs) {
+/**
+ * What a map declares, in load order.
+ *
+ * ONLY WHAT IS USED, within MAX_MAP_SCRIPTS (sixteen): two slots per runtime
+ * the level needs, its graph if it has one, one for everything the module
+ * defines (MODULE_FILE), and one for the map's own.
+ *
+ * The weapons are not here: they are game scripts. But a module that arms
+ * anybody still needs the MOB runtime in every level, because the game's
+ * weapons do their shooting through the level the player stands in
+ * (`mobs.weapon_runtime`) -- the ray, the missile and the blast are the mob
+ * runtime's, which owns the monsters and their health.
+ */
+export function scriptDecls (module, { hasMobs = false, hasTriggers = true, hasWeapons = false, graph = null } = {}) {
   const decls = []
-  decls.push(`../../../${RUNTIME_DIR}/mob_vocab.lua`, `../../../${RUNTIME_DIR}/mobs.lua`)
-  if (hasMobs) decls.push(MOBS_FILE)
-  decls.push(`../../../${RUNTIME_DIR}/trigger_vocab.lua`, `../../../${RUNTIME_DIR}/triggers.lua`)
-  for (const name of Object.keys(module.scripts ?? {})) decls.push(`../scripts/${name}`)
+  if (hasMobs || hasWeapons) decls.push(`../../../${RUNTIME_DIR}/mob_vocab.lua`, `../../../${RUNTIME_DIR}/mobs.lua`)
+  // A graph's verbs ARE the trigger runtime's (triggers.verbs), so a map with
+  // a graph needs it whether or not it has a trigger table.
+  if (hasTriggers || graph) decls.push(`../../../${RUNTIME_DIR}/trigger_vocab.lua`, `../../../${RUNTIME_DIR}/triggers.lua`)
+  if (graph) decls.push(`../../../${RUNTIME_DIR}/graph_vocab.lua`, `../../../${RUNTIME_DIR}/graphs.lua`, graph)
+  // After every runtime, because it calls into all of them.
+  if (emitModuleLua(module) !== null) decls.push(MODULE_FILE)
   return decls
 }
 
@@ -111,29 +297,44 @@ export function scriptDecls (module, hasMobs) {
  * @param runtime  { 'mobs.lua': text, ... } the four runtime scripts
  * @returns { ok, mapText, luaText, dnpm, copies, errors, warnings, emitted }
  */
-export async function emitLevel (module, doc, { bake, runtime }) {
+export async function emitLevel (module, doc, { bake, runtime, hooks = [] }) {
   normalize(doc)
   const derived = derive(doc)
-  const mobsLua = emitMobsLua(module)
-  const decls = scriptDecls(module, mobsLua !== null)
+  const withGraph = hasGraph(doc)
+  const moduleLua = emitModuleLua(module, { hooks })
+  const decls = scriptDecls(module, { hasMobs: emitMobsLua(module) !== null, hasTriggers: doc.triggers.length > 0, hasWeapons: hasWeapons(module),
+                                      graph: withGraph ? graphFile(doc.name) : null })
   const errors = []
   if (decls.length + 1 > CAP.scripts) {
-    errors.push({ line: 0, msg: `a map can declare ${CAP.scripts} scripts and this module needs ${decls.length + 1}; remove a module script` })
+    errors.push({ line: 0, msg: `a map can declare ${CAP.scripts} scripts and this module needs ${decls.length + 1}: ${decls.map((d) => d.split('/').pop()).join(', ')}.` })
   }
-  const emitted = emitMap(derived, doc, [...decls, `${doc.name}.lua`])
+  const emitted = emitMap(derived, doc, [...decls, `${doc.name}.lua`], { body: playerFor(module, doc).body })
   const lua = emitMapLua(doc, emitted)
+  // The player, resolved for this map: the module's with the map's override
+  // over it, so the file says what this map's player is rather than a base
+  // and a correction.
+  const player = emitPlayerLua(module, doc)
+  if (player !== null) lua.text += '\n' + player
   for (const p of lua.problems) errors.push({ line: 0, msg: p })
-  if (errors.length) return { ok: false, mapText: emitted.text, luaText: lua.text, dnpm: null, copies: {}, errors, warnings: derived.warnings, emitted }
+  // The graph, its verbs' places resolved as the trigger table's are.
+  let graphText = null
+  if (withGraph) {
+    const unresolved = []
+    const g = emitGraph(doc.graph, doc.name, makeResolver(doc, emitted, { problems: unresolved }))
+    for (const p of [...g.problems, ...unresolved]) errors.push({ line: 0, msg: p })
+    graphText = g.text
+  }
+  if (errors.length) return { ok: false, mapText: emitted.text, luaText: lua.text, graphText, dnpm: null, copies: {}, errors, warnings: derived.warnings, emitted }
 
   const files = {}
   for (const name of RUNTIME_SCRIPTS) files[`${RUNTIME_DIR}/${name}`] = runtime[name]
   const mapsDir = `modules/${module.id}/maps`
-  if (mobsLua !== null) files[`${mapsDir}/${MOBS_FILE}`] = mobsLua
-  for (const [name, text] of Object.entries(module.scripts ?? {})) files[`modules/${module.id}/scripts/${name}`] = text
+  if (moduleLua !== null) files[`${mapsDir}/${MODULE_FILE}`] = moduleLua
+  if (graphText !== null) files[`${mapsDir}/${graphFile(doc.name)}`] = graphText
   files[`${mapsDir}/${doc.name}.lua`] = lua.text
 
   const r = await bake({ mapPath: `${mapsDir}/${doc.name}.map`, mapText: emitted.text, files })
-  return { ok: r.ok, mapText: emitted.text, luaText: lua.text, dnpm: r.dnpm, copies: r.copies,
+  return { ok: r.ok, mapText: emitted.text, luaText: lua.text, graphText, dnpm: r.dnpm, copies: r.copies,
            errors: r.errors, warnings: derived.warnings, emitted, hash: r.hash }
 }
 
@@ -146,7 +347,7 @@ export async function emitLevel (module, doc, { bake, runtime }) {
  * @param textureSizes  (name) => { w, h } | null, for index.json
  * @returns { ok, files, problems: [{ map, errors, warnings }] }
  */
-export async function emitModule (module, docs, { bake, runtime, assets = {}, textureSizes = () => null }) {
+export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null }) {
   const files = []
   const problems = []
   const used = new Set()
@@ -154,17 +355,39 @@ export async function emitModule (module, docs, { bake, runtime, assets = {}, te
   files.push({ path: 'module.studio.json', bytes: JSON.stringify(module, null, 2) })
   const props = emitProps(module)
   files.push({ path: 'assets/props.txt', bytes: props })
-  const mobsLua = emitMobsLua(module)
-  if (mobsLua !== null) files.push({ path: `maps/${MOBS_FILE}`, bytes: mobsLua })
+  // The module's own Lua, generated into one file; the scripts it carries stay
+  // beside it as the sources they were edited as.
+  const moduleLua = emitModuleLua(module, { hooks })
+  if (moduleLua !== null) files.push({ path: `maps/${MODULE_FILE}`, bytes: moduleLua })
   for (const [name, text] of Object.entries(module.scripts ?? {})) files.push({ path: `scripts/${name}`, bytes: text })
+  // Where the levels sit, when the module has them on a grid.
+  const mm = metamapText(module.metamap)
+  if (mm) files.push({ path: 'maps/metamap.txt', bytes: mm })
+  for (const p of metamapProblems(module.metamap, docs.map((d) => d.name))) problems.push({ map: 'metamap', errors: [{ line: 0, msg: p }], warnings: [] })
+  // The screens: the HUD, the touch controls and panel templates, when the
+  // module has a layout of its own (docs/UI_LAYOUT.md).
+  files.push(...uiFiles(module, docs))
+  // The game scripts module.txt names: the runtime's copies, then the arsenal.
+  const game = emitGameLua(module)
+  if (game !== null) {
+    for (const name of GAME_RUNTIME) files.push({ path: `maps/${name}`, bytes: runtime[name] })
+    files.push({ path: `maps/${GAME_FILE}`, bytes: game })
+  }
+  const playerGame = emitPlayerSoundsLua(module)
+  if (playerGame !== null) {
+    files.push({ path: `maps/${PLAYER_GAME_RUNTIME}`, bytes: runtime[PLAYER_GAME_RUNTIME] })
+    files.push({ path: `maps/${PLAYER_GAME_FILE}`, bytes: playerGame })
+  }
 
-  let ok = true
+  // A metamap the server would refuse is fatal there, so it is here.
+  let ok = !problems.some((p) => p.map === 'metamap' && p.errors.length)
   const baked = []
   for (const doc of docs) {
-    const r = await emitLevel(module, doc, { bake, runtime })
+    const r = await emitLevel(module, doc, { bake, runtime, hooks })
     files.push({ path: `maps/${doc.name}.studio.json`, bytes: JSON.stringify(doc, null, 2) })
     files.push({ path: `maps/${doc.name}.map`, bytes: r.mapText })
     files.push({ path: `maps/${doc.name}.lua`, bytes: r.luaText })
+    if (r.graphText) files.push({ path: `maps/${graphFile(doc.name)}`, bytes: r.graphText })
     if (r.ok) {
       baked.push({ doc, dnpm: r.dnpm })
       files.push({ path: `maps/${doc.name}.dnpm`, bytes: r.dnpm })
@@ -196,6 +419,22 @@ export async function emitModule (module, docs, { bake, runtime, assets = {}, te
   const music = musicIndex(baked, Object.keys(assets).length ? new Set(trackNames) : null)
   for (const w of music.warnings) problems.push({ map: w.map, errors: [], warnings: [{ sector: 'music', msg: w.msg }] })
   if (Object.keys(music.index).length) files.push({ path: 'assets/music/index.json', bytes: JSON.stringify(music.index, null, 1) })
-  for (const [path, bytes] of Object.entries(assets)) files.push({ path: `assets/${path}`, bytes })
+  // The sound packs, merged into the one bank the engine plays; the packs
+  // themselves travel as sources at the module root.
+  const dec = new TextDecoder()
+  const packs = (module.sounds?.packs ?? []).map((p) => {
+    const b = assets[packPath(p.id)]
+    let json = null
+    try { json = b ? JSON.parse(typeof b === 'string' ? b : dec.decode(b)) : null } catch { json = null }
+    if (b && !json) problems.push({ map: 'sounds', errors: [], warnings: [{ sector: 'sounds', msg: `pack ${p.id} is not a sound project any more` }] })
+    return { ...p, json }
+  })
+  const merged = mergeBanks(packs)
+  if (merged.bank) files.push({ path: 'assets/sounds/bank.sfxproj', bytes: JSON.stringify(merged.bank) })
+  for (const c of merged.collisions) problems.push({ map: 'sounds', errors: [], warnings: [{ sector: 'sounds', msg: `${c.name} is in ${c.kept} and ${c.dropped.join(', ')}; ${c.kept}'s is kept` }] })
+  for (const [path, bytes] of Object.entries(assets)) {
+    if (path.startsWith('sources/')) files.push({ path, bytes })
+    else if (!(merged.bank && path === 'sounds/bank.sfxproj')) files.push({ path: `assets/${path}`, bytes })
+  }
   return { ok, files, problems }
 }

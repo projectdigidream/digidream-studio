@@ -30,7 +30,11 @@ const docs = readdirSync(join(dir, 'maps')).filter((f) => f.endsWith('.studio.js
 const runtime = {}
 for (const name of RUNTIME_SCRIPTS) runtime[name] = readFileSync(join(ROOT, 'engine', 'maps', 'scripts', name), 'utf8')
 
-const r = await emitModule(module, docs, { bake, runtime })
+// The hook names the server harvests, read from the vocabulary that lists them
+// rather than copied: the module file chains any that two of its parts define.
+const hooks = JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'trigger_vocab.json'), 'utf8'))
+  .events.map((e) => e.name)
+const r = await emitModule(module, docs, { bake, runtime, hooks })
 for (const p of r.problems) {
   for (const e of p.errors) console.error(`${p.map}: ${e.line ? `line ${e.line}: ` : ''}${e.msg}`)
   for (const w of p.warnings) console.error(`${p.map}: ${w.sector}: ${w.msg}`)

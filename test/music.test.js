@@ -1,15 +1,18 @@
 //
-// A map's music is filed under its content hash, and the studio's key for a
-// baked map must be the number the client computes when it looks the track
-// up -- or every map plays nothing, quietly.
+// A map's music is filed under its level name, which the client looks up
+// before the content hash -- so a re-bake, which changes the hash, keeps the
+// soundtrack. The key must be the one the client resolves, or every map plays
+// nothing, quietly.
 //
-// ORACLE: the runtime's own loader (core.loadMap) reading the hash out of a
-// baked map, as the client does; the map is modules/starter's committed bake.
+// ORACLES: the client's own lookup (engine/client/src/audio/musickey.js), and
+// the runtime's loader (core.loadMap) reading the hash out of a baked map, as
+// the client does; the map is modules/starter's committed bake.
 //
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { musicKey, musicIndex } from '../src/module_emit.js'
 import { ROOT, requireOracles, readBaked } from './oracle.js'
+import { musicKeyFor } from '../../engine/client/src/audio/musickey.js'
 
 requireOracles('music', { mapc: false, core: true })
 
@@ -38,7 +41,10 @@ const docB = { name: 'second', music: {} }
 const docC = { name: 'third', music: { fight: 'loud' } }
 const r = musicIndex([{ doc: docA, dnpm }, { doc: docB, dnpm: flipped }, { doc: docC, dnpm: flipped }], new Set(['calm']))
 check(Object.keys(r.index).length === 2, `maps with cues are filed, one without is not (${Object.keys(r.index).length})`)
-check(r.index[clientKey]?.default === 'calm.mstk' && r.index[clientKey]?.fight === 'loud.mstk', 'each cue names its track file')
+check(r.index.first?.default === 'calm.mstk' && r.index.first?.fight === 'loud.mstk', 'each cue names its track file')
+check(musicKeyFor(r.index, map.hash, 'first') === 'first', 'the client finds the map by the name the server gives its level')
+check(musicKeyFor(r.index, map.hash ^ 1n, 'first') === 'first', 'and still finds it after a re-bake changes the hash')
+check(musicKeyFor(r.index, map.hash, 'second') === null, 'CONTROL: a map with no cues finds nothing')
 check(r.warnings.some((w) => w.map === 'first' && /'loud'.*not in the module/.test(w.msg)), 'CONTROL: a cue naming a track the module lacks is said')
 check(r.warnings.some((w) => w.map === 'third' && /no cue called 'default'/.test(w.msg)), 'CONTROL: a map with cues but no default is said')
 check(musicIndex([{ doc: docA, dnpm }], null).warnings.length === 0, 'with the tracks unknown (the workstation tool), nothing is guessed')

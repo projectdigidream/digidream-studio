@@ -19,6 +19,7 @@
 // the mapping (x, z, -y) and everything here goes through it. Picking gives
 // back engine coordinates, because that is what the document stores.
 //
+import { SectorFx } from '/src/render/sectorfx.js'
 import * as THREE from 'three'
 import { makeCamera, resizeCamera } from '/src/render/scene.js'
 import { cameraOffset, ISO_ELEVATION, distanceForFraming } from '/src/camera.js'
@@ -30,7 +31,13 @@ const MAX_VIEW = 300
 
 export const COLORS = {
   grid: 0x1b2230, gridMajor: 0x2a3446, outline: 0xffe066, handle: 0xffe066, handleHot: 0xffffff,
-  rubber: 0x5b8fd6, corner: 0x5f7fa8, pickable: 0x5b8fd6, when: 0xffcc66, if: 0x5b8fd6, then: 0x7ad48a, spawn: 0x66ff99, light: 0xffcc66, mob: 0xff6b6b, prop: 0x8fd0ff, edgeHot: 0x5b8fd6
+  rubber: 0x5b8fd6, corner: 0x5f7fa8, pickable: 0x5b8fd6, when: 0xffcc66, if: 0x5b8fd6, then: 0x7ad48a, spawn: 0x66ff99, light: 0xffcc66, mob: 0xff6b6b, prop: 0x8fd0ff, edgeHot: 0x5b8fd6,
+  // Camera paths: the curve the camera rides, and the polyline that was typed.
+  path: 0x9a7bd6, pathHot: 0xd0a6ff, pathChord: 0x4a3f66,
+  // A room the bake refused or a check complained about.
+  problem: 0xff4d4d, problemWarn: 0xffa94d,
+  // The metamap: a map's cell, and how its boundary sides meet a neighbour's.
+  cell: 0x8fa6c4, neighbourShade: 0x0b0d12, seam_joined: 0x66ff99, seam_oneway: 0xffa94d, seam_walls: 0x5f7fa8, seam_loose: 0xff6b6b
 }
 
 export class Viewport {
@@ -70,7 +77,9 @@ export class Viewport {
     this.segments = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: COLORS.pickable, depthTest: false, transparent: true, opacity: 0.85 }))
     this.segments.renderOrder = 8
     this.segments.visible = false
-    this.scene.add(this.markers, this.handles, this.lines, this.segments)
+    // The neighbouring maps on the metamap, drawn where they sit; never picked.
+    this.neighbours = new THREE.Group()
+    this.scene.add(this.markers, this.handles, this.lines, this.segments, this.neighbours)
     this.labelCache = new Map()
     this.raycaster = new THREE.Raycaster()
     this.raycaster.params.Line = { threshold: 0.3 }
@@ -138,7 +147,13 @@ export class Viewport {
     // shows of a monster's size is what the game will show.
     const squash = this.mode === 'iso' ? Math.cos(this.elevation) : 1
     for (const m of this.markers.children) if (m.userData.h) m.scale.y = m.userData.h * squash
+    if (this.fx && this.view) {
+      const o = this.view.root.position
+      this.fx.setOrigin(o.x, o.y, o.z)
+      this.fx.update(performance.now() / 1000)
+    }
     this.renderer.render(this.scene, this.camera)
+    if (this.fx?.hasFog) this.fx.renderFog(this.renderer, this.scene, this.camera)
     this.dirty = false
   }
 
@@ -197,8 +212,32 @@ export class Viewport {
     }
     this.view = view
     if (view) this.scene.add(view.root)
+    // The map's weather and fog, by the game's own renderer for them
+    // (docs/SECTOR_FX.md): what the level view shows is what the game draws.
+    this.fx?.dispose()
+    this.fx = (view?.map?.fx?.length ?? 0) > 0
+      ? new SectorFx({ THREE, map: view.map, touch: matchMedia('(pointer: coarse)').matches })
+      : null
+    if (this.fx) this.scene.add(this.fx.root)
     this.dirty = true
   }
+
+  /**
+   * The maps around this one on the metamap: [{ view, offset: {x, y} }], each
+   * a MapView of its own bake, moved to where it sits relative to this map.
+   * The views stay their owner's (a cache keeps them); only the group is ours.
+   */
+  setNeighbours (list) {
+    this.neighbours.clear()
+    for (const n of list) {
+      n.view.root.position.set(toThreeX(n.offset.x), 0, toThreeZ(n.offset.y))
+      this.neighbours.add(n.view.root)
+    }
+    this.dirty = true
+  }
+
+  /** Something on screen moves by itself (rain, fog), so every frame is drawn. */
+  get animating () { return !!this.fx }
 
   /** The world distance one screen pixel covers on the plane at height z. */
   worldPerPixel (z = 0) {
@@ -216,7 +255,9 @@ export class Viewport {
                                new THREE.MeshBasicMaterial({ color: p.color ?? (p.hot ? COLORS.handleHot : COLORS.handle), depthTest: false }))
       m.position.set(toThreeX(p.x), toThreeY(p.z) + size / 2, toThreeZ(p.y))
       m.renderOrder = 10
-      m.userData = { kind: 'vertex', id: p.id }
+      // A handle says what it belongs to: a sector's corner and a camera
+      // path's point are both boxes on the floor and are not the same thing.
+      m.userData = { kind: p.kind ?? 'vertex', id: p.id }
       this.handles.add(m)
     }
     this.dirty = true
@@ -224,7 +265,7 @@ export class Viewport {
 
   /** Closed or open polylines: [{ points: [{x,y,z}], color, closed }]. */
   setLines (lines) {
-    for (const l of this.lines.children) l.geometry.dispose()
+    for (const l of this.lines.children) { l.geometry.dispose(); l.material.dispose() }
     this.lines.clear()
     for (const l of lines) {
       const pts = l.points.map((p) => new THREE.Vector3(toThreeX(p.x), toThreeY(p.z) + 0.02, toThreeZ(p.y)))
@@ -233,6 +274,22 @@ export class Viewport {
       const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: l.color ?? COLORS.outline, depthTest: false }))
       line.renderOrder = 9
       this.lines.add(line)
+      // A closed line may be filled, translucent, on its own plane: how a room
+      // that is wrong is marked so it shows at a glance, not only as an outline.
+      if (l.fill && l.closed && l.points.length >= 3) {
+        const flat = l.points.map((p) => new THREE.Vector2(p.x, p.y))
+        let tris = []
+        try { tris = THREE.ShapeUtils.triangulateShape(flat, []) } catch { tris = [] }
+        if (tris.length) {
+          const pos = []
+          for (const t of tris) for (const k of t) { const p = l.points[k]; pos.push(toThreeX(p.x), toThreeY(p.z) + 0.02, toThreeZ(p.y)) }
+          const g = new THREE.BufferGeometry()
+          g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+          const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: l.color ?? COLORS.outline, transparent: true, opacity: l.fill, depthTest: false, side: THREE.DoubleSide }))
+          mesh.renderOrder = 8
+          this.lines.add(mesh)
+        }
+      }
     }
     this.dirty = true
   }
@@ -258,7 +315,7 @@ export class Viewport {
         sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.#label(m.label, m.color), depthTest: false, transparent: true }))
         sprite.scale.set(h * 3, h, 1)
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + h / 2, toThreeZ(m.y))
-        sprite.userData = { kind: m.kind, id: m.id, own: true }
+        sprite.userData = { kind: m.kind, id: m.id, own: true, label: m.label }
       }
       sprite.renderOrder = 11
       this.markers.add(sprite)

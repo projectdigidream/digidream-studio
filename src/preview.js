@@ -22,6 +22,8 @@
 import { MapView } from '/src/render/scene.js'
 import { readMap } from '/src/mapdata.js'
 import { emitLevel } from './module_emit.js'
+import { validate } from './doc.js'
+import { sectorProblems, nameSectors } from './problems.js'
 
 const INTERVAL_MS = 100
 
@@ -33,9 +35,10 @@ export class Preview {
    * @param viewport  where the picture goes
    * @param textures  a TextureCache
    */
-  constructor ({ core, bake, runtime, viewport, textures }) {
+  constructor ({ core, bake, runtime, viewport, textures , hooks = [] }) {
     this.core = core
     this.bake = bake
+    this.hooks = hooks
     this.runtime = runtime
     this.viewport = viewport
     this.textures = textures
@@ -67,7 +70,7 @@ export class Preview {
       try {
         await this.#bakeOnce(module, doc)
       } catch (e) {
-        this.last = { ok: false, errors: [{ line: 0, msg: String(e?.message ?? e) }], warnings: [] }
+        this.last = { ok: false, errors: [{ line: 0, msg: String(e?.message ?? e) }], warnings: [], problems: [] }
         console.error('[studio] refresh failed', e)
       }
       this.onResult(this.last)
@@ -78,11 +81,19 @@ export class Preview {
   }
 
   async #bakeOnce (module, doc) {
-    const r = await emitLevel(module, doc, { bake: this.bake, runtime: this.runtime })
-    if (!r.ok) { this.last = { ok: false, errors: r.errors, warnings: r.warnings }; return }
+    const r = await emitLevel(module, doc, { bake: this.bake, runtime: this.runtime, hooks: this.hooks ?? [] })
+    // The rooms anything is wrong with -- the bake's complaints traced back
+    // through the emitter's tables, and the studio's own checks -- for the
+    // viewport to mark in red and the inspector to explain.
+    const extra = [...validate(doc).filter((p) => p.sector).map((p) => ({ sector: p.sector, msg: p.msg })),
+                   ...(r.warnings ?? []).map((w) => ({ sector: w.sector, msg: w.msg, level: 'warn' }))]
+    const problems = sectorProblems(r.ok ? [] : r.errors, r.emitted, extra)
+    // The status line says it in the studio's names for the rooms too.
+    const errors = r.errors.map((e) => ({ ...e, msg: nameSectors(e.msg, r.emitted) }))
+    if (!r.ok) { this.last = { ok: false, errors, warnings: r.warnings, problems }; return }
     const loaded = this.core.loadMap(r.dnpm)
     if (!loaded.ok) {
-      this.last = { ok: false, errors: [{ line: 0, msg: `the core refused the baked map (status ${loaded.status})` }], warnings: r.warnings }
+      this.last = { ok: false, errors: [{ line: 0, msg: `the core refused the baked map (status ${loaded.status})` }], warnings: r.warnings, problems }
       return
     }
     const data = readMap(loaded.map)
@@ -96,7 +107,7 @@ export class Preview {
     this.emitted = r.emitted
     this.dragSector = -1
     this.viewport.setView(view)
-    this.last = { ok: true, errors: [], warnings: r.warnings, hash: r.hash }
+    this.last = { ok: true, errors: [], warnings: r.warnings, hash: r.hash, problems }
   }
 
   /**

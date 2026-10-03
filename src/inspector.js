@@ -6,8 +6,9 @@
 // only, while a slider is still moving). There is no model of its own here:
 // the document is the model and the sheet is a view of it.
 //
+import { fxRows } from './fxlib.js'
 import { el, row, slider, number, text, toggle, select, button, tiles, chips, card, muted } from './ui.js'
-import { EDGE_FLAGS, removeSector, newId, newEdge } from './doc.js'
+import { EDGE_FLAGS, removeSector, newId, newEdge, newStyle } from './doc.js'
 import { findEdge } from './doc.js'
 import { twinEdge } from './presets.js'
 
@@ -47,18 +48,87 @@ function texButton (label, value, ctx, onPick) {
   return row(label, b)
 }
 
+/**
+ * How a surface is painted, and whether you can see through it.
+ *
+ * A flat's texture is projected straight down from WORLD coordinates, so
+ * neighbouring floors line up instead of each restarting at its own origin.
+ * These sit on top of that: the angle turns the pattern, the offsets slide it
+ * in world units (the same distance whatever the scale), and the scale is how
+ * many times LARGER the tile is drawn.
+ */
+function styleRows (label, owner, key, ctx) {
+  owner[key] ??= newStyle()
+  const st = owner[key]
+  const rows = [el('div', { class: 'st-section-head', text: `▦ ${label} pattern` })]
+  rows.push(slider('turn (°)', st.angle ?? 0, { min: 0, max: 360, step: 5 }, (v, done) => { st.angle = v; done ? ctx.commit() : ctx.preview() }))
+  rows.push(number('shift x', st.offX ?? 0, { min: -64, max: 64, step: 0.25 }, (v) => { st.offX = v; ctx.commit() }))
+  rows.push(number('shift y', st.offY ?? 0, { min: -64, max: 64, step: 0.25 }, (v) => { st.offY = v; ctx.commit() }))
+  rows.push(slider('size', st.scale ?? 1, { min: 0.125, max: 8, step: 0.125 }, (v, done) => { st.scale = v > 0 ? v : 1; done ? ctx.commit() : ctx.preview() }))
+  rows.push(select('painted in', st.anchor ?? 'world',
+                   [['world', "the world: patterns line up across sectors"], ['sector', 'the sector: the pattern rides it when it moves']],
+                   (v) => { st.anchor = v; ctx.commit() }))
+  rows.push(...alphaRows(st, ctx, `${label} is`))
+  return rows
+}
+
+/**
+ * The transparency toggle, and the number behind it.
+ *
+ * Opt-in per surface and deliberately so: an opaque surface keeps early-z and
+ * needs no depth sort, so a map with nothing see-through pays for none of it.
+ * 254 rather than "a bit less than 255" because that is the useful case -- it
+ * lets the picture's OWN transparent pixels through, which is how a grate or a
+ * fence is made; a lower number is a sheet of glass.
+ */
+function alphaRows (owner, ctx, what = 'this is') {
+  const on = (owner.alpha ?? 255) < 255
+  const rows = [toggle('see-through', on, (v) => { owner.alpha = v ? 254 : 255; ctx.commit(); ctx.refreshSheet?.() })]
+  if (on) {
+    rows.push(slider('opacity', owner.alpha ?? 254, { min: 0, max: 255, step: 1 }, (v, done) => { owner.alpha = Math.round(v); done ? ctx.commit() : ctx.preview() }))
+    rows.push(muted(`254 shows the picture's own holes -- a grate, a fence. Lower is glass you see the room through. ${what} still solid to walk on: transparency is drawn, never simulated.`))
+  }
+  return rows
+}
+
+/** How this side meets the next map on the metamap, when it does. */
+function seamRows (sm) {
+  if (!sm) return []
+  const say = {
+    joined: `✔ joins ${sm.with}: both sides are open, so the engine stitches them and you walk across.`,
+    'one-way': `◐ meets ${sm.with}, but only one of the two sides is open: they will not join. Open both.`,
+    walls: `▭ meets ${sm.with} along the same line, closed. Open this side and theirs to walk across.`,
+    loose: '○ open, and no neighbour meets it: a drop off the edge of the world.'
+  }
+  return [el('div', { class: sm.state === 'joined' ? 'st-muted' : 'st-warn-box', text: say[sm.state] })]
+}
+
+/** What is wrong with this room, said first: the reason it is marked on the map. */
+function problemRows (list) {
+  return list.map((p) => el('div', { class: p.level === 'warn' ? 'st-warn-box' : 'st-danger st-problem', text: `${p.level === 'warn' ? '⚠' : '✖'} ${p.msg}` }))
+}
+
 function sectorForm (s, doc, ctx) {
   const range = { min: -32, max: 64, step: 0.25 }
   const body = [
+    ...problemRows(ctx.problems?.(s.id) ?? []),
     slider('floor', s.floor, range, (v, done) => { s.floor = v; if (s.ceil <= v) s.ceil = v + 0.25; done ? ctx.commit() : ctx.preview() }),
     slider('ceiling', s.ceil, range, (v, done) => { s.ceil = v; if (s.floor >= v) s.floor = v - 0.25; done ? ctx.commit() : ctx.preview() }),
     slider('light', s.light, { min: 0, max: 255, step: 1 }, (v, done) => { s.light = v; done ? ctx.commit() : ctx.preview() }),
     slider('thickness', s.thickness, { min: 0, max: 16, step: 0.25 }, (v, done) => { s.thickness = v; done ? ctx.commit() : ctx.preview() }),
     texButton('floor tex', s.floorTex, ctx, (n) => { s.floorTex = n; ctx.commit() }),
     texButton('ceiling tex', s.ceilTex, ctx, (n) => { s.ceilTex = n; ctx.commit() }),
-    texButton('all walls', null, ctx, (n) => { for (const v of s.verts) v.edge.middle = n; ctx.commit() }),
+    // Every wall of the sector at once, one field at a time. The same three
+    // fields a single wall has, so a room is textured without tapping each
+    // side -- and `(none)` clears a field just as it does on one wall.
+    ...['middle', 'upper', 'lower'].map((field) =>
+      texButton(`all ${field}s`, null, ctx, (n) => { for (const v of s.verts) v.edge[field] = n; ctx.commit() })),
+    muted('Upper and lower are the bands a wall shows only where another room is behind it: above that room\'s ceiling, and below its floor.'),
     select('edges', s.kind, [['auto', 'room: walls (by floor height inside another)'], ['platform', 'floating platform: open edges, fall off'], ['cut', 'cut into the floor of the room around it']],
            (v) => { s.kind = v; ctx.commit() }),
+    ...styleRows('floor', s, 'floorStyle', ctx),
+    ...styleRows('ceiling', s, 'ceilStyle', ctx),
+    ...fxRows(s, ctx.fxSchema?.() ?? null, ctx),
     number('tag', s.tag, { min: 0, max: 65535, step: 1 }, (v) => { s.tag = Math.round(v); ctx.commit() }),
     el('div', { class: 'st-row' }, [
       button('duplicate', () => { ctx.duplicateSector(s.id) }),
@@ -78,13 +148,21 @@ function edgeForm (sel, doc, ctx) {
                                  (it) => { edge.flags[it.id] = !edge.flags[it.id]; ctx.commit(); ctx.refreshSheet() })
   const other = ctx.otherSide?.(edge.id) ?? null
   return [
+    // A complaint that named this wall, and the room's own.
+    ...problemRows((ctx.problems?.(e.sector.id) ?? []).filter((p) => !p.edge || p.edge === edge.id)),
     muted(twin ? `This is sector ${e.sector.id}'s side, shared with sector ${findEdge(doc, twin.id).sector.id}: passable unless forced to a wall. Tap the wall again for the other side.` : `An outer wall of sector ${e.sector.id}.`),
     other ? button(`select the other side (sector ${other.sectorId})`, () => ctx.select(other)) : null,
     texButton('middle', edge.middle, ctx, (n) => { edge.middle = n; ctx.commit() }),
     texButton('upper', edge.upper, ctx, (n) => { edge.upper = n; ctx.commit() }),
     texButton('lower', edge.lower, ctx, (n) => { edge.lower = n; ctx.commit() }),
     twin ? toggle('force wall', edge.force === 'wall', (v) => { edge.force = v ? 'wall' : null; ctx.commit() }) : null,
+    // An outer side OPEN: the room simply ends there, and on a metamap with a
+    // pitch it is where the next map joins on -- if that map's side is open too.
+    !twin ? toggle('open: the room ends here (to the next map)', edge.force === 'open', (v) => { edge.force = v ? 'open' : null; ctx.commit(); ctx.refreshSheet?.() }) : null,
+    !twin && edge.force === 'open' ? muted('Open sides join a neighbouring map on the metamap where both are open along the same line, in the world. Elsewhere it is a drop off the edge.') : null,
+    ...seamRows(ctx.seamFor?.(edge.id)),
     row('flags', flagChips()),
+    ...alphaRows(edge, ctx, 'the wall is'),
     number('x offset', edge.xoff, { min: -64, max: 64, step: 0.125 }, (v) => { edge.xoff = v; ctx.commit() }),
     number('y offset', edge.yoff, { min: -64, max: 64, step: 0.125 }, (v) => { edge.yoff = v; ctx.commit() }),
     toggle('unpeg upper', edge.unpegUpper, (v) => { edge.unpegUpper = v; ctx.commit() }),
