@@ -161,6 +161,18 @@ class PanelWindow {
     }
     requestAnimationFrame(() => this.fit())
     if (!this.onResize) { this.onResize = () => { if (!this.root.hidden) this.fit?.() }; addEventListener('resize', this.onResize) }
+    // The stage's width settles after the side list has laid out (and its
+    // fonts arrived): fitted again whenever it changes, not only on the first frame.
+    if (this.watched !== stage && globalThis.ResizeObserver) {
+      this.stageObserver?.disconnect()
+      let last = 0
+      this.stageObserver = new ResizeObserver(([e]) => {
+        const w = Math.round(e.contentRect.width)
+        if (w !== last && !this.root.hidden) { last = w; this.fit?.() }
+      })
+      this.stageObserver.observe(stage)
+      this.watched = stage
+    }
   }
 
   /** The panel, drawn by the client from the template this panel writes. */
