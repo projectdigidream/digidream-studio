@@ -117,6 +117,13 @@ export class Viewport {
 
   lookAt (x, y, z = this.target.z) { this.target = { x, y, z }; this.dirty = true }
 
+  /**
+   * The camera put somewhere, looking at something (engine units), instead of
+   * orbiting the target: a cutscene's camera, previewed (scene.js). Null
+   * hands it back.
+   */
+  setPose (pose) { this.pose = pose; this.dirty = true }
+
   /** Move the target so that what was under one screen point is under another. */
   panBy (dx, dy) {
     const cx = innerWidth / 2; const cy = innerHeight / 2
@@ -129,6 +136,12 @@ export class Viewport {
 
   #place () {
     const T = new THREE.Vector3(toThreeX(this.target.x), toThreeY(this.target.z), toThreeZ(this.target.y))
+    if (this.pose && this.mode !== 'plan') {
+      const { eye, look } = this.pose
+      this.iso.position.set(toThreeX(eye.x), toThreeY(eye.z), toThreeZ(eye.y))
+      this.iso.lookAt(toThreeX(look.x), toThreeY(look.z), toThreeZ(look.y))
+      return
+    }
     if (this.mode === 'plan') {
       this.plan.position.set(T.x, T.y + 200, T.z)
       this.plan.lookAt(T)

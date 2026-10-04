@@ -103,6 +103,23 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
       case 'int':
         // A ROOM or a WALL as its index: picked on the map and held as a
         // reference, which the emitter writes as the index (a graph's world nodes).
+        // A CAMERA PATH by its tag: the map's paths, each with its length, and
+        // for a flythrough how long the shot lasts at its speed (the engine
+        // times `done` the same way: length / speed).
+        if (a.name === 'path' && ctx.paths) {
+          const list = ctx.paths()
+          const opts = [['', list.length ? '(choose a path)' : '(no camera paths on this map)'],
+            ...(cur !== undefined && !list.some((p) => p.tag === cur) ? [[String(cur), `tag ${cur} -- not on this map`]] : []),
+            ...list.map((p) => [String(p.tag), `tag ${p.tag}${p.length !== null ? ` · ${p.length.toFixed(1)} u` : ' · needs 2 points'}`])]
+          rows.push(row(label, selectOf(cur === undefined ? '' : String(cur), opts, (v) => set(v === '' ? undefined : Number(v))),
+            ctx.editPath ? button('✎', () => ctx.editPath(cur)) : null))
+          const info = list.find((p) => p.tag === cur)
+          if (info?.length && owner === 'camera_flythrough') {
+            const speed = Math.abs(Number(obj.speed ?? 6)) || 6
+            rows.push(muted(`the shot lasts ${(info.length / speed).toFixed(1)} s at ${speed} u/s`))
+          }
+          return
+        }
         // A panel's widget by its number (widget_is): chosen by its panel and name.
         if (a.name === 'widget' && ctx.widgetIds) {
           rows.push(row(label, selectOf(cur === undefined ? '' : String(cur), [['', '(choose)'], ...ctx.widgetIds().map(([id, t]) => [String(id), t])], (v) => set(v === '' ? undefined : Number(v)))))

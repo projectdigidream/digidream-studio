@@ -953,7 +953,7 @@ async function emitAll () {
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
     for (const [name, g] of graphsOf(d)) {
-      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger) : []
+      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
       if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
     }
   }

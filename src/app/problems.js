@@ -20,7 +20,7 @@ export function moduleProblems (S) {
     for (const p of V.validateTriggers(d, S.module.panels ?? d.panels)) out.maps.push({ map: d.name, msg: p })
     for (const [name, g] of graphsOf(d)) {
       if (!NAME_RE.test(name)) out.maps.push({ map: d.name, msg: `graph '${name}': a name is 1 to 32 of a-z, 0-9, _` })
-      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger)) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
+      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
     }
   }
   for (const [name, g] of graphsOf(S.module)) {

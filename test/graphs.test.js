@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync } from 
 import { spawnSync, spawn } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { newDoc, addSector, addSpawn, CAP } from '../src/doc.js'
+import { newDoc, addSector, addSpawn, addPath, addPathPoint, CAP } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { makeResolver } from '../src/lua_emit.js'
@@ -276,6 +276,32 @@ delete gm.graph
 const two = moduleTxt(gm)
 check(/^game module\.game\.graph\.json\ngame module\.greeter\.graph\.json$/m.test(two) && (two.match(/graphs\.lua shared/g) ?? []).length === 1,
       `module.txt runs each of the game's graphs, after one copy of the runtimes (${gameScripts(gm).join(', ')})`)
+// A cutscene: a map with a camera path, and a graph that takes the controls,
+// flies the path, speaks two lines and gives everything back.
+const film = structuredClone(plain)
+film.name = 'film'
+const rail = addPath(film, 4)
+for (const [x, y] of [[2, 2], [10, 3], [14, 6]]) addPathPoint(film, rail, x, y, 2)
+const cutscene = { vars: {}, nodes: [
+  { id: 'go', type: 'when_player_arrives', pos: { x: 0, y: 0 } },
+  { id: 'cut', type: 'start_cinematic', pos: { x: 260, y: 0 } },
+  { id: 'fly', type: 'camera_flythrough', path: 4, speed: 4, pos: { x: 520, y: 0 } },
+  { id: 'line', type: 'subtitle', text: 'Welcome.', speaker: 'Guide', pos: { x: 520, y: 200 } },
+  { id: 'dark', type: 'fade', to: 'black', seconds: 0.5, pos: { x: 780, y: 0 } },
+  { id: 'out', type: 'end_cinematic', pos: { x: 1040, y: 0 } },
+  { id: 'clear', type: 'fade', to: 'clear', pos: { x: 1300, y: 0 } },
+  { id: 'shake', type: 'camera_shake', pos: { x: 780, y: 200 } },
+  { id: 'back', type: 'camera_follow', distance: 12, pos: { x: 1040, y: 200 } }
+], links: [['go.then', 'cut.in'], ['cut.then', 'fly.in'], ['fly.then', 'line.in'], ['fly.done', 'dark.in'], ['dark.done', 'out.in'], ['out.then', 'clear.in'],
+  ['line.done', 'shake.in'], ['shake.then', 'back.in']] }
+const filmPaths = new Set(film.paths.map((x) => x.tag))
+check(graphProblems(cutscene, GV, TV, { paths: filmPaths }).length === 0, `a cutscene is clean on a map with its path (${graphProblems(cutscene, GV, TV, { paths: filmPaths }).join(' | ')})`)
+const lost = structuredClone(cutscene); lost.nodes[2].path = 9
+check(graphProblems(lost, GV, TV, { paths: filmPaths }).some((p) => /no camera path with tag 9/.test(p)), 'CONTROL: a path the map lacks is named')
+check(graphProblems(cutscene, GV, TV, { game: true }).some((p) => /camera_flythrough acts on a level/.test(p)), 'CONTROL: a flythrough in the game\'s graph is named: the game has no paths')
+film.graphs = { intro: cutscene }
+const filmLost = { ...structuredClone(film), name: 'lost', graphs: { intro: lost } }
+
 const em = await emitModule(gm, [{ ...plain, name: 'alley', graphs: { world: worldGraph, reward: levelGraph } }, { ...plain, name: 'answers', graphs: { main: levelGraph } }], { bake, runtime })
 const paths = em.files.map((f) => f.path)
 check(em.ok && ['module.game.graph.json', 'module.greeter.graph.json', 'alley.world.graph.json', 'alley.reward.graph.json', 'answers.main.graph.json'].every((n) => paths.includes(`maps/${n}`)) &&
@@ -302,8 +328,34 @@ else if (em.ok) {
   check(/\[graphs\] alley\.reward\.graph\.json: 3 nodes, 3 links/.test(log) && !/refus/i.test(log), 'and both of a map\'s graphs in its level, under their own names')
   check(/level 0: \S*triggers\.lua \(declared by the map\)/.test(log) && /level 0: \S*graphs\.lua \(declared by the map\)/.test(log),
         'and the level still runs its own trigger and graph runtimes (shared)')
+  if (process.env.DNP_GRAPHS_LOG) console.log(log)
   check(/\[graphs\] alley\.world\.graph\.json: 8 nodes, 7 links/.test(log) && !/alley\.world\.graph\.json: .*(not in this map|refused|should be)/.test(log),
         `and a map's world nodes load there, their picked room and wall found in the map (${log.split('\n').filter((l) => /alley/.test(l)).slice(0, 3).join(' | ')})`)
+}
+
+// The cutscene on the server: on its own module, so it is the level loaded
+// at once; and again with a path the map lacks, which the engine refuses.
+async function serveOne (docs, port) {
+  const m = newModule('cut', 'cut')
+  const r = await emitModule(m, docs, { bake, runtime })
+  if (!r.ok) return { ok: false, log: JSON.stringify(r.problems) }
+  const dir = mkdtempSync(join(tmpdir(), 'dnp-cut-'))
+  for (const f of r.files) { const p = join(dir, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, typeof f.bytes === 'string' ? f.bytes : Buffer.from(f.bytes)) }
+  const srv = spawn(SERVER, ['--port', String(port), '--module', dir], { cwd: join(ROOT, 'engine') })
+  let log = ''
+  srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
+  await new Promise((res) => setTimeout(res, 2500))
+  srv.kill()
+  return { ok: true, log }
+}
+if (existsSync(SERVER)) {
+  const good = await serveOne([film], 34697)
+  check(good.ok && /\[graphs\] film\.intro\.graph\.json: 9 nodes, 8 links/.test(good.log) && !/refus|not in this map|no path/i.test(good.log),
+        `the server loads the cutscene on the map that has its path (${good.log.split('\n').filter((l) => /graph|path/i.test(l)).slice(0, 4).join(' | ')})`)
+  const bad = await serveOne([filmLost], 34698)
+  if (process.env.DNP_GRAPHS_LOG) console.log(bad.log.split("\n").filter((l) => /graph|path/i.test(l)).join("\n"))
+  check(bad.ok && !/\[graphs\] lost\.intro\.graph\.json: 9 nodes/.test(bad.log) && /no camera path tagged 9/.test(bad.log),
+        `CONTROL: and refuses it where the path is missing, as the studio says (${bad.log.split('\n').filter((l) => /graph|path/i.test(l)).slice(0, 3).join(' | ')})`)
 }
 
 console.log(`graphs: ${checks} checks, ${fails} failures`)

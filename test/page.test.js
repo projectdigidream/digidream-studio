@@ -1670,6 +1670,61 @@ await page.keyboard.press('Escape')
   check(deleted.names.join() === 'lifts' && deleted.gname === 'lifts', `deleting a graph asks first, and the window moves to the one left (${JSON.stringify(deleted)})`)
 }
 
+// A CUTSCENE: the camera path chosen on its node (its length, the shot's
+// duration), and ▶ scene playing the run over the map -- bars in, the line at
+// the bottom drawn by the client's HUD, the camera on the path -- then back.
+{
+  const built = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map', Object.keys(S.docs)[0])
+    const { addPath, addPathPoint } = await import('/studio/src/doc.js')
+    const room = S.doc.sectors[S.doc.order[0]]
+    const xs = room.verts.map((v) => v.x); const ys = room.verts.map((v) => v.y)
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    window.__keptPaths = S.doc.paths
+    S.doc.paths = []
+    const p = addPath(S.doc, 7)
+    for (const [fx, fy] of [[0.2, 0.2], [0.5, 0.4], [0.8, 0.7]]) addPathPoint(S.doc, p, x0 + (x1 - x0) * fx, y0 + (y1 - y0) * fy, room.floor + 2)
+    S.doc.graphs = { intro: { vars: {}, nodes: [
+      { id: 'go', type: 'when_level_starts', pos: { x: 0, y: 0 } },
+      { id: 'cut', type: 'start_cinematic', pos: { x: 260, y: 0 } },
+      { id: 'fly', type: 'camera_flythrough', path: 7, speed: 2, pos: { x: 520, y: 0 } },
+      { id: 'line', type: 'subtitle', text: 'You came back.', speaker: 'Guide', seconds: 6, pos: { x: 780, y: 0 } }],
+      links: [['go.then', 'cut.in'], ['cut.then', 'fly.in'], ['fly.then', 'line.in']] } }
+    S.commit()
+    await S.go('graph', `${S.docName}:intro`)
+    await new Promise((r) => setTimeout(r, 400))
+    const node = document.querySelector('.gw [data-node="fly"]')
+    const sel = [...node.querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === '7'))
+    return { option: sel ? [...sel.options].find((o) => o.value === '7').textContent : null, hint: node.textContent.match(/the shot lasts [\d.]+ s/)?.[0] ?? null,
+             length: S.pathCurve(p).length, play: !!document.querySelector('.gw .gw-play') }
+  })
+  check(/tag 7 · [\d.]+ u/.test(built.option ?? '') && built.hint === `the shot lasts ${(built.length / 2).toFixed(1)} s`,
+        `a flythrough chooses its path from the map's, with its length and the shot's duration (${built.option} / ${built.hint})`)
+  const playing = await page.evaluate(async () => {
+    const S = window.__studio
+    document.querySelector('.gw .gw-play').click()
+    await new Promise((r) => setTimeout(r, 1200))
+    const scene = document.querySelector('.sc-scene')
+    const bar = scene?.querySelector('.sc-bar-top')
+    const hud = scene?.querySelector('.dnp-hud')?.textContent ?? ''
+    return { scene: !!scene, bar: bar ? bar.getBoundingClientRect().height : 0, hud, pose: S.viewport.pose, graphHidden: document.querySelector('.gw').hidden,
+             clock: scene?.querySelector('.sc-clock')?.textContent }
+  })
+  check(playing.scene && playing.bar > 10 && playing.graphHidden, `▶ scene plays the run over the map, the bars in (${playing.bar}px)`)
+  check(/Guide/.test(playing.hud) && /You came back\./.test(playing.hud), `the line and its speaker at the bottom, drawn by the client's HUD (${playing.hud})`)
+  check(!!playing.pose?.eye && !!playing.pose?.look, `the camera rides the path (${JSON.stringify(playing.pose?.eye)})`)
+  const stopped = await page.evaluate(async () => {
+    const S = window.__studio
+    document.querySelector('.sc-scene [data-scene="stop"]').click()
+    await new Promise((r) => setTimeout(r, 300))
+    const out = { scene: !!document.querySelector('.sc-scene'), pose: S.viewport.pose ?? null, graph: !document.querySelector('.gw').hidden, route: S.route() }
+    delete S.doc.graphs; S.doc.paths = window.__keptPaths ?? []; S.commit(); await S.go('map')
+    return out
+  })
+  check(!stopped.scene && stopped.pose === null && stopped.graph && stopped.route === 'graph', `■ ends it: the camera given back, the graph window there again (${JSON.stringify(stopped)})`)
+}
+
 // THE WORLD'S NODES: the menu grouped the designer's way, a door added with
 // its speed already chosen, and its room picked on the map.
 {

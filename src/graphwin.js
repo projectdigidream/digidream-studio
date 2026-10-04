@@ -26,6 +26,8 @@
 //
 import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog } from './ui.js'
 import { argFields } from './argform.js'
+import { playScene } from './scene.js'
+import { isStart } from './scene_plan.js'
 import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME } from './graphs_emit.js'
 
 const CATEGORY = { event: 'ev', condition: 'cond', action: 'act', branch: 'flow', sequence: 'flow', delay: 'flow', once: 'flow',
@@ -40,6 +42,7 @@ function categoryOf (n, spec) {
   if (CATEGORY[n.type]) return CATEGORY[n.type]
   if (spec?.starts) return 'ev'
   if (['entity', 'sector', 'wall'].includes(spec?.category)) return (spec.exec_in ?? []).length ? 'act' : 'data'
+  if (spec?.category === 'cinematic' || spec?.category === 'camera') return 'cine'
   return 'flow'
 }
 
@@ -49,6 +52,8 @@ const MENU = [
   ['when …', (s) => s.starts || s.name === 'on_call'],
   ['do to a thing', (s) => s.category === 'entity' && (s.exec_in ?? []).length],
   ['move the map', (s) => (s.category === 'sector' || s.category === 'wall') && (s.exec_in ?? []).length],
+  ['🎬 cutscene', (s) => s.category === 'cinematic'],
+  ['🎥 camera', (s) => s.category === 'camera'],
   ['read', (s) => ['entity', 'sector', 'wall'].includes(s.category) && !(s.exec_in ?? []).length],
   ['flow', (s) => ['branch', 'sequence', 'delay', 'once', 'call'].includes(s.name)],
   ['data', (s) => ['get_var', 'set_var', 'add_var', 'literal', 'compare', 'math', 'logic', 'random'].includes(s.name)]
@@ -144,6 +149,29 @@ class GraphWindow {
     if (redraw) this.render()
   }
 
+  /**
+   * Play the run from the picked node -- or, with none, from the first start
+   * node that reaches a cutscene or a camera node -- over the map (scene.js),
+   * timed as the engine times it, and come back here after.
+   */
+  playScene () {
+    const g = this.graph
+    if (!g?.nodes.length) return
+    const specs = nodeSpecs(this.gv)
+    const cine = (n) => ['cinematic', 'camera'].includes(specs.get(n.type)?.category)
+    const reaches = (id, seen = new Set()) => {
+      if (seen.has(id)) return false
+      seen.add(id)
+      const n = g.nodes.find((x) => x.id === id)
+      if (n && cine(n)) return true
+      return g.links.filter(([f]) => f.startsWith(`${id}.`)).some(([, t]) => reaches(t.slice(0, t.lastIndexOf('.')), seen))
+    }
+    const picked = this.picked?.kind === 'node' ? g.nodes.find((n) => n.id === this.picked.id) : null
+    const start = picked ?? g.nodes.find((n) => isStart(n) && reaches(n.id)) ?? g.nodes.find((n) => isStart(n)) ?? g.nodes[0]
+    this.root.hidden = true
+    this.scene = playScene(this.S, g, start.id, { onEnd: () => { this.scene = null; this.open() } })
+  }
+
   /** Switch to another of this scope's graphs, or make one. */
   async pickGraph (name) {
     if (name === '\u0000new') {
@@ -208,6 +236,18 @@ class GraphWindow {
       triggers: this.game ? [] : S.doc.triggers.map((t) => ({ id: t.id, name: t.name })),
       mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: S.propNames?.() ?? [],
       vars: Object.keys(g.vars ?? {}), suggest: (a, o) => S.suggest?.(a, o) ?? null, soundField: S.soundField,
+      // The map's camera paths, by tag, with their lengths: what a camera node rides.
+      ...(this.game ? {} : {
+        paths: () => [...new Set((S.doc.paths ?? []).map((p) => p.tag))].sort((a, b) => a - b).map((tag) => {
+          const p = S.doc.paths.find((x) => x.tag === tag)
+          return { tag, length: S.pathCurve?.(p)?.length ?? null, points: p.points.length }
+        }),
+        editPath: (tag) => {
+          const p = (S.doc.paths ?? []).find((x) => x.tag === tag)
+          this.close()
+          S.go('map').then(() => { S.showCamera?.(); if (p) S.editPath?.(p.id) })
+        }
+      }),
       ...(S.panelCtx?.() ?? {})
     }
   }
@@ -219,7 +259,7 @@ class GraphWindow {
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
-    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game, paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
       el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
@@ -227,6 +267,7 @@ class GraphWindow {
       this.#palette(),
       el('div', { class: 'wk-tabs gw-panes' }, [['board', 'board'], ['details', 'details']].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.pane === v ? '1' : '0', onclick: () => { this.pane = v; this.root.dataset.pane = v } }))),
+      this.graph?.nodes.length ? button('▶ scene', () => this.playScene(), 'gw-play') : null,
       el('span', { style: 'flex:1' }),
       problems.length ? el('span', { class: 'st-danger', text: `${problems.length} problem${problems.length > 1 ? 's' : ''}` }) : null,
       button(this.game ? '‹ graphs' : '‹ map', () => this.back())
@@ -845,6 +886,7 @@ const STYLE = `
 .gw-head{padding:6px 10px;font-weight:700;font-size:12px;border-radius:9px 9px 0 0;cursor:grab;touch-action:none}
 .gw-ev .gw-head{background:#5a2330}.gw-cond .gw-head{background:#5a4a1e}.gw-act .gw-head{background:#1f3a5c}
 .gw-flow .gw-head{background:#33384a}.gw-data .gw-head{background:#1f4a35}
+.gw-cine .gw-head{background:#4a2a5c}
 .gw-sum{padding:4px 10px;color:#9fb0c8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gw-body{display:flex;justify-content:space-between;padding:2px 0 8px}
 .gw-col{display:flex;flex-direction:column;gap:2px}

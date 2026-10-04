@@ -76,7 +76,7 @@ function showGraphs () {
   const all = allGraphs()
   const row = (g) => {
     const nodes = g.graph?.nodes?.length ?? 0
-    const problems = graphProblems(g.graph, V.graph, V.trigger, { game: g.game })
+    const problems = graphProblems(g.graph, V.graph, V.trigger, { game: g.game, paths: g.game ? null : new Set((S.docs[g.map]?.paths ?? []).map((x) => x.tag)) })
     const calls = [...namesOf('call', [g])]
     const answers = [...namesOf('on_call', [g])]
     const lines = [nodes ? `${nodes} node${nodes > 1 ? 's' : ''}` : 'empty -- not written until it has a node']
