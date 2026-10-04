@@ -47,7 +47,7 @@ function showScripts (open = null) {
     if (S.module.scripts[n] !== undefined) { S.status(`${n} exists already`, 'warn'); return }
     S.module.scripts[n] = '-- Runs in every level of the module, after its monsters are loaded.\n'
     S.moduleChanged(); showScripts(n)
-  }), muted('Each runs in every level, in its own scope; hooks it defines (on_tick, on_attack, ...) run alongside every other script\'s. Game-wide graphs are not offered yet: they would need the trigger runtime game-wide, which the engine would then skip in every level.'))
+  }), muted('Each runs in every level, in its own scope; hooks it defines (on_tick, on_attack, ...) run alongside every other script\'s. What should run once for the whole game rather than in every level is the game\'s graph (Graphs).'))
   S.ui.showSheet('Scripts', body)
 }
 
