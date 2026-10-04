@@ -106,7 +106,7 @@ class Screens {
       el('div', { class: 'wk-tabs sc-tabs' }, [['module', '🌐 every map'], ['map', `🗺 only ${S.docName}`]].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.scope === v ? '1' : '0', 'data-scope': v, onclick: () => { S.screensScope = v; this.picked = null; this.render() } }))),
       select('', this.device, Object.keys(DEVICES), (v) => { this.device = v; this.render() }).lastChild,
-      el('div', { class: 'wk-tabs sc-tabs' }, [['hud', 'HUD'], ['touch', 'touch'], ['panels', 'panels']].map(([v, l]) =>
+      el('div', { class: 'wk-tabs sc-tabs' }, [['hud', 'HUD'], ['touch', 'touch'], ['panels', 'templates']].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.tab === v ? '1' : '0', 'data-tab': v, onclick: () => { this.tab = v; this.picked = null; this.render() } }))),
       el('span', { style: 'flex:1' }),
       button('‹ back', () => (this.S.leave ? this.S.leave() : this.close()))
@@ -417,7 +417,8 @@ class Screens {
   #panelRows () {
     const L = this.layout
     L.panels ??= {}
-    const rows = [muted('A template is how a panel LOOKS: where it sits and where each widget goes. A script\'s panel names it (dnp.ui_open{ template = … }); widgets it does not place are stacked in the body, so a template never loses a control.')]
+    const rows = [el('div', { class: 'st-row' }, [el('span', { class: 'st-muted', text: 'The module\'s panels are designed in Panels, widgets and look together.' }), button('▢ Panels…', () => this.S.go('panels'))]),
+      muted('Here: templates for panels a hand-written script opens (dnp.ui_open{ template = … }) -- how such a panel LOOKS: where it sits and where each widget goes. Widgets it does not place are stacked in the body, so a template never loses a control.')]
     for (const [name, t] of Object.entries(L.panels)) {
       const on = name === this.picked
       const set = (k) => (v) => { if (v === '' || v === undefined) delete t[k]; else t[k] = v; this.changed() }

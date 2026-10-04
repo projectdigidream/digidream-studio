@@ -33,7 +33,7 @@ const ENTITIES_HEADER = `-- Placed props and monsters. Positions are eighths of 
  * @param guards    TEST ONLY: false leaves the staleness guards out
  * @returns { text, problems }   problems are references that did not resolve
  */
-export function emitMapLua (doc, emitted, { guards = true } = {}) {
+export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?? null } = {}) {
   const problems = []
   const L = []
   L.push(`-- ${doc.name}.lua -- written by the studio from ${doc.name}.studio.json.`)
@@ -107,11 +107,14 @@ export function emitMapLua (doc, emitted, { guards = true } = {}) {
   }
 
   // --- triggers ---------------------------------------------------------------
-  if (doc.triggers.length) {
+  // A panel a graph's `ui_open` opens is the trigger table's too, so a map
+  // with such a panel and no cards still writes a (cardless) table.
+  const hasPanels = panels && Object.keys(panels).length > 0
+  if (doc.triggers.length || hasPanels) {
     const resolve = makeResolver(doc, emitted, { guards, problems })
     const table = {
       name: doc.name,
-      ...(doc.panels ? { panels: doc.panels } : {}),
+      ...(hasPanels ? { panels } : {}),
       triggers: doc.triggers.map((t) => {
         const where = `trigger "${t.name}"`
         const out = { name: t.name }

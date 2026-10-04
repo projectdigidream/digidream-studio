@@ -103,6 +103,11 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
       case 'int':
         // A ROOM or a WALL as its index: picked on the map and held as a
         // reference, which the emitter writes as the index (a graph's world nodes).
+        // A panel's widget by its number (widget_is): chosen by its panel and name.
+        if (a.name === 'widget' && ctx.widgetIds) {
+          rows.push(row(label, selectOf(cur === undefined ? '' : String(cur), [['', '(choose)'], ...ctx.widgetIds().map(([id, t]) => [String(id), t])], (v) => set(v === '' ? undefined : Number(v)))))
+          return
+        }
         if (a.name === 'sector' && ctx.pickSector) {
           const b = button(refLabel(cur, ctx), () => ctx.pickSector((hit) => set({ sector: hit.id })))
           b.style.flex = '1 1 auto'
@@ -138,6 +143,18 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
                         { placeholder: 'e.g. 0.25 or -4/48' })
         break
       case 'string': case 'value':
+        // A PANEL of the module's, and a widget of it by name: chosen, not typed.
+        if (a.type === 'string' && a.name === 'panel' && ctx.panels) {
+          const names = ctx.panels()
+          rows.push(row(label, selectOf(cur ?? '', [['', a.optional ? '(none)' : '(choose)'], ...(cur && !names.includes(cur) ? [[cur, `${cur} -- no such panel`]] : []), ...names.map((n) => [n, n])], (v) => set(v || undefined)),
+            ctx.editPanel ? button('✎', () => ctx.editPanel(cur)) : null))
+          return
+        }
+        if (a.type === 'string' && a.name === 'widget' && ctx.widgetsOf) {
+          const names = ctx.widgetsOf(obj.panel)
+          rows.push(row(label, selectOf(cur ?? '', [['', a.optional ? '(any)' : '(choose)'], ...(cur && !names.includes(cur) ? [[cur, `${cur} -- not on that panel`]] : []), ...names.map((n) => [n, n])], (v) => set(v || undefined))))
+          return
+        }
         // A sound is picked from the module's packs and heard, not typed.
         if (ctx.soundField && (a.name === 'sound' || (a.name === 'name' && owner === 'sound'))) {
           rows.push(ctx.soundField(label, cur, (v) => set(v || undefined)))
@@ -208,6 +225,14 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
     }
     rows.push(row(label, control))
   }
+}
+
+/** A bare select, its value kept even when not among the options. */
+function selectOf (value, options, onChange) {
+  const s = el('select', {}, options.map(([v, t]) => el('option', { value: v, text: t })))
+  s.value = value
+  s.addEventListener('change', () => onChange(s.value))
+  return s
 }
 
 export function refLabel (v, ctx) {

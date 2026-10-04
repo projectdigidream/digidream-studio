@@ -11,8 +11,9 @@
 //
 import { packPath } from './soundpacks.js'
 import { migrateGraph } from './graphs_emit.js'
+import { migratePanels } from './panels_emit.js'
 
-export const MODULE_VERSION = 2
+export const MODULE_VERSION = 3
 
 export function newMetamap () { return { enabled: false, pitch: null, radius: 1, cells: {} } }
 
@@ -34,6 +35,8 @@ export function migrateModule (rec) {
     did.push('the module\'s sound bank is its first sound pack now')
   }
   for (const d of Object.values(rec.docs ?? {})) if (migrateGraph(d.graph)) did.push(`${d.name}'s graph: node places moved to pos`)
+  // Version 3: panels are the module's (panels_emit.js), not each map's.
+  did.push(...migratePanels(m, Object.values(rec.docs ?? {})))
   if ((m.version ?? 1) < MODULE_VERSION) { m.version = MODULE_VERSION; did.push(`module document version ${MODULE_VERSION}`) }
   return did
 }

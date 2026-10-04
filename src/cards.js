@@ -18,8 +18,6 @@ import { addTrigger, findEdge } from './doc.js'
 import * as presets from './presets.js'
 import { argFields, refLabel } from './argform.js'
 import { otherSide } from './tools.js'
-import { UiView } from '/src/render/ui.js'
-import { UI_KIND } from '/src/proto.js'
 
 /**
  * What a trigger touches, for the viewport: each sector, wall and point it
@@ -86,7 +84,7 @@ function listView (S) {
   const doc = S.doc
   const vocab = S.vocab
   const redraw = () => show(S)
-  const problems = vocab.validateTriggers(doc)
+  const problems = vocab.validateTriggers(doc, S.module.panels ?? doc.panels)
   const mobNames = Object.keys(S.module.mobs?.mobs ?? {})
 
   const pickSector = (prompt) => S.pickInViewport(['sector'], prompt)
@@ -149,7 +147,7 @@ function listView (S) {
     ], (it) => applyPreset(it.id))
   ]
   if (problems.length) body.push(el('div', { class: 'st-danger', text: problems.join('\n'), style: 'white-space:pre-wrap;font-size:12px' }))
-  body.push(...panelRows(S, redraw))
+  body.push(...panelRows(S))
   if (!doc.triggers.length) body.push(muted('No triggers yet.'))
   for (const t of doc.triggers) {
     const bad = problems.some((p) => p.startsWith(`trigger "${t.name || t.id}"`))
@@ -170,76 +168,21 @@ function listView (S) {
 // --- panels --------------------------------------------------------------------------
 
 /**
- * The map's panels: what `ui_open` opens (the trigger table's `panels`). A
- * panel is a layout -- a title and a list of widgets -- so it is edited here as
- * data, the widget kinds and their fields generated from the vocabulary's
- * `panels` entry, and a button press comes back as `on_ui_event`, tested with
- * `widget_is`.
+ * Panels are the MODULE'S (the Panels section, panelwin.js): designed there,
+ * opened here by `ui_open` with the panel's name, and answered by
+ * `on_ui_event` + `widget_is`. This lists the ones this map's cards open and
+ * goes to the editor.
  */
-function panelRows (S, redraw) {
-  const doc = S.doc
-  const V = S.vocab.trigger.panels
-  if (!V) return []
-  const done = () => { S.commit(); redraw() }
-  const kinds = new Map(V.widgets.map((w) => [w.name, w]))
-  const rows = []
-  for (const [name, p] of Object.entries(doc.panels ?? {})) {
-    const body = [
-      el('div', { class: 'st-row' }, [
-        el('span', { class: 'st-entry', text: `▢ ${name}` }),
-        button('✕ panel', () => { delete doc.panels[name]; if (!Object.keys(doc.panels).length) delete doc.panels; done() }, 'st-danger')
-      ]),
-      ...argFields(V.fields, p, { onChange: done })
-    ]
-    ;(p.widgets ?? []).forEach((w, i) => {
-      const spec = kinds.get(w.kind)
-      body.push(el('div', { class: 'st-card' }, [
-        el('div', { class: 'st-row' }, [
-          el('span', { class: 'st-entry', text: `${i + 1}. ${w.kind}` }),
-          i > 0 ? button('↑', () => { [p.widgets[i - 1], p.widgets[i]] = [p.widgets[i], p.widgets[i - 1]]; done() }) : null,
-          button('✕', () => { p.widgets.splice(i, 1); done() })
-        ].filter(Boolean)),
-        ...(spec ? argFields(spec.args, w, { onChange: done }) : [muted(`no widget kind "${w.kind}" in the vocabulary`)])
-      ]))
-    })
-    if ((p.widgets ?? []).length < (V.max_widgets ?? 32)) {
-      body.push(select('add', '', [['', '+ widget…'], ...V.widgets.map((w) => [w.name, w.name])], (k) => {
-        if (!k) return
-        const used = new Set((p.widgets ?? []).map((w) => w.id))
-        let id = 1
-        while (used.has(id)) id++
-        const w = { kind: k, id, label: k === 'label' ? 'Text' : k.charAt(0).toUpperCase() + k.slice(1) }
-        if (k === 'slider') Object.assign(w, { lo: 0, hi: 10 })
-        if (k === 'select') w.options = ['one', 'two']
-        ;(p.widgets ??= []).push(w)
-        done()
-      }))
-    }
-    body.push(panelPreview(p))
-    rows.push(el('div', { class: 'st-card', 'data-panel': name }, body))
-  }
-  rows.push(button('+ panel', async () => {
-    const raw = await ask('panel name (letters, digits, underscore)', 'shop')
-    const n = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_]/g, '')
-    if (!n || doc.panels?.[n]) { if (raw) S.status('that name is empty or taken', 'warn'); return }
-    ;(doc.panels ??= {})[n] = { title: n.charAt(0).toUpperCase() + n.slice(1), widgets: [{ kind: 'button', id: 1, label: 'OK' }] }
-    done()
-  }))
-  rows.push(muted('A trigger opens one with `ui_open`; a press arrives as `on_ui_event`, and `widget_is` says which widget it was.'))
-  return [el('div', { class: 'st-section-head', text: '▢ panels' }), ...rows]
-}
-
-/** The panel as the game draws it: the client's own UiView, inside a box here. */
-function panelPreview (p) {
-  const host = el('div', { class: 'st-panel-preview' })
-  const KIND = { label: UI_KIND.LABEL, button: UI_KIND.BUTTON, slider: UI_KIND.SLIDER, select: UI_KIND.SELECT, toggle: UI_KIND.TOGGLE }
-  const view = new UiView({ onEvent: () => {}, host, size: { width: 300, height: 60 + 40 * (p.widgets?.length ?? 0) } })
-  try {
-    view.open({ uiId: 1, title: p.title ?? '', widgets: (p.widgets ?? []).map((w) => ({
-      kind: KIND[w.kind] ?? UI_KIND.LABEL, id: w.id ?? 0, label: w.label ?? '', value: w.value ?? 0,
-      lo: w.lo ?? 0, hi: w.hi ?? 0, options: w.options ?? [] })) })
-  } catch (e) { host.textContent = `preview: ${e.message}` }
-  return host
+function panelRows (S) {
+  const names = Object.keys(S.module.panels ?? {})
+  const used = new Set()
+  for (const t of S.doc.triggers) for (const a of t.actions ?? []) if ((a.a === 'ui_open' || a.a === 'ui_close') && a.panel) used.add(a.panel)
+  return [el('div', { class: 'st-section-head', text: '▢ panels' }),
+    el('div', { class: 'st-row' }, [
+      el('span', { class: 'st-muted', text: names.length ? `${names.length} in the module${used.size ? `; these cards open ${[...used].join(', ')}` : ''}` : 'none in the module yet' }),
+      button('design panels…', () => S.go('panels'))
+    ]),
+    muted('A card opens a panel with `ui_open` and its name; a press arrives as `on_ui_event`, and `widget_is` says which widget it was.')]
 }
 
 // --- one trigger -------------------------------------------------------------------
@@ -249,7 +192,7 @@ function triggerView (S, t) {
   const vocab = S.vocab
   const redraw = () => show(S)
   const done = () => { S.commit(); redraw() }
-  const problems = vocab.validateTriggers(doc).filter((p) => p.startsWith(`trigger "${t.name || t.id}"`))
+  const problems = vocab.validateTriggers(doc, S.module.panels ?? doc.panels).filter((p) => p.startsWith(`trigger "${t.name || t.id}"`))
   const ctx = {
     onChange: done,
     status: (m, l) => S.status(m, l),
@@ -257,7 +200,8 @@ function triggerView (S, t) {
     triggers: doc.triggers.filter((x) => x.id !== t.id).map((x) => ({ id: x.id, name: x.name })),
     mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: S.propNames?.() ?? [],
     suggest: (n, o) => S.suggest?.(n, o) ?? null,
-      soundField: S.soundField
+      soundField: S.soundField,
+    ...S.panelCtx()
   }
 
   const body = [

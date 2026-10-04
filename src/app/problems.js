@@ -17,7 +17,7 @@ export function moduleProblems (S) {
   const V = S.vocab
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
-    for (const p of V.validateTriggers(d)) out.maps.push({ map: d.name, msg: p })
+    for (const p of V.validateTriggers(d, S.module.panels ?? d.panels)) out.maps.push({ map: d.name, msg: p })
     if (V.graph) for (const p of graphProblems(d.graph, V.graph, V.trigger)) out.maps.push({ map: d.name, msg: `graph: ${p}` })
   }
   if (V.graph) for (const p of graphProblems(S.module.graph, V.graph, V.trigger, { game: true })) out.graphs.push(`the game's graph: ${p}`)

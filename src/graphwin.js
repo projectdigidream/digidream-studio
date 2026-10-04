@@ -105,6 +105,12 @@ class GraphWindow {
   }
 
   open () {
+    // Sent here to look at one node (from the Panels window's list of uses).
+    if (this.S.graphFocus) {
+      const n = this.graph?.nodes.find((x) => x.id === this.S.graphFocus)
+      if (n) { this.picked = { kind: 'node', id: n.id }; this.view = { x: 60 - (n.pos?.x ?? 0), y: 60 - (n.pos?.y ?? 0), z: 1 } }
+      this.S.graphFocus = null
+    }
     this.root.hidden = false
     this.S.ui.layer.dataset.workshop = '1'
     this.S.ui.hideSheet()
@@ -153,7 +159,8 @@ class GraphWindow {
       ...(S.mapPickers && !this.game ? S.mapPickers((f) => this.aroundPick(f)) : {}),
       triggers: this.game ? [] : S.doc.triggers.map((t) => ({ id: t.id, name: t.name })),
       mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: S.propNames?.() ?? [],
-      vars: Object.keys(g.vars ?? {}), suggest: (a, o) => S.suggest?.(a, o) ?? null, soundField: S.soundField
+      vars: Object.keys(g.vars ?? {}), suggest: (a, o) => S.suggest?.(a, o) ?? null, soundField: S.soundField,
+      ...(S.panelCtx?.() ?? {})
     }
   }
 

@@ -29,6 +29,7 @@ import { bankNames } from './soundpacks.js'
 import { fxSchema } from './fxlib.js'
 import { openScreens } from './screens.js'
 import { openGraph } from './graphwin.js'
+import { openPanels } from './panelwin.js'
 import { graphProblems } from './graphs_emit.js'
 import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
@@ -243,6 +244,7 @@ pageSection('textures', 'Textures', '🧱', /^Textures$/, (n) => S.showTextures(
 pageSection('music', 'Music', '♪', /^Soundtrack/, () => S.showMusic())
 pageSection('sounds', 'Sounds', '🔊', /^Sounds$/, () => S.showSounds())
 windowSection('screens', 'Screens', '▣', () => openScreens(S))
+windowSection('panels', 'Panels', '▢', (name) => openPanels(S, name))
 pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
 pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
 windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
@@ -515,6 +517,13 @@ S.ensureTag = (sectorId) => {
  * point for x/y/z, a placed thing for a name. `around` wraps the pick for a
  * window that covers the map (the graph steps aside while it is done).
  */
+/** What an argument form needs to choose a panel and its widgets (argform.js). */
+S.panelCtx = () => ({
+  panels: () => Object.keys(S.module.panels ?? {}),
+  widgetsOf: (panel) => (S.module.panels?.[panel]?.widgets ?? []).map((w) => w.name),
+  widgetIds: () => Object.entries(S.module.panels ?? {}).flatMap(([p, q]) => q.widgets.filter((w) => w.kind !== 'label').map((w) => [w.id, `${p} · ${w.name} (${w.id})`])),
+  editPanel: (name) => S.go('panels', name || null)
+})
 S.mapPickers = (around = (f) => f()) => ({
   pickSector: (cb) => around(() => S.pickInViewport(['sector'], 'tap a room')).then((hit) => cb(hit)),
   pickTag: (cb) => around(() => S.pickInViewport(['sector'], 'tap the room (it is given a tag if it has none)')).then((hit) => cb(S.ensureTag(hit.id))),
@@ -873,7 +882,7 @@ S.suggest = (arg, owner) => {
   if (arg === 'icon' || arg === 'frame') return S.spriteNames()
   if (arg === 'item') return S.propNames()
   if (arg === 'cue') return [...new Set(['default', ...Object.keys(S.doc?.music ?? {})])]
-  if (arg === 'panel') return Object.keys(S.doc?.panels ?? {})
+  if (arg === 'panel') return Object.keys(S.module?.panels ?? {})
   if (arg === 'name' && (owner === 'call' || owner === 'on_call')) return S.callNames?.() ?? null
   // The graph's world nodes: what to spawn, whose death, which prop, which picture.
   if (arg === 'what' && owner === 'spawn') return [...Object.keys(S.module.mobs?.mobs ?? {}), ...S.propNames()]
@@ -940,7 +949,7 @@ async function emitAll () {
   for (const [path, blob] of Object.entries(S.rec.assets ?? {})) assets[path] = new Uint8Array(await blob.arrayBuffer())
   const r = await emitModule(S.module, Object.values(S.docs), {
     // The hook names the server harvests, from the vocabulary that lists them.
-    bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name), assets,
+    bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name), assets, graphVocab: S.vocab.graph,
     textureSizes: (n) => (sizes[n] ? { w: sizes[n][0], h: sizes[n][1], cutout: !!texIndex.cutout?.[n] } : null)
   })
   if (!r.ok) {

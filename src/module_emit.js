@@ -31,6 +31,7 @@ import { normalize, derive } from './topology.js'
 import { emitMap } from './mapfmt.js'
 import { emitMapLua, makeResolver } from './lua_emit.js'
 import { emitGraph, graphFile, hasGraph, GAME_GRAPH } from './graphs_emit.js'
+import { triggerPanels, graphPanels } from './panels_emit.js'
 import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
 import { emitPlayerLua, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
@@ -312,7 +313,10 @@ export function scriptDecls (module, { hasMobs = false, hasTriggers = true, hasW
  * @param runtime  { 'mobs.lua': text, ... } the four runtime scripts
  * @returns { ok, mapText, luaText, dnpm, copies, errors, warnings, emitted }
  */
-export async function emitLevel (module, doc, { bake, runtime, hooks = [] }) {
+/** Does this graph runtime read a graph's `panels` (docs/PANELS.md)? Written only then: an older one refuses the field. */
+export const graphTakesPanels = (gv) => !!gv?.graph_fields?.some((f) => f.name === 'panels')
+
+export async function emitLevel (module, doc, { bake, runtime, hooks = [], graphVocab = null }) {
   normalize(doc)
   const derived = derive(doc)
   const withGraph = hasGraph(doc)
@@ -324,7 +328,9 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [] }) {
     errors.push({ line: 0, msg: `a map can declare ${CAP.scripts} scripts and this module needs ${decls.length + 1}: ${decls.map((d) => d.split('/').pop()).join(', ')}.` })
   }
   const emitted = emitMap(derived, doc, [...decls, `${doc.name}.lua`], { body: playerFor(module, doc).body })
-  const lua = emitMapLua(doc, emitted)
+  // The module's panels this map opens through its trigger table; a document
+  // from before panels were the module's still carries its own.
+  const lua = emitMapLua(doc, emitted, { panels: module.panels ? triggerPanels(doc, module.panels) : (doc.panels ?? null) })
   // The player, resolved for this map: the module's with the map's override
   // over it, so the file says what this map's player is rather than a base
   // and a correction.
@@ -335,7 +341,8 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [] }) {
   let graphText = null
   if (withGraph) {
     const unresolved = []
-    const g = emitGraph(doc.graph, doc.name, makeResolver(doc, emitted, { problems: unresolved }), makeResolver(doc, emitted, { guards: false, problems: unresolved }))
+    const g = emitGraph(doc.graph, doc.name, makeResolver(doc, emitted, { problems: unresolved }), makeResolver(doc, emitted, { guards: false, problems: unresolved }),
+                        { panels: graphTakesPanels(graphVocab) ? graphPanels(doc.graph, module.panels) : null })
     for (const p of [...g.problems, ...unresolved]) errors.push({ line: 0, msg: p })
     graphText = g.text
   }
@@ -362,7 +369,7 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [] }) {
  * @param textureSizes  (name) => { w, h } | null, for index.json
  * @returns { ok, files, problems: [{ map, errors, warnings }] }
  */
-export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null }) {
+export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null, graphVocab = null }) {
   const files = []
   const problems = []
   const used = new Set()
@@ -397,7 +404,7 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   // The game's graph: the runtimes it needs beside it, then the graph.
   if (hasGameGraph(module)) {
     for (const name of GRAPH_GAME_RUNTIME) files.push({ path: `maps/${name}`, bytes: runtime[name] })
-    const g = emitGraph(module.graph, 'module', null)
+    const g = emitGraph(module.graph, 'module', null, null, { panels: graphTakesPanels(graphVocab) ? graphPanels(module.graph, module.panels) : null })
     files.push({ path: `maps/${GAME_GRAPH}`, bytes: g.text })
     if (g.problems.length) problems.push({ map: 'module graph', errors: g.problems.map((msg) => ({ line: 0, msg })), warnings: [] })
   }
@@ -406,7 +413,7 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   let ok = !problems.some((p) => (p.map === 'metamap' || p.map === 'module graph') && p.errors.length)
   const baked = []
   for (const doc of docs) {
-    const r = await emitLevel(module, doc, { bake, runtime, hooks })
+    const r = await emitLevel(module, doc, { bake, runtime, hooks, graphVocab })
     files.push({ path: `maps/${doc.name}.studio.json`, bytes: JSON.stringify(doc, null, 2) })
     files.push({ path: `maps/${doc.name}.map`, bytes: r.mapText })
     files.push({ path: `maps/${doc.name}.lua`, bytes: r.luaText })

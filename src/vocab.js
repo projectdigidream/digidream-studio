@@ -181,7 +181,7 @@ export class Vocab {
   }
 
   /** Problems with a document's triggers, as sentences naming the trigger. Empty is clean. */
-  validateTriggers (doc) {
+  validateTriggers (doc, panels = doc.panels) {
     const problems = []
     const names = new Map()
     const ids = new Set(doc.triggers.map((t) => t.id))
@@ -231,8 +231,8 @@ export class Vocab {
         checkArgs(spec.args ?? [], obj, aw, problems, ctx, ['a', 'expect_tag'])
         // A panel the table does not define is a silent `false` forever at
         // fire time, so the runtime refuses it at load; say it here first.
-        if ((a.a === 'ui_open' || a.a === 'ui_close') && typeof a.panel === 'string' && !(doc.panels && a.panel in doc.panels)) {
-          problems.push(`${aw}: no panel called "${a.panel}" on this map (Triggers → panels)`)
+        if ((a.a === 'ui_open' || a.a === 'ui_close') && typeof a.panel === 'string' && !(panels && a.panel in panels)) {
+          problems.push(`${aw}: no panel called "${a.panel}" in the module (Panels)`)
         }
       }
     }

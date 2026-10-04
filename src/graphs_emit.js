@@ -196,7 +196,7 @@ export function graphProblems (graph, gv, tv, { game = false } = {}) {
  * @param resolve  lua_emit's makeResolver for this map, for verb arguments
  * @returns { json, text, problems }
  */
-export function emitGraph (graph, name, resolve, plain = null) {
+export function emitGraph (graph, name, resolve, plain = null, { panels = null } = {}) {
   const problems = []
   const nodes = (graph.nodes ?? []).map((n) => {
     const { pos, show, ...rest } = n
@@ -224,6 +224,8 @@ export function emitGraph (graph, name, resolve, plain = null) {
   })
   const json = { graph: 1, name, vars: { ...(graph.vars ?? {}) }, nodes, links: (graph.links ?? []).map((l) => [...l]) }
   if (!Object.keys(json.vars).length) delete json.vars
+  // The panels its nodes name, as the runtime reads them (docs/PANELS.md 2).
+  if (panels && Object.keys(panels).length) json.panels = panels
   json.meta = { editor: 'studio' }
   return { json, text: JSON.stringify(json, null, 1) + '\n', problems }
 }

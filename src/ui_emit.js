@@ -13,6 +13,8 @@
 // client draws its built-in default.
 //
 
+import { withTemplates } from './panels_emit.js'
+
 export const UI_DIR = 'assets/ui'
 export const DEFAULT_FILE = 'hud.json'
 
@@ -28,15 +30,23 @@ export function newLayout (base) {
   return JSON.parse(JSON.stringify(base))
 }
 
-/** Every file the module's screens need, [{ path, bytes }]; empty when it has none. */
+/**
+ * Every file the module's screens need, [{ path, bytes }]; empty when it has none.
+ *
+ * The module's PANELS (panels_emit.js) are templates in every one of them: a
+ * level draws from one file, so a map with its own layout must carry them too.
+ * A module with panels and no layout of its own writes one holding only them,
+ * which the client completes with its default HUD and touch controls.
+ */
 export function uiFiles (module, docs) {
-  if (!module.ui) return []
+  const panels = module.panels && Object.keys(module.panels).length ? module.panels : null
+  if (!module.ui && !panels) return []
   const index = { version: 1, default: DEFAULT_FILE, maps: {} }
-  const files = [{ path: `${UI_DIR}/${DEFAULT_FILE}`, bytes: JSON.stringify(module.ui, null, 1) }]
+  const files = [{ path: `${UI_DIR}/${DEFAULT_FILE}`, bytes: JSON.stringify(withTemplates(module.ui ?? { version: 1 }, panels), null, 1) }]
   for (const doc of docs) {
     if (!doc.ui) continue
     index.maps[doc.name] = mapFile(doc.name)
-    files.push({ path: `${UI_DIR}/${mapFile(doc.name)}`, bytes: JSON.stringify(doc.ui, null, 1) })
+    files.push({ path: `${UI_DIR}/${mapFile(doc.name)}`, bytes: JSON.stringify(withTemplates(doc.ui, panels), null, 1) })
   }
   if (!Object.keys(index.maps).length) delete index.maps
   files.unshift({ path: `${UI_DIR}/index.json`, bytes: JSON.stringify(index, null, 1) })

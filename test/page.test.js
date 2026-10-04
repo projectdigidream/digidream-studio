@@ -1152,26 +1152,30 @@ await page.keyboard.press('Escape')
   check(await page.evaluate(() => !window.__studio.viewport.fx && !window.__studio.viewport.animating), 'CONTROL: taking the rain away stops the drawing, and the view stops redrawing every frame')
 }
 
-// PANELS: what ui_open opens, edited on the trigger sheet and previewed by the
-// client's own UiView.
+// PANELS ON THE TRIGGER SHEET: the module's, named there and designed in the
+// Panels section; a card's ui_open chooses one rather than typing it.
 {
   const panels = await page.evaluate(async () => {
     const S = window.__studio
-    S.doc.panels = { shop: { title: 'Shop', widgets: [{ kind: 'button', id: 1, label: 'Buy' }] } }
+    const { newPanel, addWidget } = await import('/studio/src/panels_emit.js')
+    const p = newPanel('Shop'); addWidget(p, 'button', 'Buy')
+    S.module.panels = { shop: p }
+    S.doc.triggers.push({ id: 'tp1', name: 'open_shop', event: 'on_interact', actions: [{ a: 'ui_open', panel: 'shop' }] })
     S.commit()
     S.triggerOpen = null
     const { triggersSheet } = await import('/studio/src/cards.js')
     S.ui.showSheet('Triggers', triggersSheet(S))
-    const card = document.querySelector('.st-sheet [data-panel="shop"]')
-    const add = card && [...card.querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === 'slider'))
-    if (add) { add.value = 'slider'; add.dispatchEvent(new Event('change')) }
-    const again = document.querySelector('.st-sheet [data-panel="shop"]')
-    const preview = again?.querySelector('.st-panel-preview .dnp-ui')
-    return { widgets: S.doc.panels.shop.widgets.map((w) => `${w.kind}#${w.id}`), preview: !!preview, buttons: preview?.querySelectorAll('button').length ?? 0, sliders: preview?.querySelectorAll('input[type=range]').length ?? 0 }
+    const listed = [...document.querySelectorAll('.st-sheet .st-row')].find((r) => /in the module/.test(r.textContent))?.textContent ?? ''
+    const problems = S.vocab.validateTriggers(S.doc, S.module.panels)
+    S.triggerOpen = 'tp1'
+    S.ui.showSheet('Triggers', triggersSheet(S))
+    const pick = [...document.querySelectorAll('.st-sheet select')].find((x) => [...x.options].some((o) => o.value === 'shop'))
+    const out = { listed, problems, pick: pick ? [...pick.options].map((o) => o.value) : null }
+    S.doc.triggers = S.doc.triggers.filter((t) => t.id !== 'tp1'); delete S.module.panels; S.triggerOpen = null; S.commit(); S.ui.hideSheet()
+    return out
   })
-  check(panels.widgets.join() === 'button#1,slider#2', `a widget is added with the next free id (${panels.widgets.join(', ')})`)
-  check(panels.preview && panels.buttons >= 1 && panels.sliders === 1, `the panel is previewed as the game draws it (${JSON.stringify(panels)})`)
-  await page.evaluate(() => { const S = window.__studio; delete S.doc.panels; S.commit(); S.ui.hideSheet() })
+  check(/1 in the module; these cards open shop/.test(panels.listed), `the trigger sheet names the module's panels its cards open (${panels.listed})`)
+  check(panels.problems.length === 0 && panels.pick?.includes('shop'), `a card's ui_open chooses one of them, and is clean (${JSON.stringify(panels)})`)
 }
 
 // SOUNDS, and how the module is played: the Sounds sheet opens on whatever
@@ -1404,6 +1408,8 @@ await page.keyboard.press('Escape')
     const ticks = [...node('wait').querySelectorAll('.st-row')].find((r) => r.firstChild?.textContent === 'ticks')?.querySelector('input')
     if (ticks) { ticks.value = '90'; ticks.dispatchEvent(new Event('change')) }
     await new Promise((r) => setTimeout(r, 100))
+    // Links are drawn on the next frame, once the pins have places.
+    for (let i = 0; i < 20 && !document.querySelector('.gw .wk-edge.gw-exec-link'); i++) await new Promise((r) => setTimeout(r, 50))
     const link = document.querySelector('.gw .wk-edge.gw-exec-link')
     return { sid, mob: mob.id, center: { x: cx, y: cy, floor: room.floor }, ticks: S.doc.graph.nodes.find((n) => n.id === 'wait').ticks,
              arrow: link?.getAttribute('marker-end') ?? null, pointBtn: !!node('tp')?.querySelector('button') }
@@ -1447,6 +1453,112 @@ await page.keyboard.press('Escape')
   check(picked.tag > 0 && picked.tag === picked.roomTag, `a tag is a tap on the room, which is given one if it had none (${picked.tag}/${picked.roomTag})`)
   check(picked.kind === 'imp' && picked.back, `a thing's name is a tap on one placed on the map, and the board comes back (${JSON.stringify(picked)})`)
   await page.evaluate(async (mob) => { const S = window.__studio; delete S.doc.graph; S.doc.entities = window.__keptEntities; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map') }, setup.mob)
+}
+
+// THE PANEL EDITOR: a panel designed where the player sees it -- drawn by the
+// client's UiView, its widgets dragged and sized in the frame -- tried as in
+// the game, and opened and answered from a map's graph.
+{
+  const opened = await page.evaluate(async () => {
+    const S = window.__studio
+    const { newPanel, addWidget } = await import('/studio/src/panels_emit.js')
+    const p = newPanel('Shop')
+    addWidget(p, 'label', 'What will it be?')
+    addWidget(p, 'button', 'Buy')
+    S.module.panels = { shop: p }
+    S.moduleChanged()
+    await S.go('panels', 'shop')
+    await new Promise((r) => setTimeout(r, 500))
+    const drawn = document.querySelector('.pw .dnp-ui-t[data-template="shop"]')
+    return { route: S.route(), drawn: !!drawn, slots: [...document.querySelectorAll('.pw .pw-slot')].map((b) => b.dataset.widget), title: drawn?.querySelector('.dnp-ui-title')?.textContent }
+  })
+  check(opened.route === 'panels' && opened.drawn && opened.slots.join() === 'what_will_it_be,buy', `the panel is drawn by the client's own UiView, a handle over each widget (${JSON.stringify(opened)})`)
+  // Drag the button 30 frame pixels right and 20 down.
+  const handle = async (sel) => page.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, k: window.__studio.window?.k ?? 1 } }, sel)
+  const drag = async (from, dx, dy) => { await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(from.x + dx / 2, from.y + dy / 2, { steps: 4 }); await page.mouse.move(from.x + dx, from.y + dy, { steps: 4 }); await page.mouse.up(); await new Promise((r) => setTimeout(r, 300)) }
+  const before = await page.evaluate(() => ({ ...window.__studio.module.panels.shop.widgets[1].slot }))
+  const b = await handle('.pw [data-widget="buy"]')
+  await drag(b, 30, 20)
+  const after = await page.evaluate(() => {
+    const S = window.__studio; const w = S.module.panels.shop.widgets[1]
+    const slot = document.querySelectorAll('.pw .dnp-ui-stage > .dnp-ui-slot')[1]
+    return { slot: { ...w.slot }, left: parseFloat(slot.style.left), on: document.querySelector('.pw [data-widget="buy"]')?.dataset.on }
+  })
+  check(after.slot.x > before.x + 4 && after.slot.y > before.y + 4 && after.on === '1', `dragging a widget moves its slot, and selects it (${JSON.stringify(before)} -> ${JSON.stringify(after.slot)})`)
+  // Its corner sizes it.
+  const corner = await handle('.pw [data-widget="buy"] .pw-corner')
+  await drag(corner, -40, 16)
+  const sized = await page.evaluate(() => ({ ...window.__studio.module.panels.shop.widgets[1].slot }))
+  check(sized.w < after.slot.w && sized.h > after.slot.h, `its corner sizes it (${after.slot.w}x${after.slot.h} -> ${sized.w}x${sized.h})`)
+  // The panel moved toward the top right re-anchors there.
+  const pan = await handle('.pw [data-handle="panel"]')
+  await page.evaluate(() => { window.__studio.window.sel = { kind: 'panel' } })
+  await drag(pan, 260, -120)
+  const look = await page.evaluate(() => ({ ...window.__studio.module.panels.shop.look }))
+  check(look.anchor === 'tr' || look.anchor === 't' || look.anchor === 'r', `dragging the panel re-anchors it to where it lands (${JSON.stringify(look)})`)
+  // Add a toggle from the palette, rename it, and undo brings the old name back.
+  const added = await page.evaluate(async () => {
+    const S = window.__studio
+    const pal = document.querySelector('.pw .pw-palette')
+    pal.value = 'w:toggle'; pal.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 300))
+    const w = S.module.panels.shop.widgets.at(-1)
+    const name = [...document.querySelectorAll('.pw .wk-details .st-row')].find((r) => /name \(graphs say it\)/.test(r.textContent))?.querySelector('input')
+    name.value = 'Loud Music'; name.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 300))
+    const renamed = S.module.panels.shop.widgets.at(-1).name
+    return { kind: w.kind, id: w.id, renamed, handles: document.querySelectorAll('.pw .pw-slot').length }
+  })
+  check(added.kind === 'toggle' && added.id === 3 && added.renamed === 'loud_music' && added.handles === 3, `the palette adds a widget, drawn with a handle; its name is made the engine's way (${JSON.stringify(added)})`)
+  // Try it: a press says what a graph hears.
+  const tried = await page.evaluate(async () => {
+    const S = window.__studio
+    document.querySelector('.pw [data-mode="try"]').click()
+    await new Promise((r) => setTimeout(r, 300))
+    ;[...document.querySelectorAll('.pw .dnp-ui-t button')].find((x) => x.textContent === 'Buy').click()
+    await new Promise((r) => setTimeout(r, 100))
+    const heard = [...document.querySelectorAll('.pw .pw-heard-row')].map((r) => r.firstChild.textContent)
+    document.querySelector('.pw [data-mode="edit"]').click()
+    return { heard, hidden: getComputedStyle(document.querySelector('.pw .pw-hits')).display }
+  })
+  check(tried.heard[0] === 'when_panel_used · shop · buy → value 1', `in try mode a press says what a graph hears (${tried.heard.join(' | ')})`)
+  // Open it from the first map's graph, and answer its button there.
+  const wired = await page.evaluate(async () => {
+    const S = window.__studio
+    const map = Object.keys(S.docs)[0]
+    delete S.docs[map].graph
+    const pick = (label, value) => { const s = [...document.querySelectorAll('.pw .wk-details .st-row')].find((r) => r.firstChild?.textContent === label)?.querySelector('select'); s.value = value; s.dispatchEvent(new Event('change')) }
+    pick('open it from', map)
+    await new Promise((r) => setTimeout(r, 600))
+    const first = { route: S.route(), nodes: S.docs[map].graph?.nodes.map((n) => `${n.type}:${n.a ?? ''}:${n.panel ?? ''}`), picked: S.window?.picked?.id }
+    await S.go('panels', 'shop')
+    await new Promise((r) => setTimeout(r, 300))
+    pick('answer', 'buy')
+    await new Promise((r) => setTimeout(r, 200))
+    pick('answer buy in', map)
+    await new Promise((r) => setTimeout(r, 600))
+    const g = S.docs[map].graph
+    const { graphProblems } = await import('/studio/src/graphs_emit.js')
+    await S.go('panels', 'shop')
+    await new Promise((r) => setTimeout(r, 300))
+    const uses = [...document.querySelectorAll('.pw [data-use]')].map((u) => u.dataset.use)
+    const r = await S.emitAll()
+    const lua = r ? String(r.files.find((f) => f.path === `maps/${map}.lua`).bytes) : ''
+    const hud = r ? JSON.parse(String(r.files.find((f) => f.path === 'assets/ui/hud.json')?.bytes ?? '{}')) : {}
+    const out = { map, first, nodes: g.nodes.map((n) => n.type + (n.c ? `:${n.c}:${n.widget}` : '')), links: g.links, problems: graphProblems(g, S.vocab.graph, S.vocab.trigger), uses,
+                  ok: !!r, luaPanels: /panels = \{/.test(lua) && /template = "shop"/.test(lua), template: !!hud.panels?.shop, ready: !!S.vocab.graph.nodes.some((n) => n.name === 'open_panel') }
+    delete S.docs[map].graph; delete S.module.panels; S.moduleChanged()
+    return out
+  })
+  const viaNodes = wired.ready
+  check(wired.first.route === 'graph' && wired.first.picked && wired.first.nodes?.length === 1 && wired.first.nodes[0].includes('shop'),
+        `"open it from" puts the opening node into that map's graph and goes there, picked (${JSON.stringify(wired.first)})`)
+  check(viaNodes ? wired.nodes.includes('when_panel_used') : (wired.nodes.includes('event') && wired.nodes.some((n) => n === 'condition:widget_is:2') && wired.links.length === 1),
+        `"answer" adds what hears that button (${viaNodes ? 'the panel node' : 'on_ui_event + widget_is, the trigger words'}: ${wired.nodes.join(', ')})`)
+  // With the trigger words, widget_is does not name its panel, so only the opening is listed.
+  check(wired.problems.length === 0 && wired.uses.length === (viaNodes ? 2 : 1), `the graph is clean, and the panel lists where it is used (${wired.problems.join(' | ')} / ${wired.uses.join(', ')})`)
+  check(wired.ok && wired.luaPanels && wired.template, `and the module is written: the map's trigger table carries the panel, the layout its template (${wired.ok})`)
+  await page.evaluate(async () => { await window.__studio.go('home') })
 }
 
 // THE WORLD'S NODES: the menu grouped the designer's way, a door added with
@@ -1794,7 +1906,7 @@ await page.keyboard.press('Escape')
   })
   await page.setViewport({ width: 1000, height: 700 })
   check(side.details > 200 && side.preview > 150 && side.scrolls, `on a phone on its side the player's picture and forms are side by side, the forms scrolling (${JSON.stringify(side)})`)
-  check(side.screensList > 250 && side.screensScrolls === 'auto', 'and Screens gives its list the height to be read, scrolling')
+  check(side.screensList > 250 && side.screensScrolls === 'auto', `and Screens gives its list the height to be read, scrolling (${side.screensList}, ${side.screensScrolls})`)
 }
 
 // A PHONE HELD UPRIGHT: no rail; the module's home lists the sections, and
