@@ -140,6 +140,8 @@ class PanelWindow {
     this.hud.setLayout(layout)
     this.hud.update({ hp: 75, 'hud.hp_max': 100, ...this.sample })
     this.empty.hidden = !!p
+    // Nothing to zoom onto: the whole screen.
+    if (!p && this.zoom) { this.zoom = { z: 1, x: 0, y: 0 }; this.autoZoomFor = null }
     this.redrawing = true
     this.view.clear()
     if (p) this.#drawPanel(layout)
