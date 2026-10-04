@@ -2275,6 +2275,19 @@ await page.keyboard.press('Escape')
   if (booted) await page.evaluate(async () => { const S = window.__studio; delete S.docs.second; await S.openDoc(Object.keys(S.docs)[0]); S.save(); await new Promise((r) => setTimeout(r, 900)) })
 }
 
+// THE PLAY LOG: a page of its own; in a browser (no shell, no Play) it says so.
+{
+  const pl = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('playlog')
+    await new Promise((r) => setTimeout(r, 300))
+    const out = { route: S.route(), text: document.querySelector('.sd-page .sd-body')?.textContent ?? '' }
+    await S.go('map')
+    return out
+  })
+  check(pl.route === 'playlog' && /Play, and its log, need the app/.test(pl.text), `the Play log has a page, which in a browser says Play needs the app (${pl.text.slice(0, 60)})`)
+}
+
 // Export: the whole module as files, with the map's Lua carrying the triggers.
 const exported = await page.evaluate(async () => {
   const S = window.__studio

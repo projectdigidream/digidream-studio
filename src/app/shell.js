@@ -101,6 +101,10 @@ const STYLE = `
   .sd-page[data-kind="window"] .sd-head{display:none}
   .sd-rail .sd-hist{display:flex}
 }
+/* The Play log: the shells' and the studio's lines, the failures in red. */
+.sd-log{font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;background:#0f131b;border:1px solid #2a3446;border-radius:8px;padding:6px 8px;max-height:46vh;overflow:auto;-webkit-overflow-scrolling:touch}
+.sd-log-line{white-space:pre-wrap;word-break:break-word}
+.sd-log-bad{color:#ff8a8a}
 .sd-thumb{display:block;width:100%;aspect-ratio:16/10;border-radius:6px;background:#0e1219}
 .sd-thumb-row{width:96px;flex:0 0 96px}
 .sd-body.st-page .sd-cell{position:relative;overflow:hidden}

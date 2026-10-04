@@ -30,6 +30,7 @@ import { fxSchema } from './fxlib.js'
 import { openScreens } from './screens.js'
 import { openGraph } from './graphwin.js'
 import { openPanels } from './panelwin.js'
+import { writeStudioLog, noteStudioLog, showPlayLog, lastPlay, readLogs, failures } from './playlog.js'
 import { graphProblems, graphsOf, liveGraphs, graphFile } from './graphs_emit.js'
 import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
@@ -249,6 +250,7 @@ pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
 pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
 windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
 pageSection('settings', 'Settings', '⚙', /^Module settings$/, () => S.showSettings())
+pageSection('playlog', 'Play log', '📋', /^Play log$/, () => showPlayLog(S), { rail: false })
 new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
   dragStart: (i) => tools.onDragStart(S, i),
@@ -957,16 +959,32 @@ async function emitAll () {
 async function play () {
   if (!hasShell()) { S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn'); return }
   S.status('baking…', 'ok')
+  const map = `${S.docName}.dnpm`
   const r = await emitAll()
-  if (!r) return
+  if (!r) {
+    // Refused before anything ran: what the status strip said is the log.
+    S.playLogLines = [`[studio] play-test of ${S.module.id}/maps/${map}, ${new Date().toISOString()}`]
+    await noteStudioLog(S, `the module did not bake, so nothing was launched: ${document.querySelector('.st-status')?.textContent ?? ''}`)
+    return
+  }
   const root = `modules/${S.module.id}`
   for (const f of r.files) {
     const bytes = typeof f.bytes === 'string' ? new TextEncoder().encode(f.bytes) : f.bytes
     await shell.writeFile(`${root}/${f.path}`, bytes)
   }
+  // The studio's part of the Play log (playlog.js), before anything starts.
+  await writeStudioLog(S, r, { map })
   S.status('starting the game…', 'ok')
   rememberReturn()
-  try { await shell.launch({ module: root, map: `${S.docName}.dnpm` }) } catch (e) { forgetReturn(); S.status(String(e.message ?? e), 'error') }
+  try {
+    await shell.launch({ module: root, map })
+  } catch (e) {
+    forgetReturn()
+    await noteStudioLog(S, `the launch failed: ${e.message ?? e}`)
+    S.status(String(e.message ?? e), 'error')
+    // What the server said is in the log: show it.
+    S.go('playlog')
+  }
 }
 
 // BACK FROM PLAY, to the map that was being tested. The game's "◀ Studio" link
@@ -1041,6 +1059,7 @@ function scriptBudget () {
 function showMenu () {
   S.ui.showMenu([
     ['Map settings…', showMapSettings],
+    ['Play log…', () => S.go('playlog')],
     ['Camera…', () => S.showCamera()],
     ['Import texture (PNG)', () => S.importTexture()],
     ['Fit view', frameToDoc],
@@ -1092,6 +1111,11 @@ async function finishBoot () {
         S.viewport.resize()
       }
       S.status(`back from playing ${back.map}`, 'ok')
+      // What the play-test logged that looks wrong, said on the way back.
+      readLogs().then((logs) => {
+        const bad = failures(logs)
+        if (bad.length) S.status(`back from playing ${back.map} -- the Play log has ${bad.length} line${bad.length > 1 ? 's' : ''} that look wrong (⋯ → Play log, or Home)`, 'warn')
+      }).catch(() => {})
     }
   }
   if (!S.router.current) await S.router.follow()
