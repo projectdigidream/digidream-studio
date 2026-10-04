@@ -267,7 +267,7 @@ S.shell.moduleName = S.module.name || S.module.id
 // Back from Play: no address of our own, and a note saying where we were.
 const back = parseHash(location.hash) ? null : takeReturn()
 if (back) {
-  if (back.module !== S.module.id && await S.store.load(back.module)) await openModule(back.module)
+  if (back.module !== S.module.id && await S.store.load(back.module)) await openModule(back.module, { show: false })
   if (S.docs[back.map]) {
     await S.go('map', back.map)
     const v = back.view
@@ -366,7 +366,16 @@ async function copyModule (baseId, id, name) {
 }
 S.copyModule = copyModule
 
-async function openModule (id) {
+/**
+ * Open a module. Every section shows the module, so whatever was on screen
+ * is the old one's: unless `show` is false (boot, the way back from Play,
+ * which go on to a section of their own), it lands on the new module's Home,
+ * drawn afresh -- the router does not move to the section already showing.
+ */
+async function openModule (id, { show = true } = {}) {
+  // The module being left is saved first: saving waits a moment after the
+  // last change, and that save would otherwise write the NEW module.
+  if (S.rec) await S.store.save(S.rec)
   let rec = id ? await S.store.load(id) : null
   if (!rec) {
     const doc = starterDoc('first')
@@ -416,6 +425,10 @@ async function openModule (id) {
     } catch (e) { console.warn('[studio] sheet', path, e.message) }
   }
   await openDoc(Object.keys(S.docs)[0])
+  if (show && S.router?.current) {
+    if (S.router.current.id === 'home') await S.router.remount()
+    else await S.go('home')
+  }
 }
 
 async function openDoc (name) {

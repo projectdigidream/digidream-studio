@@ -69,7 +69,7 @@ async function showHome () {
       tile('settings', '⚙', 'Settings', m.controls ?? 'platformer')
     ]),
     list.length > 1 ? el('div', { class: 'st-section-head', text: '⇄ other modules' }) : null,
-    list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) { await S.openModule(it.id); S.go('home') } }) : null
+    list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null
   ])
 }
 

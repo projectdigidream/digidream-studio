@@ -1061,6 +1061,41 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(copy.base >= 1100 && copy.firstId === copy.base && copy.base2 > copy.base, `each copy gets its own prop id range (${copy.base}, ${copy.base2})`)
 }
 
+// SWITCHING MODULE: Home shows the module just opened -- its name and its
+// maps -- not the one before (the router does not move to the section already
+// showing, so opening a module redraws Home itself); from any other section
+// it lands there too.
+{
+  const switched = await page.evaluate(async () => {
+    const S = window.__studio
+    const was = S.rec.id
+    const title = () => document.querySelector('.sd-page:not([hidden]) .sd-body h1, .sd-page:not([hidden]) .sd-body .sd-home-name')?.textContent ?? document.querySelector('.sd-page:not([hidden]) .sd-body')?.textContent.slice(0, 60)
+    await S.go('home')
+    await new Promise((r) => setTimeout(r, 200))
+    // An edit, and the switch at once: within the moment saving waits.
+    const about = S.module.about
+    S.module.about = 'edited just before switching'; S.save()
+    const chip = [...document.querySelectorAll('.sd-body .st-chip')].find((c) => c.textContent === 'copy1')
+    chip?.click()
+    await new Promise((r) => setTimeout(r, 800))
+    const after = { route: S.route(), rec: S.rec.id, text: document.querySelector('.sd-page .sd-body')?.textContent ?? '', rail: document.querySelector('.sd-rail .sd-mod')?.textContent }
+    await S.go('sounds')
+    await S.openModule(was)
+    await new Promise((r) => setTimeout(r, 800))
+    const back = { route: S.route(), rec: S.rec.id, text: document.querySelector('.sd-page .sd-body')?.textContent ?? '' }
+    const kept = S.module.about
+    S.module.about = about; S.save()
+    const out = { chip: !!chip, was, after, back, name: S.module.name, kept }
+    await S.go('map')
+    return out
+  })
+  check(switched.chip && switched.after.rec === 'copy1' && switched.after.route === 'home' && /Copy One/.test(switched.after.text) && /Copy One/.test(switched.after.rail ?? ''),
+        `opening another module from Home shows that module's Home and name (${JSON.stringify({ ...switched.after, text: switched.after.text.slice(0, 50) })})`)
+  check(switched.back.rec === switched.was && switched.back.route === 'home' && switched.back.text.includes(switched.name) && !/Copy One/.test(switched.back.text.slice(0, 80)),
+        `and opening one from another section lands on its Home (${JSON.stringify({ ...switched.back, text: switched.back.text.slice(0, 50) })})`)
+  check(switched.kept === 'edited just before switching', `an edit made just before switching is saved with the module it was made in (${switched.kept})`)
+}
+
 // A door preset through the studio's own code path, on the sector between two rooms.
 const preset = await page.evaluate(async () => {
   const S = window.__studio
