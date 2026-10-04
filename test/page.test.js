@@ -2253,6 +2253,28 @@ await page.keyboard.press('Escape')
   await page.evaluate(() => window.__studio.go('map'))
 }
 
+// BACK FROM PLAY TO A MAP THAT IS NOT THE FIRST: the way back opens it during
+// the boot, which redrew before the redraw was published -- the loader stuck
+// on "the picture". It must boot, on that map, with no error.
+{
+  const second = await page.evaluate(async () => {
+    const S = window.__studio
+    S.docs.second = S.starterDoc('second')
+    S.save()
+    await new Promise((r) => setTimeout(r, 900))
+    await S.go('map', 'second')
+    S.rememberReturn()
+    return Object.keys(S.docs)[0] !== 'second'
+  })
+  const before = errors.length
+  await page.goto(URL_, { waitUntil: 'domcontentloaded' })
+  const booted = await page.waitForFunction(() => document.getElementById('boot')?.hidden === true, { timeout: 30000 }).then(() => true).catch(() => false)
+  const back = await page.evaluate(() => ({ route: window.__studio?.route(), map: window.__studio?.docName, msg: document.getElementById('bootmsg')?.textContent }))
+  check(second && booted && back.route === 'map' && back.map === 'second' && errors.length === before,
+        `back from Play to a map that is not the first, the studio boots on it (${JSON.stringify(back)} ${errors.slice(before, before + 2).join(' | ')})`)
+  if (booted) await page.evaluate(async () => { const S = window.__studio; delete S.docs.second; await S.openDoc(Object.keys(S.docs)[0]); S.save(); await new Promise((r) => setTimeout(r, 900)) })
+}
+
 // Export: the whole module as files, with the map's Lua carrying the triggers.
 const exported = await page.evaluate(async () => {
   const S = window.__studio

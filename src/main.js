@@ -264,32 +264,10 @@ frameToDoc()
 redraw()
 previewNow()
 S.shell.moduleName = S.module.name || S.module.id
-// Back from Play: no address of our own, and a note saying where we were.
-const back = parseHash(location.hash) ? null : takeReturn()
-if (back) {
-  if (back.module !== S.module.id && await S.store.load(back.module)) await openModule(back.module, { show: false })
-  if (S.docs[back.map]) {
-    await S.go('map', back.map)
-    const v = back.view
-    if (v) {
-      if (v.mode && v.mode !== S.viewport.mode) { S.viewport.setMode(v.mode); S.ui.setView(v.mode) }
-      if (v.target) S.viewport.lookAt(v.target.x, v.target.y, v.target.z)
-      if (v.viewHeight) S.viewport.viewHeight = v.viewHeight
-      if (typeof v.yaw === 'number') S.viewport.yaw = v.yaw
-      S.viewport.resize()
-    }
-    S.status(`back from playing ${back.map}`, 'ok')
-  }
-}
-if (!S.router.current) await S.router.follow()
-addEventListener('hashchange', () => S.router.follow())
-boot.hidden = true
-// For the page test and for poking at a live session from the console.
-globalThis.__studio = S
-requestAnimationFrame(function loop () {
-  if (S.viewport.dirty || S.viewport.animating) S.viewport.render()
-  requestAnimationFrame(loop)
-})
+// The rest of the boot -- the way back from Play, the first section, the
+// loader away -- is finishBoot(), at the end of this file: it uses verbs this
+// file publishes further down (S.redraw, S.openDoc ...), which a step taken
+// here would find missing.
 
 // --- modules and maps --------------------------------------------------------------------
 
@@ -1092,4 +1070,38 @@ function showMapSettings () {
 }
 S.showMapSettings = showMapSettings
 
-
+/**
+ * The end of the boot, run last: everything above has published its verbs on
+ * S by now. Coming back from Play to a map that was not the first opened it
+ * here, mid-file, and the camera's redraw found S.redraw not yet there -- the
+ * loader stayed on "the picture".
+ */
+async function finishBoot () {
+  // Back from Play: no address of our own, and a note saying where we were.
+  const back = parseHash(location.hash) ? null : takeReturn()
+  if (back) {
+    if (back.module !== S.module.id && await S.store.load(back.module)) await openModule(back.module, { show: false })
+    if (S.docs[back.map]) {
+      await S.go('map', back.map)
+      const v = back.view
+      if (v) {
+        if (v.mode && v.mode !== S.viewport.mode) { S.viewport.setMode(v.mode); S.ui.setView(v.mode) }
+        if (v.target) S.viewport.lookAt(v.target.x, v.target.y, v.target.z)
+        if (v.viewHeight) S.viewport.viewHeight = v.viewHeight
+        if (typeof v.yaw === 'number') S.viewport.yaw = v.yaw
+        S.viewport.resize()
+      }
+      S.status(`back from playing ${back.map}`, 'ok')
+    }
+  }
+  if (!S.router.current) await S.router.follow()
+  addEventListener('hashchange', () => S.router.follow())
+  boot.hidden = true
+  // For the page test and for poking at a live session from the console.
+  globalThis.__studio = S
+  requestAnimationFrame(function loop () {
+    if (S.viewport.dirty || S.viewport.animating) S.viewport.render()
+    requestAnimationFrame(loop)
+  })
+}
+await finishBoot()
