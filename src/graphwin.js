@@ -34,6 +34,25 @@ const CATEGORY = { event: 'ev', condition: 'cond', action: 'act', branch: 'flow'
 const HIDDEN_ARGS = ['side', 'expect_neighbour', 'expect_tag', 'fn']
 const NODE_W = 236
 
+/** A node's colour: where a run starts, what it does, what it reads, how it flows. */
+function categoryOf (n, spec) {
+  if (CATEGORY[n.type]) return CATEGORY[n.type]
+  if (spec?.starts) return 'ev'
+  if (['entity', 'sector', 'wall'].includes(spec?.category)) return (spec.exec_in ?? []).length ? 'act' : 'data'
+  return 'flow'
+}
+
+// The node menu's groups, designer's words first: the world's nodes by their
+// graph_vocab category, then flow and data, then the trigger vocabulary's.
+const MENU = [
+  ['when …', (s) => s.starts || s.name === 'on_call'],
+  ['do to a thing', (s) => s.category === 'entity' && (s.exec_in ?? []).length],
+  ['move the map', (s) => (s.category === 'sector' || s.category === 'wall') && (s.exec_in ?? []).length],
+  ['read', (s) => ['entity', 'sector', 'wall'].includes(s.category) && !(s.exec_in ?? []).length],
+  ['flow', (s) => ['branch', 'sequence', 'delay', 'once', 'call'].includes(s.name)],
+  ['data', (s) => ['get_var', 'set_var', 'add_var', 'literal', 'compare', 'math', 'logic', 'random'].includes(s.name)]
+]
+
 let win = null
 /** @param arg  'game' for the module's graph; otherwise the map's being edited */
 export function openGraph (S, arg = null) {
@@ -182,16 +201,26 @@ class GraphWindow {
   // --- adding ---------------------------------------------------------------------
 
   #palette () {
-    const opts = [['', '+ node…']]
-    for (const e of this.events) opts.push([`event:${e.name}`, `when ${e.name}`])
-    opts.push(['cond:', 'if … (a condition)'], ['act:', 'do … (an action)'])
-    for (const n of this.gv.nodes) if (!['event', 'condition', 'action'].includes(n.name)) opts.push([`node:${n.name}`, n.name])
-    return select('', '', opts, (v) => {
+    const sel = el('select', { class: 'gw-palette' }, [el('option', { value: '', text: '+ node…' })])
+    const group = (label, opts) => { if (opts.length) sel.append(el('optgroup', { label }, opts.map(([v, t]) => el('option', { value: v, text: t })))) }
+    // The game has no level: what needs one is not offered there.
+    const specs = this.gv.nodes.filter((n) => !['event', 'condition', 'action'].includes(n.name) && !(this.game && n.level_only))
+    const taken = new Set()
+    for (const [label, test] of MENU) {
+      const list = specs.filter((n) => !taken.has(n.name) && test(n))
+      for (const n of list) taken.add(n.name)
+      group(label, list.map((n) => [`node:${n.name}`, n.name.replace(/_/g, ' ')]))
+    }
+    group('other', specs.filter((n) => !taken.has(n.name)).map((n) => [`node:${n.name}`, n.name.replace(/_/g, ' ')]))
+    // The trigger vocabulary's own words, for what the world's nodes do not say.
+    group('trigger words', [...this.events.map((e) => [`event:${e.name}`, `when ${e.name}`]), ['cond:', 'if … (a condition)'], ['act:', 'do … (an action)']])
+    sel.addEventListener('change', () => {
+      const v = sel.value
       if (!v) return
       const [kind, name] = v.split(':')
       const g = this.ensure()
       const at = this.#freeSpot()
-      const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name : kind === 'cond' ? 'if' : 'do')
+      const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name.replace(/^when_/, '') : kind === 'cond' ? 'if' : 'do')
       const n = { id, pos: { x: at.x, y: at.y } }
       if (kind === 'event') Object.assign(n, { type: 'event', event: name })
       else if (kind === 'cond') Object.assign(n, { type: 'condition', c: this.verbs('condition')[0]?.name })
@@ -208,11 +237,28 @@ class GraphWindow {
         if (['get_var', 'set_var', 'add_var'].includes(name)) n.var = Object.keys(g.vars ?? {})[0] ?? 'count'
         if (name === 'call') Object.assign(n, { to: this.game ? 'level' : 'game', name: this.S.callNames?.()[0] ?? 'hello' })
         if (name === 'on_call') n.name = this.S.callNames?.()[0] ?? 'hello'
+        this.#defaults(n, nodeSpecs(this.gv).get(name))
       }
       g.nodes.push(n)
       this.picked = { kind: 'node', id }
       this.changed()
-    }).lastChild
+    })
+    return sel
+  }
+
+  /**
+   * A new world node's required arguments, where one value is the obvious
+   * start: the first of an enum's choices, a few seconds, the first monster.
+   * What only the map can say -- a spot, a wall -- is left to be picked.
+   */
+  #defaults (n, spec) {
+    for (const a of spec?.args ?? []) {
+      if (a.optional || n[a.name] !== undefined) continue
+      if (a.type === 'enum' && a.values?.length) n[a.name] = a.values[0]
+      else if (a.name === 'seconds') n[a.name] = n.type === 'every' ? 5 : 3
+      else if (a.name === 'what') { const m = Object.keys(this.S.module.mobs?.mobs ?? {})[0]; if (m) n[a.name] = m }
+    }
+    if (n.type === 'move_floor' || n.type === 'move_ceiling') n.amount ??= 4
   }
 
   #newId (base) {
@@ -266,7 +312,7 @@ class GraphWindow {
     const outs = [...p.execOut.map((x) => pin(x, 'out', 'exec')), ...p.dataOut.map((x) => pin(x, 'out', 'data'))]
     body.append(el('div', { class: 'gw-col' }, ins), el('div', { class: 'gw-col gw-right' }, outs))
     const fields = this.#boardFields(n, spec, p.argPins)
-    const node = el('div', { class: `gw-node gw-${CATEGORY[n.type] ?? 'flow'}${on ? ' gw-on' : ''}${bad ? ' wk-node-bad' : ''}`, 'data-node': n.id },
+    const node = el('div', { class: `gw-node gw-${categoryOf(n, spec)}${on ? ' gw-on' : ''}${bad ? ' wk-node-bad' : ''}`, 'data-node': n.id },
       [head, fields.length ? el('div', { class: 'gw-fields' }, fields) : el('div', { class: 'gw-sum', text: this.#summary(n) }), body])
     node.style.left = `${n.pos?.x ?? 0}px`
     node.style.top = `${n.pos?.y ?? 0}px`
@@ -280,7 +326,10 @@ class GraphWindow {
    * the action) and the arguments it needs or already has -- the rest are in
    * the side panel. A change is a change to the map, as anywhere.
    */
+  #current = null
+
   #boardFields (n, spec, argPins = []) {
+    this.#current = n
     const ctx = this.fieldCtx()
     const linked = this.#linkedArgs(n)
     const out = []
@@ -292,7 +341,9 @@ class GraphWindow {
     }
     // Required arguments, and optional ones once they have a value, a link,
     // or were asked onto the node (`show`, the editor's own).
-    const shown = (args) => (args ?? []).filter((a) => !a.optional || n[a.name] !== undefined || linked.has(a.name) || n.show?.includes(a.name))
+    const on = (name) => n[name] !== undefined || linked.has(name) || n.show?.includes(name)
+    // A place comes whole: x brought on brings its y and z, for one tap.
+    const shown = (args) => (args ?? []).filter((a) => !a.optional || on(a.name) || ((a.name === 'y' || a.name === 'z') && on('x')))
     if (n.type === 'event') {
       out.push(pick('when', n.event, withCurrent(this.events.map((e) => [e.name, e.name]), n.event), (v) => { n.event = v; this.changed() }))
     } else if (n.type === 'condition' || n.type === 'action') {
@@ -310,41 +361,48 @@ class GraphWindow {
           button(v?.edge ? `wall ${v.edge}` : v?.edgeTwin ? `facing ${v.edgeTwin}` : '📍 tap a wall', () => this.pickOnMap(['edge'], 'tap the wall').then((hit) => { n.side = { edge: hit.id }; this.changed() }))]))
       }
       const verb = this.tv[n.type === 'condition' ? 'conditions' : 'actions'].find((x) => x.name === n[key])
-      if (verb) {
-        const rows = argFields(shown(verb.args), n, ctx, HIDDEN_ARGS, n[key])
-        // Each pinnable argument's pin at the start of its row; a linked one
-        // shows where its value comes from instead of a control.
-        for (const name of argPins) {
-          if (!shown(verb.args).some((a) => a.name === name)) continue
-          let r = rows.find((x) => x.dataset?.arg === name)
-          if (linked.has(name)) {
-            const nr = el('div', { class: 'st-row gw-linked', 'data-arg': name }, [el('label', { text: name }), el('span', { class: 'gw-from', text: `← ${linked.get(name)}` })])
-            if (r) rows.splice(rows.indexOf(r), 1, nr); else rows.push(nr)
-            r = nr
-          }
-          if (r) { r.classList.add('gw-argrow'); r.prepend(this.pin(name, 'in', 'data')) }
-        }
-        out.push(...rows)
-        // The optional arguments not on the node, to bring one on.
-        const more = (verb.args ?? []).filter((a) => a.optional && !HIDDEN_ARGS.includes(a.name) && !shown([a]).length)
-        if (more.length) {
-          const sel = el('select', { class: 'gw-pick gw-more' }, [el('option', { value: '', text: `+ ${more.length} more…` }), ...more.map((a) => el('option', { value: a.name, text: a.name }))])
-          sel.addEventListener('change', () => { if (!sel.value) return; n.show = [...(n.show ?? []), sel.value]; this.changed() })
-          out.push(el('div', { class: 'st-row' }, [sel]))
-        }
-      }
+      if (verb) out.push(...this.#argRows(verb.args, shown, argPins, linked, (args) => argFields(args, n, ctx, HIDDEN_ARGS, n[key])))
     } else if (spec) {
       if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
         out.push(pick('variable', n.var, Object.keys(this.graph?.vars ?? {}).map((v) => [v, v]), (v) => { n.var = v; this.changed() }))
         if (n.type !== 'get_var') out.push(this.#literalRow('value', n, 'value'))
       } else {
-        for (const a of shown(spec.args)) {
-          if (a.type === 'value') out.push(this.#literalRow(a.name, n, a.name))
-          else out.push(...argFields([a], n, ctx, [], n.type))
-        }
+        out.push(...this.#argRows(spec.args, shown, argPins, linked, (args) => [
+          // Places, rooms and walls together, so x, y and z are one tap.
+          ...argFields(args.filter((a) => a.type !== 'value'), n, ctx, [], n.type),
+          ...args.filter((a) => a.type === 'value').map((a) => { const r = this.#literalRow(a.name, n, a.name); r.dataset.arg = a.name; return r })
+        ]))
       }
     }
     return out
+  }
+
+  /**
+   * An entry's argument rows on the board: those `shown`, each pinnable one
+   * with its data pin at the start of its row -- a linked one saying where its
+   * value comes from instead of a control -- then the rest to bring on.
+   */
+  #argRows (args, shown, argPins, linked, make) {
+    const n = this.#current
+    const rows = make(shown(args))
+    for (const name of argPins) {
+      if (!shown(args).some((a) => a.name === name)) continue
+      let r = rows.find((x) => x.dataset?.arg === name)
+      if (linked.has(name)) {
+        const nr = el('div', { class: 'st-row gw-linked', 'data-arg': name }, [el('label', { text: name }), el('span', { class: 'gw-from', text: `← ${linked.get(name)}` })])
+        if (r) rows.splice(rows.indexOf(r), 1, nr); else rows.push(nr)
+        r = nr
+      }
+      if (r) { r.classList.add('gw-argrow'); r.prepend(this.pin(name, 'in', 'data')) }
+    }
+    // The optional arguments not on the node, to bring one on.
+    const more = (args ?? []).filter((a) => a.optional && !HIDDEN_ARGS.includes(a.name) && !shown([a]).length)
+    if (more.length) {
+      const sel = el('select', { class: 'gw-pick gw-more' }, [el('option', { value: '', text: `+ ${more.length} more…` }), ...more.map((a) => el('option', { value: a.name, text: a.name }))])
+      sel.addEventListener('change', () => { if (!sel.value) return; n.show = [...(n.show ?? []), sel.value]; this.changed() })
+      rows.push(el('div', { class: 'st-row' }, [sel]))
+    }
+    return rows
   }
 
   /** The node's arguments a link feeds: name -> where from ("node.pin"). */
@@ -598,10 +656,11 @@ class GraphWindow {
       rows.push(select('variable', n.var ?? '', Object.keys(g.vars ?? {}).map((v) => [v, v]), (v) => { n.var = v; ch() }))
       if (n.type !== 'get_var') rows.push(text('value (unless linked)', n.value ?? '', (v) => { n.value = literal(v); ch() }))
     } else if (spec) {
-      for (const a of spec.args ?? []) {
-        if (a.type === 'value') rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
-        else rows.push(...argFields([a], n, ctx, [], n.type))
-      }
+      const linked = this.#linkedArgs(n)
+      const own = (spec.args ?? []).filter((a) => !linked.has(a.name))
+      for (const a of (spec.args ?? []).filter((x) => linked.has(x.name))) rows.push(row(a.name, el('span', { class: 'gw-from', text: `← linked from ${linked.get(a.name)}` })))
+      rows.push(...argFields(own.filter((a) => a.type !== 'value'), n, ctx, [], n.type))
+      for (const a of own.filter((x) => x.type === 'value')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
     }
     rows.push(button('delete node', () => {
       g.nodes.splice(g.nodes.indexOf(n), 1)

@@ -77,8 +77,13 @@ export function pinsOf (node, spec, tv = null, gv = null) {
   if (spec.data_in_args && tv) {
     const pinnable = new Set(gv?.pinnable_types ?? ['int', 'fx', 'string', 'bool', 'enum', 'sector', 'value'])
     for (const a of verbOf(node, tv)?.args ?? []) if (pinnable.has(a.type) && !NOT_PINNED.has(a.name)) argPins.push(a.name)
+    return { execIn: spec.exec_in ?? [], execOut, dataIn: [...(spec.data_in ?? []), ...argPins], dataOut: spec.data_out ?? [], argPins }
   }
-  return { execIn: spec.exec_in ?? [], execOut, dataIn: [...(spec.data_in ?? []), ...argPins], dataOut: spec.data_out ?? [], argPins }
+  // A world node's data input named after one of its arguments (teleport's
+  // x, a door's sector, damage's amount) is that argument's pin too.
+  const own = new Set((spec.args ?? []).map((a) => a.name))
+  for (const d of spec.data_in ?? []) if (own.has(d)) argPins.push(d)
+  return { execIn: spec.exec_in ?? [], execOut, dataIn: spec.data_in ?? [], dataOut: spec.data_out ?? [], argPins }
 }
 
 const split = (s) => { const i = String(s).lastIndexOf('.'); return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)] }
@@ -114,7 +119,19 @@ export function graphProblems (graph, gv, tv, { game = false } = {}) {
     byId.set(n.id, n)
     const spec = specs.get(n.type)
     if (!spec) { problems.push(`${where}: no node type '${n.type}'`); continue }
-    for (const a of spec.args ?? []) if (!a.optional && (n[a.name] === undefined || n[a.name] === '')) problems.push(`${where}: needs \`${a.name}\``)
+    for (const a of spec.args ?? []) {
+      const v = n[a.name]
+      if (v === undefined || v === '') { if (!a.optional && !linkedInto.has(`${n.id}.${a.name}`)) problems.push(`${where}: needs \`${a.name}\``); continue }
+      // The runtime checks a world node's fields by type: a number is a number.
+      if (a.type === 'number' && typeof v !== 'number') problems.push(`${where}: \`${a.name}\` should be a number`)
+      if (a.type === 'enum' && a.values && !a.values.includes(v)) problems.push(`${where}: \`${a.name}\` is one of ${a.values.join(', ')}`)
+    }
+    // What the game has no level for: refused in the game's graph.
+    if (game && spec.level_only) problems.push(`${where}: a ${n.type} acts on a level, and the game has none -- call the level's graph (a call node, to level) and do it there`)
+    // A sector node needs its sector: picked, linked, or a tag.
+    if (spec.category === 'sector' && (spec.exec_out ?? []).length && n.sector === undefined && n.tag === undefined && !linkedInto.has(`${n.id}.sector`)) {
+      problems.push(`${where}: a ${n.type} needs a sector -- picked on the map, linked from sector_of, or a tag`)
+    }
     if (game && n.type === 'event' && n.event && !gameOk.event.has(n.event)) {
       problems.push(`${where}: '${n.event}' does not reach the game -- a game graph starts from ${[...gameOk.event].join(', ')}`)
     } else if (!game && n.type === 'event' && ['on_player_enter', 'on_player_leave'].includes(n.event)) {
@@ -179,7 +196,7 @@ export function graphProblems (graph, gv, tv, { game = false } = {}) {
  * @param resolve  lua_emit's makeResolver for this map, for verb arguments
  * @returns { json, text, problems }
  */
-export function emitGraph (graph, name, resolve) {
+export function emitGraph (graph, name, resolve, plain = null) {
   const problems = []
   const nodes = (graph.nodes ?? []).map((n) => {
     const { pos, show, ...rest } = n
@@ -194,6 +211,11 @@ export function emitGraph (graph, name, resolve) {
       if (!resolve && Object.values(args).some((v) => v && typeof v === 'object' && !Array.isArray(v))) {
         problems.push(`${where}: names a place in a map, which a graph without one cannot resolve`)
       }
+    } else if (Object.values(rest).some((v) => v && typeof v === 'object' && !Array.isArray(v))) {
+      // A world node's picked sector or wall: the bare index. Its fields are
+      // checked by name, so the trigger table's guards have no place there.
+      if (plain) out = plain(rest, `graph node '${n.id}'`)
+      else problems.push(`graph node '${n.id}': names a place in a map, which a graph without one cannot resolve`)
     }
     if (pos) out.meta = { x: Math.round(pos.x ?? 0), y: Math.round(pos.y ?? 0) }
     // Which optional arguments the board shows: the editor's, like the place.

@@ -335,7 +335,7 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [] }) {
   let graphText = null
   if (withGraph) {
     const unresolved = []
-    const g = emitGraph(doc.graph, doc.name, makeResolver(doc, emitted, { problems: unresolved }))
+    const g = emitGraph(doc.graph, doc.name, makeResolver(doc, emitted, { problems: unresolved }), makeResolver(doc, emitted, { guards: false, problems: unresolved }))
     for (const p of [...g.problems, ...unresolved]) errors.push({ line: 0, msg: p })
     graphText = g.text
   }

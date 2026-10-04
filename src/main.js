@@ -875,6 +875,11 @@ S.suggest = (arg, owner) => {
   if (arg === 'cue') return [...new Set(['default', ...Object.keys(S.doc?.music ?? {})])]
   if (arg === 'panel') return Object.keys(S.doc?.panels ?? {})
   if (arg === 'name' && (owner === 'call' || owner === 'on_call')) return S.callNames?.() ?? null
+  // The graph's world nodes: what to spawn, whose death, which prop, which picture.
+  if (arg === 'what' && owner === 'spawn') return [...Object.keys(S.module.mobs?.mobs ?? {}), ...S.propNames()]
+  if (arg === 'kind' && (owner === 'when_dies' || owner === 'when_hurt')) return Object.keys(S.module.mobs?.mobs ?? {})
+  if (arg === 'prop') return S.propNames()
+  if (arg === 'texture') return S.textureNames
   if (arg === 'param' && owner === 'add_effect') return paramNames()
   return null
 }

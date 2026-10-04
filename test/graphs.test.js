@@ -39,6 +39,17 @@ const GV = JSON.parse(readFileSync(join(SCRIPTS, 'graph_vocab.json'), 'utf8'))
 const TV = JSON.parse(readFileSync(join(SCRIPTS, 'trigger_vocab.json'), 'utf8'))
 const TRIGGERCHECK = join(ROOT, 'engine', 'build', 'lua', 'triggercheck')
 
+// A graph as the server's JSON decoder hands it to Lua: a decimal is a plain
+// number there (engine/server/src/lua/json.cpp), which toLua -- written for
+// the studio's exact fixed-point tables -- refuses on purpose.
+const luaOfJson = (v) => {
+  if (v === null || v === undefined) return 'nil'
+  if (typeof v === 'number') return String(v)
+  if (typeof v !== 'object') return toLua(v)
+  if (Array.isArray(v)) return `{ ${v.map(luaOfJson).join(', ')} }`
+  return `{ ${Object.entries(v).map(([k, x]) => `[${JSON.stringify(k)}] = ${luaOfJson(x)}`).join(', ')} }`
+}
+
 const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
 const doc = newDoc('lifts')
 const hall = addSector(doc, rect(0, 0, 16, 8), { floorTex: 'F', ceilTex: 'C' })
@@ -119,6 +130,27 @@ check(/^game trigger_vocab\.lua shared\ngame triggers\.lua shared\ngame graph_vo
       `module.txt runs the runtimes shared and then the game's graph (${gameScripts(gm).join(', ')})`)
 check(!/graph/.test(moduleTxt(newModule('p', 'p'))), 'CONTROL: a module without one says nothing of it')
 
+// --- the world's nodes: said the way a designer says it ---------------------------------------
+// Stepping into the lift's room opens it; the hall's wall shows a lit switch;
+// being near the start hurts by a linked amount.
+const worldGraph = { vars: {}, nodes: [
+  { id: 'in', type: 'when_sector_entered', sector: { sector: lift.id }, pos: { x: 0, y: 0 } },
+  { id: 'open', type: 'open_door', sector: { sector: lift.id }, speed: 'fast', close_after: 4, pos: { x: 260, y: 0 } },
+  { id: 'lit', type: 'set_wall_texture', side: { edge: wall }, texture: 'SW1ON', pos: { x: 520, y: 0 } },
+  { id: 'near', type: 'when_near', x: 2, y: 2, radius: 1.5, pos: { x: 0, y: 200 } },
+  { id: 'where', type: 'sector_of', pos: { x: 0, y: 360 } },
+  { id: 'up', type: 'move_floor', to: 'up_by', amount: 2, pos: { x: 260, y: 200 } },
+  { id: 'five', type: 'literal', value: 5, pos: { x: 260, y: 360 } },
+  { id: 'hurt', type: 'damage', pos: { x: 520, y: 200 } }
+], links: [['in.then', 'open.in'], ['open.then', 'lit.in'], ['near.near', 'up.in'], ['near.entity', 'where.entity'], ['where.sector', 'up.sector'],
+  ['up.then', 'hurt.in'], ['five.value', 'hurt.amount']] }
+check(graphProblems(worldGraph, GV, TV).length === 0, `the world's nodes are clean (${graphProblems(worldGraph, GV, TV).join(' | ')})`)
+check(pinsOf(worldGraph.nodes[7], specs.get('damage'), TV, GV).argPins.join() === 'amount' && pinsOf(worldGraph.nodes[5], specs.get('move_floor'), TV, GV).argPins.join() === 'sector,amount',
+      'a world node\'s input named after an argument is that argument\'s pin')
+const wbad = (mutate, opts) => { const g = structuredClone(worldGraph); mutate(g); return graphProblems(g, GV, TV, opts) }
+check(wbad((g) => { g.links = g.links.filter(([, t]) => t !== 'up.sector') }).some((p) => /needs a sector/.test(p)), 'CONTROL: a sector node with no sector, link or tag is named')
+check(wbad((g) => { g.nodes[3].radius = '1.5' }).some((p) => /should be a number/.test(p)), 'CONTROL: a number written as words is named')
+check(wbad(() => {}, { game: true }).some((p) => /open_door acts on a level/.test(p)), 'CONTROL: in the game\'s graph, what needs a level is named')
 // --- the file ---------------------------------------------------------------------------------
 const emitted = emitMap(derive(doc), doc, [])
 const unresolved = []
@@ -140,6 +172,11 @@ check(tp.x === 3 && tp.y === 4 && tp.z === 0 && tp.meta?.x === 300, `a teleport 
 const old = { nodes: [{ id: 'a', type: 'event', event: 'on_tick', x: 10, y: 20 }] }
 check(migrateGraph(old) && old.nodes[0].pos.x === 10 && !('x' in old.nodes[0]) && !migrateGraph(old), 'a graph saved with places as x, y is moved to pos, once')
 
+const wfile = emitGraph(worldGraph, 'world', makeResolver(doc, emitted, { problems: [] }), makeResolver(doc, emitted, { guards: false, problems: [] }))
+const wn = (id) => wfile.json.nodes.find((n) => n.id === id)
+check(wn('open').sector === emitted.sectorIndex.get(lift.id) && !('expect_tag' in wn('open')) && wn('lit').side === emitted.sideIndex.get(wall) && !('expect_neighbour' in wn('lit')),
+      `a picked room or wall is its bare index on a world node (${JSON.stringify([wn('open'), wn('lit')])})`)
+
 if (!existsSync(TRIGGERCHECK)) {
   console.log('graphs: triggercheck not built (scripts/build_lua_tests.sh) -- the runtime checks are skipped')
 } else {
@@ -150,7 +187,7 @@ if (!existsSync(TRIGGERCHECK)) {
     writeFileSync(f, [
       'dofile("maps/scripts/graph_vocab.lua")',
       'dofile("maps/scripts/graphs.lua")',
-      `local ok, problems = graphs.load(${toLua(json)}, "${name}")`,
+      `local ok, problems = graphs.load(${luaOfJson(json)}, "${name}")`,
       'if not ok then error(table.concat(problems or {}, "\\n")) end',
       // triggercheck wants a trigger table, and a graph is not one.
       'triggers.load{ name = "carrier", triggers = { { name = "x", event = "on_tick", actions = { { a = "log", text = "x" } } } } }'
@@ -169,7 +206,7 @@ if (!existsSync(TRIGGERCHECK)) {
       'dnp = dnp or {}', 'dnp.is_game = function() return true end',
       'dofile("maps/scripts/graph_vocab.lua")',
       'dofile("maps/scripts/graphs.lua")',
-      `local ok, problems = graphs.load(${toLua(json)}, "${name}")`,
+      `local ok, problems = graphs.load(${luaOfJson(json)}, "${name}")`,
       'if not ok then error(table.concat(problems or {}, "\\n")) end',
       'triggers.load{ name = "carrier", triggers = { { name = "x", event = "on_tick", actions = { { a = "log", text = "x" } } } } }'
     ].join('\n'))
@@ -187,6 +224,14 @@ if (!existsSync(TRIGGERCHECK)) {
   check(loads(ul, 'lvl2').ok, 'and one whose required argument comes from a link')
   ul.links = ul.links.filter(([, t]) => t !== 'add.counter')
   check(!loads(ul, 'lvl3').ok, 'CONTROL: refused once nothing supplies it')
+
+  const wl = loads(wfile.json, 'world')
+  check(wl.ok, `graphs.load takes the world's nodes:\n${wl.out}`)
+  const wg = gameLoads(emitGraph({ vars: {}, nodes: [{ id: 'came', type: 'when_player_arrives' }, { id: 'heal', type: 'heal', amount: 10 }, { id: 'tick', type: 'every', seconds: 2 }, { id: 'say', type: 'action', a: 'log', text: 'x' }],
+    links: [['came.then', 'heal.in'], ['tick.then', 'say.in']] }, 'module', null).json, 'game3')
+  check(wg.ok, `and the game's graph takes the designer's nodes that need no level:\n${wg.out}`)
+  const wgBad = gameLoads(emitGraph({ vars: {}, nodes: [{ id: 'came', type: 'when_player_arrives' }, { id: 'open', type: 'open_door', tag: 3 }], links: [['came.then', 'open.in']] }, 'module', null).json, 'game4')
+  check(!wgBad.ok && /acts on a level/.test(wgBad.out), 'CONTROL: and refuses a door there, as the studio said')
 
   const broken = structuredClone(g.json)
   broken.links.push(['press.then', 'say.in'])
@@ -210,7 +255,7 @@ const plain = { ...doc, graph: undefined, name: 'plain' }
 const rp = await emitLevel(module, plain, { bake, runtime })
 check(rp.ok && /script module\.lua/.test(rp.mapText) && !/graph/.test(rp.mapText), 'CONTROL: a map without a graph declares no graph runtime')
 
-const em = await emitModule(gm, [{ ...plain, name: 'answers', graph: levelGraph }], { bake, runtime })
+const em = await emitModule(gm, [{ ...plain, name: 'alley', graph: worldGraph }, { ...plain, name: 'answers', graph: levelGraph }], { bake, runtime })
 const paths = em.files.map((f) => f.path)
 check(em.ok && paths.includes(`maps/${GAME_GRAPH}`) && ['triggers.lua', 'graphs.lua', 'graph_vocab.lua', 'trigger_vocab.lua'].every((n) => paths.includes(`maps/${n}`)),
       `the module carries its game graph and the runtimes beside it (${em.problems.map((p) => JSON.stringify(p)).join(' | ')})`)
@@ -225,10 +270,13 @@ else if (em.ok) {
   srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
   await new Promise((res) => setTimeout(res, 2500))
   srv.kill()
+  if (process.env.DNP_GRAPHS_LOG) console.log(log)
   check(/module\.graph\.json \(a graph, for the whole game\)/.test(log) && /\[graphs\] module\.graph\.json: 3 nodes, 3 links/.test(log),
         `the server runs the game's graph once (${log.split('\n').filter((l) => /graph/.test(l)).join(' | ')})`)
   check(/level 0: \S*triggers\.lua \(declared by the map\)/.test(log) && /level 0: \S*graphs\.lua \(declared by the map\)/.test(log),
         'and the level still runs its own trigger and graph runtimes (shared)')
+  check(/\[graphs\] alley\.graph\.json: 8 nodes, 7 links/.test(log) && !/alley\.graph\.json: .*(not in this map|refused|should be)/.test(log),
+        `and a map's world nodes load there, their picked room and wall found in the map (${log.split('\n').filter((l) => /alley/.test(l)).slice(0, 3).join(' | ')})`)
 }
 
 console.log(`graphs: ${checks} checks, ${fails} failures`)

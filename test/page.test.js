@@ -1449,6 +1449,56 @@ await page.keyboard.press('Escape')
   await page.evaluate(async (mob) => { const S = window.__studio; delete S.doc.graph; S.doc.entities = window.__keptEntities; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map') }, setup.mob)
 }
 
+// THE WORLD'S NODES: the menu grouped the designer's way, a door added with
+// its speed already chosen, and its room picked on the map.
+{
+  const menu = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map', Object.keys(S.docs)[0])
+    delete S.doc.graph; S.commit()
+    await S.go('graph')
+    const sel = document.querySelector('.gw .wk-top select')
+    const groups = [...sel.querySelectorAll('optgroup')].map((g) => g.label)
+    sel.value = 'node:open_door'; sel.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    const n = S.doc.graph.nodes[0]
+    const sid = S.doc.order[0]; const room = S.doc.sectors[sid]
+    const cx = room.verts.reduce((a, v) => a + v.x, 0) / room.verts.length
+    const cy = room.verts.reduce((a, v) => a + v.y, 0) / room.verts.length
+    // Near a corner, inside: the middle of the room has things placed in it.
+    const v0 = room.verts[0]
+    const { graphProblems } = await import('/studio/src/graphs_emit.js')
+    return { groups, n: { ...n }, sid, center: { x: v0.x + 0.12 * (cx - v0.x) + 0.5, y: v0.y + 0.12 * (cy - v0.y) + 0.5, floor: room.floor }, before: graphProblems(S.doc.graph, S.vocab.graph, S.vocab.trigger),
+             btn: [...document.querySelectorAll('.gw [data-node="open_door"] button')].map((b) => b.textContent) }
+  })
+  check(menu.groups.slice(0, 3).join() === 'when …,do to a thing,move the map' && menu.groups.includes('trigger words'), `the node menu is grouped the designer's way (${menu.groups.join(', ')})`)
+  check(menu.n.type === 'open_door' && menu.n.id === 'open_door' && menu.before.some((p) => /needs a sector/.test(p)), `a door is added, and asks for its room (${menu.before.join(' | ')})`)
+  // Bring the sector onto the node and pick it.
+  await page.evaluate(async () => {
+    const sel = document.querySelector('.gw [data-node="open_door"] .gw-more')
+    sel.value = 'sector'; sel.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    ;[...document.querySelectorAll('.gw [data-node="open_door"] button')].find((b) => /tap a sector/.test(b.textContent)).click()
+    const S = window.__studio; S.viewport.setMode('plan'); S.ui.setView('plan'); S.frameToDoc()
+    await new Promise((r) => setTimeout(r, 200))
+  })
+  const p = await page.evaluate((c) => window.__studio.viewport.toScreen(c.x - 0.5, c.y - 0.5, c.floor), menu.center)
+  await page.mouse.click(p.x, p.y)
+  await new Promise((r) => setTimeout(r, 300))
+  const picked = await page.evaluate(async () => {
+    const S = window.__studio
+    const { graphProblems } = await import('/studio/src/graphs_emit.js')
+    const { emitLevel } = await import('/studio/src/module_emit.js')
+    const r = await emitLevel(S.module, S.doc, { bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name) })
+    const out = { status: document.querySelector('.st-status')?.textContent, pending: S.pick?.kinds ?? null, sector: S.doc.graph.nodes[0].sector, problems: graphProblems(S.doc.graph, S.vocab.graph, S.vocab.trigger),
+                  file: r.graphText ? JSON.parse(r.graphText).nodes[0] : null, ok: r.ok, errors: r.errors.map((e) => e.msg) }
+    delete S.doc.graph; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map')
+    return out
+  })
+  check(picked.sector?.sector && picked.problems.length === 0, `the door's room is a tap on it (${JSON.stringify(picked.sector)} ${picked.problems.join(' | ')}; tapped ${JSON.stringify(p)}, ${picked.status}, pending ${picked.pending})`)
+  check(picked.ok && Number.isInteger(picked.file?.sector) && !('expect_tag' in (picked.file ?? {})), `and bakes as its index, with no trigger guard (${JSON.stringify(picked.file)} ${picked.errors.join(' | ')})`)
+}
+
 // THE GAME'S GRAPH: listed with the maps' in the Graphs section, edited with
 // only the words the game has, a call to the level answered by a map's
 // on_call whose value is linked straight into an action's argument.
@@ -1468,6 +1518,8 @@ await page.keyboard.press('Escape')
   check(listed.scope === 'game' && /game/.test(listed.title ?? ''), `and opens the game's (${listed.title})`)
   check(listed.opts.includes('event:on_player_enter') && !listed.opts.includes('event:on_interact') && listed.opts.includes('node:call') && listed.opts.includes('node:on_call'),
         'its menu offers what the game hears and calls, not a level\'s events')
+  check(listed.opts.includes('node:when_player_arrives') && listed.opts.includes('node:heal') && !listed.opts.includes('node:open_door') && !listed.opts.includes('node:when_sector_entered'),
+        'and of the world\'s nodes, only those that need no level')
   const game = await page.evaluate(async () => {
     const S = window.__studio
     const pick = (v) => { const s = document.querySelector('.gw .wk-top select'); s.value = v; s.dispatchEvent(new Event('change')) }

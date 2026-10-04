@@ -27,6 +27,7 @@ export function showFx (v) {
 let listSeq = 0
 function input (value, onChange, { placeholder = '', type = 'text', choices = null } = {}) {
   const i = el('input', { type, value: value ?? '', placeholder })
+  if (type === 'number') i.step = 'any'
   i.addEventListener('change', () => onChange(i.value))
   // Names the studio knows -- the bank's sounds, the sheets' frames -- offered
   // as the field is typed in, and never enforced: a name from another module
@@ -64,6 +65,11 @@ const VFX_ARGS = new Set(['hit_vfx', 'kind', 'effect', 'tracer', 'blood'])
 // Arguments that name a THING by its catalogue name, which can be taken from
 // one placed on the map.
 const THING_NAMES = new Set(['entity_kind_is', 'target_name_is', 'spawn_prop', 'spawn_enemy'])
+// The graph's own nodes name things by other arguments: a prop's kind, what
+// to spawn, which monster's death.
+const THING_ARGS = { prop: null, what: new Set(['spawn']), kind: new Set(['when_dies', 'when_hurt']) }
+const thingArg = (name, owner) => (name === 'name' && THING_NAMES.has(owner)) ||
+  (name in THING_ARGS && (THING_ARGS[name] === null || THING_ARGS[name].has(owner)))
 
 export function argFields (args, obj, ctx, skip = [], owner = null) {
   const rows = []
@@ -95,6 +101,20 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
     let control
     switch (a.type) {
       case 'int':
+        // A ROOM or a WALL as its index: picked on the map and held as a
+        // reference, which the emitter writes as the index (a graph's world nodes).
+        if (a.name === 'sector' && ctx.pickSector) {
+          const b = button(refLabel(cur, ctx), () => ctx.pickSector((hit) => set({ sector: hit.id })))
+          b.style.flex = '1 1 auto'
+          rows.push(row(label, b, cur !== undefined ? button('✕', () => set(undefined)) : null))
+          return
+        }
+        if (a.name === 'side' && ctx.pickEdge) {
+          const b = button(cur?.edge ? `wall ${cur.edge}` : 'tap a wall', () => ctx.pickEdge((hit) => set({ edge: hit.id })))
+          b.style.flex = '1 1 auto'
+          rows.push(row(label, b, cur !== undefined ? button('✕', () => set(undefined)) : null))
+          return
+        }
         // A ROOM'S TAG, from tapping the room (which is given one if it has none).
         if (a.name === 'tag' && ctx.pickTag) {
           const i = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
@@ -109,6 +129,10 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         }
         control = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
         break
+      // A plain number: units, seconds, degrees.
+      case 'number':
+        control = input(cur, (v) => set(v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v)), { type: 'number' })
+        break
       case 'fx':
         control = input(showFx(cur), (v) => { const p = v === '' ? undefined : parseFx(v); if (v !== '' && p === null) { ctx.status?.(`${a.name}: write a whole number, a decimal or n/d`, 'warn'); return } set(p) },
                         { placeholder: 'e.g. 0.25 or -4/48' })
@@ -121,7 +145,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         }
         control = input(cur, (v) => set(v), { choices: ctx.suggest?.(a.name, owner) ?? null })
         // A THING'S NAME, from tapping one placed on the map.
-        if (a.name === 'name' && THING_NAMES.has(owner) && ctx.pickThing) {
+        if (thingArg(a.name, owner) && ctx.pickThing) {
           rows.push(row(label, control, button('📍', () => ctx.pickThing((e) => { if (e) set(e.name) }))))
           return
         }
