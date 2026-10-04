@@ -22,6 +22,19 @@ const STYLE = `
   align-items:center;justify-content:center;gap:3px}
 .st-bar button .ico{font-size:18px;line-height:1}
 .st-bar button[data-on="1"]{background:rgba(91,143,214,.55);border-color:rgba(207,227,255,.7)}
+/* A phone held upright: the eight tools in ONE row of icon-first buttons
+   (they fit at 390 CSS px once each takes an equal share), not three rows
+   over the bottom third of the map. On its side: a lower bar. */
+@media (max-width:600px) and (orientation:portrait){
+  .st-bar{flex-wrap:nowrap;gap:4px;padding:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+  .st-bar button{flex:1 1 0;min-width:0;height:50px;font-size:9px;letter-spacing:-.2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+  .st-bar button .ico{font-size:17px}
+}
+@media (max-height:560px) and (orientation:landscape){
+  .st-bar{padding:4px 6px;padding-bottom:calc(4px + env(safe-area-inset-bottom))}
+  .st-bar button{height:42px;font-size:10px;gap:2px}
+  .st-bar button .ico{font-size:15px}
+}
 .st-top{position:absolute;left:0;right:0;top:0;display:flex;gap:6px;align-items:flex-start;
   padding:8px;padding-top:calc(8px + env(safe-area-inset-top));padding-left:calc(8px + env(safe-area-inset-left));
   padding-right:calc(8px + env(safe-area-inset-right))}

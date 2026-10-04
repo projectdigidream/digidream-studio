@@ -70,6 +70,37 @@ const STYLE = `
 /* The particle preview has the page's room. */
 .sd-body.st-page .st-vfx-canvas{max-width:640px}
 /* Map thumbnails: on Home, in the Maps list, in the metamap's cells. */
+/* HANDHELD. A phone gives every pixel of height to what is edited: the
+   page's row and a window's bar are compact, and a window's bar is one row
+   that scrolls sideways rather than wrapping into two or three. What only
+   explains (a note) or repeats (a window's own ‹ back, beside the rail and
+   the page's ‹ module) is left out there. */
+.sd-rail .sd-hist{display:none}
+.sd-rail button[disabled]{opacity:.35}
+@media (max-height:560px) and (orientation:landscape), (max-width:600px) and (orientation:portrait){
+  .sd-head{padding:3px 8px;padding-top:calc(3px + env(safe-area-inset-top));gap:6px}
+  .sd-head button{height:34px;min-width:38px;padding:0 10px}
+  .sd-head .sd-title{font-size:13px}
+  body .wk .wk-top{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:4px 8px;gap:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  body .wk .wk-top::-webkit-scrollbar{display:none}
+  body .wk .wk-top > *{flex:0 0 auto}
+  body .wk .wk-top button,body .wk .wk-top select{height:34px;min-width:34px;font-size:11px;padding:0 8px}
+  body .wk .wk-top .wk-title{font-size:12px}
+  body .wk .wk-top .wk-back,body .wk .wk-top .wk-note{display:none}
+  body .wk .wk-top .st-chips{flex-wrap:nowrap}
+  body .wk .wk-top .st-chip{padding:5px 8px;font-size:11px;white-space:nowrap}
+  /* The panes' tabs are how a phone moves between them: first, never
+     scrolled off the end of the bar. */
+  body .wk .wk-top .wk-tabs{order:-1}
+  .sd-rail{gap:0}
+  .sd-rail button{min-height:32px}
+  .sd-rail .sd-mod{min-height:36px}
+}
+/* A phone on its side, in a window: the window's bar is the header. */
+@media (max-height:560px) and (orientation:landscape){
+  .sd-page[data-kind="window"] .sd-head{display:none}
+  .sd-rail .sd-hist{display:flex}
+}
 .sd-thumb{display:block;width:100%;aspect-ratio:16/10;border-radius:6px;background:#0e1219}
 .sd-thumb-row{width:96px;flex:0 0 96px}
 .sd-body.st-page .sd-cell{position:relative;overflow:hidden}
@@ -128,7 +159,12 @@ export class Shell {
       items.push(el('button', { title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => this.router.go(s.id) },
         [el('span', { class: 'ico', text: s.icon }), el('span', { class: 'lbl', text: s.label }), n ? el('span', { class: 'sd-badge', text: String(n) }) : null].filter(Boolean)))
     }
-    items.push(el('div', { class: 'sd-gap' }),
+    // Undo and redo, for a phone on its side, where a window's own bar is the
+    // header and the page's row (which holds them) gives its height back.
+    this.railUndo = el('button', { class: 'sd-hist', title: 'undo (the module)', 'data-action': 'rail-undo', onclick: () => this.on.undo?.() }, [el('span', { class: 'ico', text: '↶' }), el('span', { class: 'lbl', text: 'Undo' })])
+    this.railRedo = el('button', { class: 'sd-hist', title: 'redo (the module)', 'data-action': 'rail-redo', onclick: () => this.on.redo?.() }, [el('span', { class: 'ico', text: '↷' }), el('span', { class: 'lbl', text: 'Redo' })])
+    this.railUndo.disabled = this.undoBtn.disabled; this.railRedo.disabled = this.redoBtn.disabled
+    items.push(el('div', { class: 'sd-gap' }), this.railUndo, this.railRedo,
       el('button', { title: 'play the map being edited', 'data-action': 'play', onclick: () => this.on.play() }, [el('span', { class: 'ico', text: '▶' }), el('span', { class: 'lbl', text: 'Play' })]),
       el('button', { title: 'export the module as a pack', 'data-action': 'export', onclick: () => this.on.exportPack() }, [el('span', { class: 'ico', text: '⇪' }), el('span', { class: 'lbl', text: 'Export' })]))
     this.rail.replaceChildren(...items)
@@ -137,12 +173,14 @@ export class Shell {
   setHistory (canUndo, canRedo) {
     this.undoBtn.disabled = !canUndo
     this.redoBtn.disabled = !canRedo
+    if (this.railUndo) { this.railUndo.disabled = !canUndo; this.railRedo.disabled = !canRedo }
   }
 
   /** The page: a section's title, its actions, and an empty body for it. */
   openPage (title, { kind = 'rows', actions = [] } = {}) {
     this.closePageContent()
     this.page.hidden = false
+    this.page.dataset.kind = kind
     this.title.textContent = title
     this.actions.replaceChildren(...actions)
     this.body.className = kind === 'rows' ? 'sd-body st-page' : 'sd-body'

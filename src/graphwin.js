@@ -199,6 +199,7 @@ class GraphWindow {
     for (const n of this.graph?.nodes ?? []) world.appendChild(this.#nodeEl(n, specs.get(n.type), problems))
     this.#applyView()
     this.#boardGestures(board)
+    board.appendChild(this.#zoomBar(board))
 
     const side = el('div', { class: 'wk-details' }, this.#details(problems))
     this.root.replaceChildren(top, el('div', { class: 'wk-graph' }, [board]), side)
@@ -435,6 +436,7 @@ class GraphWindow {
 
   #applyView () {
     this.world.style.transform = `translate(${this.view.x}px, ${this.view.y}px) scale(${this.view.z})`
+    if (this.zoomLabel) this.zoomLabel.textContent = `${Math.round(this.view.z * 100)}%`
   }
 
   /** Board pan and zoom: one finger or the mouse on empty board pans; pinch and wheel zoom. */
@@ -473,6 +475,34 @@ class GraphWindow {
     board.addEventListener('pointerup', end)
     board.addEventListener('pointercancel', end)
     board.addEventListener('wheel', (e) => { e.preventDefault(); this.#zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY / 400), board); this.#applyView() }, { passive: false })
+  }
+
+  /** −, the zoom, +, and every node in view: for a phone, where a pinch is not always at hand. */
+  #zoomBar (board) {
+    this.zoomLabel = el('span', { class: 'gw-zoom-pct', text: `${Math.round(this.view.z * 100)}%` })
+    const mid = (f) => { const r = board.getBoundingClientRect(); this.#zoomAt(r.left + r.width / 2, r.top + r.height / 2, f, board); this.#applyView() }
+    const bar = el('div', { class: 'gw-zoom' }, [
+      el('button', { text: '−', title: 'zoom out', 'data-zoom': 'out', onclick: () => mid(1 / 1.25) }),
+      this.zoomLabel,
+      el('button', { text: '+', title: 'zoom in', 'data-zoom': 'in', onclick: () => mid(1.25) }),
+      el('button', { text: '⤢', title: 'every node in view', 'data-zoom': 'fit', onclick: () => this.fitAll(board) })
+    ])
+    bar.addEventListener('pointerdown', (e) => e.stopPropagation())
+    return bar
+  }
+
+  /** Every node in view, as large as fits. */
+  fitAll (board) {
+    const nodes = this.graph?.nodes ?? []
+    if (!nodes.length) return
+    const els = nodes.map((n) => this.nodeEls.get(n.id)).filter(Boolean)
+    const x0 = Math.min(...nodes.map((n) => n.pos?.x ?? 0)); const y0 = Math.min(...nodes.map((n) => n.pos?.y ?? 0))
+    const x1 = Math.max(...nodes.map((n, i) => (n.pos?.x ?? 0) + (els[i]?.offsetWidth ?? NODE_W)))
+    const y1 = Math.max(...nodes.map((n, i) => (n.pos?.y ?? 0) + (els[i]?.offsetHeight ?? 120)))
+    const r = board.getBoundingClientRect()
+    const z = Math.min(2, Math.max(0.3, Math.min((r.width - 40) / (x1 - x0), (r.height - 80) / (y1 - y0))))
+    this.view = { z, x: (r.width - (x1 - x0) * z) / 2 - x0 * z, y: 20 - y0 * z }
+    this.#applyView()
   }
 
   #zoomAt (cx, cy, factor, board) {
@@ -753,6 +783,9 @@ const STYLE = `
 .wk-world[data-linking="exec"] .gw-pin.gw-in.gw-exec .gw-dot{background:#66ff99;transform:scale(1.45)}
 .wk-world[data-linking="data"] .gw-pin.gw-in.gw-data .gw-dot{border-color:#66ff99;background:#1f4a35;transform:scale(1.45)}
 .gw-pname{color:#9fb0c8}
+.gw-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;background:rgba(11,13,18,.85);border:1px solid #2a3446;border-radius:10px;padding:4px}
+.gw .gw-zoom button{min-width:36px;height:34px;padding:0 8px;border-radius:8px;background:rgba(27,34,48,.95);color:#cfe3ff;border:1px solid rgba(207,227,255,.22);font:600 15px/1 ui-monospace,Menlo,monospace;cursor:pointer}
+.gw-zoom-pct{font:600 11px ui-monospace,Menlo,monospace;color:#9fb0c8;min-width:42px;text-align:center}
 .gw-link{fill:none;stroke:transparent;stroke-width:18;pointer-events:stroke;cursor:pointer}
 .gw-exec-link{stroke:#e8f0ff;stroke-width:3.5}
 .gw-data-link{stroke:#7ad48a;stroke-width:3}

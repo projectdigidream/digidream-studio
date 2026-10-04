@@ -1491,7 +1491,8 @@ await page.keyboard.press('Escape')
   const sized = await page.evaluate(() => ({ ...window.__studio.module.panels.shop.widgets[1].slot }))
   check(sized.w < after.slot.w && sized.h > after.slot.h, `its corner sizes it (${after.slot.w}x${after.slot.h} -> ${sized.w}x${sized.h})`)
   // The panel moved toward the top right re-anchors there.
-  const pan = await handle('.pw [data-handle="panel"]')
+  // By its title bar: the rest of the panel pans the view.
+  const pan = await page.evaluate(() => { const r = document.querySelector('.pw [data-handle="panel"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 8 } })
   await page.evaluate(() => { window.__studio.window.sel = { kind: 'panel' } })
   await drag(pan, 260, -120)
   const look = await page.evaluate(() => ({ ...window.__studio.module.panels.shop.look }))
@@ -1907,6 +1908,77 @@ await page.keyboard.press('Escape')
   await page.setViewport({ width: 1000, height: 700 })
   check(side.details > 200 && side.preview > 150 && side.scrolls, `on a phone on its side the player's picture and forms are side by side, the forms scrolling (${JSON.stringify(side)})`)
   check(side.screensList > 250 && side.screensScrolls === 'auto', `and Screens gives its list the height to be read, scrolling (${side.screensList}, ${side.screensScrolls})`)
+}
+
+// HANDHELD: the chrome gives the height back -- on a phone on its side a
+// window's own bar is the header (undo moves to the rail), every bar is one
+// row -- and the panel editor zooms: onto the panel when it opens there,
+// fitted, stepped, and panned by dragging the panel's body; the graph board
+// shows every node with one button; upright, the map's tools are one row.
+{
+  await page.setViewport({ width: 915, height: 412 })
+  const land = await page.evaluate(async () => {
+    const S = window.__studio
+    const { newPanel, addWidget } = await import('/studio/src/panels_emit.js')
+    const p = newPanel('Shop'); addWidget(p, 'label', 'What will it be?'); addWidget(p, 'button', 'Buy'); addWidget(p, 'slider', 'How many')
+    S.module.panels = { hh: p }; S.moduleChanged()
+    await S.go('panels', 'hh')
+    await new Promise((r) => setTimeout(r, 900))
+    const vis = (sel) => { const e = document.querySelector(sel); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0 }
+    const w = S.window
+    return { head: vis('.sd-page .sd-head'), top: Math.round(document.querySelector('.pw .wk-top').getBoundingClientRect().height),
+             railUndo: vis('.sd-rail .sd-hist'), back: vis('.pw .wk-top .wk-back'), z: w.zoom.z, k0: w.k0 }
+  })
+  check(!land.head && land.top <= 48 && land.railUndo && !land.back, `on a phone on its side a window's bar is the header, one row, undo in the rail (${JSON.stringify(land)})`)
+  check(land.z > 1.5, `a panel opens zoomed onto itself there (zoom ${land.z.toFixed(2)})`)
+  const zoomed = await page.evaluate(async () => {
+    const w = window.__studio.window
+    document.querySelector('.pw [data-zoom="fit"]').click()
+    const fit = w.zoom.z
+    document.querySelector('.pw [data-zoom="in"]').click()
+    const stepped = w.zoom.z
+    document.querySelector('.pw [data-zoom="panel"]').click()
+    return { fit, stepped, panel: w.zoom.z }
+  })
+  check(zoomed.fit === 1 && zoomed.stepped > 1.3 && zoomed.panel > 1.5, `fit shows the whole screen, + steps in, the panel button zooms back onto it (${JSON.stringify(zoomed)})`)
+  // Drag the panel's body (below its title bar): the view pans, the panel stays.
+  const body = await page.evaluate(() => {
+    const r = document.querySelector('.pw [data-handle="panel"]').getBoundingClientRect()
+    const look = { ...window.__studio.module.panels.hh.look }
+    return { x: r.x + 6, y: r.y + r.height - 6, zx: window.__studio.window.zoom.x, look }
+  })
+  await page.mouse.move(body.x, body.y); await page.mouse.down(); await page.mouse.move(body.x + 60, body.y - 20, { steps: 5 }); await page.mouse.up()
+  await new Promise((r) => setTimeout(r, 300))
+  const panned = await page.evaluate(() => ({ zx: window.__studio.window.zoom.x, look: { ...window.__studio.module.panels.hh.look } }))
+  check(Math.abs(panned.zx - body.zx - 60) < 3 && JSON.stringify(panned.look) === JSON.stringify(body.look), `dragging the panel's body pans the view and leaves the panel where it is (${Math.round(panned.zx - body.zx)})`)
+  const graph = await page.evaluate(async () => {
+    const S = window.__studio
+    S.doc.graph = { vars: {}, nodes: [0, 1, 2, 3, 4].map((i) => ({ id: `n${i}`, type: 'delay', ticks: 30, pos: { x: i * 300, y: (i % 2) * 400 } })), links: [] }
+    S.commit(); await S.go('graph')
+    await new Promise((r) => setTimeout(r, 500))
+    document.querySelector('.gw [data-zoom="fit"]').click()
+    const b = document.querySelector('.gw .wk-board').getBoundingClientRect()
+    const inside = [...document.querySelectorAll('.gw .gw-node')].every((n) => { const q = n.getBoundingClientRect(); return q.left >= b.left - 1 && q.right <= b.right + 1 && q.top >= b.top - 1 && q.bottom <= b.bottom + 1 })
+    delete S.doc.graph; S.commit()
+    return { inside, z: S.window.view.z }
+  })
+  check(graph.inside && graph.z < 1, `the graph's ⤢ puts every node in view (${JSON.stringify(graph)})`)
+  await page.setViewport({ width: 390, height: 844 })
+  const port = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map')
+    await new Promise((r) => setTimeout(r, 400))
+    const tops = [...document.querySelectorAll('.st-bar button')].filter((b) => b.offsetParent).map((b) => Math.round(b.getBoundingClientRect().top))
+    await S.go('panels', 'hh')
+    await new Promise((r) => setTimeout(r, 600))
+    const top = Math.round(document.querySelector('.pw .wk-top').getBoundingClientRect().height)
+    const stage = Math.round(document.querySelector('.pw .pw-stage').getBoundingClientRect().height)
+    delete S.module.panels; S.moduleChanged(); await S.go('home')
+    return { rows: new Set(tops).size, tools: tops.length, top, stage }
+  })
+  check(port.rows === 1 && port.tools >= 8, `upright, the map's tools are one row (${JSON.stringify(port)})`)
+  check(port.top <= 48 && port.stage >= 360, `and the panel editor's bar is one row over a stage of half the screen (${JSON.stringify(port)})`)
+  await page.setViewport({ width: 1000, height: 700 })
 }
 
 // A PHONE HELD UPRIGHT: no rail; the module's home lists the sections, and

@@ -109,7 +109,7 @@ class Screens {
       el('div', { class: 'wk-tabs sc-tabs' }, [['hud', 'HUD'], ['touch', 'touch'], ['panels', 'templates']].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.tab === v ? '1' : '0', 'data-tab': v, onclick: () => { this.tab = v; this.picked = null; this.render() } }))),
       el('span', { style: 'flex:1' }),
-      button('‹ back', () => (this.S.leave ? this.S.leave() : this.close()))
+      button('‹ back', () => (this.S.leave ? this.S.leave() : this.close()), 'wk-back')
     ])
 
     // The frame, scaled to fit beside the controls; the client draws at the

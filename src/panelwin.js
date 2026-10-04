@@ -99,7 +99,7 @@ class PanelWindow {
         el('button', { text: l, 'data-on': this.mode === v ? '1' : '0', 'data-mode': v, onclick: () => { this.mode = v; this.heard = []; this.render() } }))),
       p && this.mode === 'edit' ? this.#palette() : null,
       el('span', { style: 'flex:1' }),
-      button('‹ back', () => (S.leave ? S.leave() : this.close()))
+      button('‹ back', () => (S.leave ? S.leave() : this.close()), 'wk-back')
     ].filter(Boolean))
 
     // The frame and the client's views in it live as long as the device does:
@@ -109,6 +109,10 @@ class PanelWindow {
       this.view?.clear()
       this.hud?.destroy()
       this.stage = el('div', { class: 'pw-stage' })
+      this.zoom = { z: 1, x: 0, y: 0 }
+      this.autoZoomFor = null
+      this.#zoomBar(this.stage)
+      this.#stageGestures(this.stage)
       const frame = el('div', { class: 'pw-frame', style: `width:${dev.width}px;height:${dev.height}px` })
       const safe = el('div', { class: 'pw-safe' })
       Object.assign(safe.style, { left: `${dev.insets.left ?? 0}px`, right: `${dev.insets.right ?? 0}px`, top: `${dev.insets.top ?? 0}px`, bottom: `${dev.insets.bottom ?? 0}px` })
@@ -151,13 +155,20 @@ class PanelWindow {
       const r = stage.getBoundingClientRect()
       const upright = matchMedia('(max-width:1100px) and (orientation:portrait)').matches
       const k = upright ? Math.min(1, (r.width - 24) / dev.width) : Math.min(1, (r.width - 24) / dev.width, (r.height - 24) / dev.height)
-      this.k = k > 0 ? k : 1
-      frame.style.transform = `scale(${this.k})`
-      frame.style.transformOrigin = upright ? 'top center' : 'center'
-      stage.style.height = upright ? `${Math.ceil(dev.height * this.k) + 24}px` : ''
+      // The fitted scale: the whole device in the stage. Zoom and pan are on top.
+      this.k0 = k > 0 ? k : 1
+      // Upright, at least half the screen less a little, so a zoomed panel has room.
+      stage.style.height = upright ? `${Math.max(Math.ceil(dev.height * this.k0) + 24, Math.round(innerHeight * 0.45))}px` : ''
+      this.#place()
       this.hud?.refresh()
       this.view?.relayout()
       this.#handles()
+      // On a phone a panel opens zoomed onto itself: at the device's whole
+      // size it is a few millimetres of screen.
+      if (this.autoZoomFor !== this.name && this.name && this.mode === 'edit' && handheld()) {
+        this.autoZoomFor = this.name
+        requestAnimationFrame(() => this.zoomToPanel())
+      }
     }
     requestAnimationFrame(() => this.fit())
     if (!this.onResize) { this.onResize = () => { if (!this.root.hidden) this.fit?.() }; addEventListener('resize', this.onResize) }
@@ -186,6 +197,114 @@ class PanelWindow {
     this.view.panels.get(1)?.decor?.update({ hp: 75, 'hud.hp_max': 100, ...this.sample })
   }
 
+  // --- zoom ------------------------------------------------------------------------
+
+  /** Where the frame is: fitted, then zoomed by `z` about the stage's middle and moved by (x, y). */
+  #place () {
+    const st = this.stage
+    if (!st || !this.dev) return
+    const W = st.clientWidth; const H = st.clientHeight
+    const k = this.k0 * this.zoom.z
+    this.k = k
+    const tx = (W - this.dev.width * k) / 2 + this.zoom.x
+    const ty = (H - this.dev.height * k) / 2 + this.zoom.y
+    this.frame.style.transform = `translate(${tx}px, ${ty}px) scale(${k})`
+    if (this.zoomLabel) this.zoomLabel.textContent = `${Math.round(k * 100)}%`
+  }
+
+  /** Zoom by `f` keeping the stage point (cx, cy) where it is. */
+  zoomAt (f, cx, cy) {
+    const st = this.stage
+    const W = st.clientWidth; const H = st.clientHeight
+    const z = Math.min(8 / this.k0, Math.max(0.5, this.zoom.z * f))
+    const k = this.k0 * this.zoom.z; const k2 = this.k0 * z
+    const tx = (W - this.dev.width * k) / 2 + this.zoom.x
+    const ty = (H - this.dev.height * k) / 2 + this.zoom.y
+    // The frame point under (cx, cy) stays under it.
+    const fx = (cx - tx) / k; const fy = (cy - ty) / k
+    this.zoom = { z, x: cx - fx * k2 - (W - this.dev.width * k2) / 2, y: cy - fy * k2 - (H - this.dev.height * k2) / 2 }
+    this.#place()
+  }
+
+  /** The whole device again. */
+  zoomFit () { this.zoom = { z: 1, x: 0, y: 0 }; this.#place() }
+
+  /** The panel filling the stage, with a margin round it. */
+  zoomToPanel () {
+    const root = this.view?.panels.get(1)?.root
+    if (!root || !this.stage) return
+    this.zoomFit()
+    const r = this.#rectOf(root)
+    const W = this.stage.clientWidth; const H = this.stage.clientHeight
+    // A margin round it, and the zoom bar's height clear at the bottom.
+    const k2 = Math.min((W * 0.88) / r.width, (H - 56) * 0.92 / r.height, 8)
+    const z = Math.max(1, k2 / this.k0)
+    const kk = this.k0 * z
+    // Centre the panel: its middle, in frame units, at the stage's middle.
+    const mx = r.left + r.width / 2; const my = r.top + r.height / 2
+    this.zoom = { z, x: W / 2 - mx * kk - (W - this.dev.width * kk) / 2, y: (H - 44) / 2 - my * kk - (H - this.dev.height * kk) / 2 }
+    this.#place()
+  }
+
+  #zoomBar (stage) {
+    this.zoomLabel = el('span', { class: 'pw-zoom-pct', text: '100%' })
+    const mid = () => [stage.clientWidth / 2, stage.clientHeight / 2]
+    stage.appendChild(el('div', { class: 'pw-zoom' }, [
+      el('button', { text: '−', title: 'zoom out', 'data-zoom': 'out', onclick: () => this.zoomAt(1 / 1.4, ...mid()) }),
+      this.zoomLabel,
+      el('button', { text: '+', title: 'zoom in', 'data-zoom': 'in', onclick: () => this.zoomAt(1.4, ...mid()) }),
+      el('button', { text: '▢', title: 'zoom to the panel', 'data-zoom': 'panel', onclick: () => this.zoomToPanel() }),
+      el('button', { text: '⤢', title: 'the whole screen', 'data-zoom': 'fit', onclick: () => this.zoomFit() })
+    ]))
+  }
+
+  /**
+   * Pinch or wheel to zoom; drag the empty stage (or the frame where nothing
+   * is) to pan. A handle's own drag never reaches here: it stops the event.
+   * In try mode the panel's controls keep their touches.
+   */
+  #stageGestures (stage) {
+    const pts = new Map()
+    let last = null
+    const at = (e) => { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top } }
+    let travel = 0
+    let downOn = null
+    stage.addEventListener('pointerdown', (e) => {
+      if (e.defaultPrevented || e.target.closest('.pw-zoom') || (this.mode === 'try' && e.target.closest('.dnp-ui'))) return
+      stage.setPointerCapture?.(e.pointerId)
+      pts.set(e.pointerId, at(e))
+      last = null
+      travel = 0
+      downOn = e.target
+    })
+    stage.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return
+      const prev = pts.get(e.pointerId)
+      const p = at(e)
+      pts.set(e.pointerId, p)
+      travel += Math.abs(p.x - prev.x) + Math.abs(p.y - prev.y)
+      if (pts.size === 1) { this.zoom.x += p.x - prev.x; this.zoom.y += p.y - prev.y; this.#place() } else if (pts.size === 2) {
+        // Two fingers: the pinch zooms about their middle, and the middle moving pans.
+        const [a, b] = [...pts.values()]
+        const d = Math.hypot(a.x - b.x, a.y - b.y)
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+        if (last) {
+          this.zoom.x += (m.x - last.m.x); this.zoom.y += (m.y - last.m.y)
+          this.zoomAt(d / last.d, m.x, m.y)
+        }
+        last = { d, m }
+      }
+    })
+    const end = (e) => {
+      const tap = pts.size === 1 && travel < 4
+      pts.delete(e.pointerId); last = null
+      if (tap && downOn?.closest?.('.pw-panel') && this.mode === 'edit') this.#pick({ kind: 'panel' })
+    }
+    stage.addEventListener('pointerup', end)
+    stage.addEventListener('pointercancel', end)
+    stage.addEventListener('wheel', (e) => { e.preventDefault(); const p = at(e); this.zoomAt(Math.exp(-e.deltaY / 300), p.x, p.y) }, { passive: false })
+  }
+
   // --- handles ---------------------------------------------------------------------
 
   /** Where something the client drew is, in the frame's own pixels. */
@@ -210,13 +329,16 @@ class PanelWindow {
 
     // The panel: drag to move it; its right edge and its bottom to size it.
     const pbox = this.#box(pr, 'pw-panel', this.sel.kind === 'panel', { 'data-handle': 'panel' })
+    // Moved by its title bar (or its top edge without one); the rest of it is
+    // the stage's, to pan when zoomed in, and a tap there selects it.
+    const band = Math.max(18, root.querySelector('.dnp-ui-title')?.offsetHeight ?? 0)
     this.#drag(pbox, root, (dx, dy, moved) => {
       if (!moved) return this.#pick({ kind: 'panel' })
       const a = anchorFor({ ...pr, left: pr.left + dx, top: pr.top + dy }, this.dev.width, this.dev.height, s, this.dev.insets)
       Object.assign(p.look, a)
       this.sel = { kind: 'panel' }
       this.changed()
-    })
+    }, null, (e) => (e.clientY - pbox.getBoundingClientRect().top) / this.k <= band || e.target !== pbox)
     const wide = el('div', { class: 'pw-edge pw-edge-r', 'data-handle': 'panel-w' })
     this.#drag(wide, null, (dx, dy, moved) => { if (moved) { p.look.w = Math.max(120, snap((pr.width + dx) / s)); this.changed() } }, (dx) => { pbox.style.width = `${pr.width + dx}px` })
     const tall = el('div', { class: 'pw-edge pw-edge-b', 'data-handle': 'panel-h' })
@@ -281,8 +403,10 @@ class PanelWindow {
    * moved with it, so the panel itself moves, not an outline); `end(dx, dy,
    * moved)` writes the change. Distances are in frame pixels.
    */
-  #drag (handle, target, end, live = null) {
+  #drag (handle, target, end, live = null, accept = null) {
     handle.addEventListener('pointerdown', (e) => {
+      // Not this handle's: left to the stage (a pan), which sees it next.
+      if (accept && !accept(e)) return
       e.preventDefault(); e.stopPropagation()
       handle.setPointerCapture?.(e.pointerId)
       const x0 = e.clientX; const y0 = e.clientY
@@ -651,6 +775,8 @@ class PanelWindow {
 }
 
 const snap = (v) => Math.round(v / GRID) * GRID
+/** A phone: on its side and short, or upright and narrow. */
+const handheld = () => matchMedia('(max-height:560px) and (orientation:landscape), (max-width:600px) and (orientation:portrait)').matches
 
 const STYLE = `
 .pw{grid-template-columns:1fr 400px;grid-template-areas:"top top" "stage details"}
@@ -659,8 +785,17 @@ const STYLE = `
 .pw .wk-details>*{flex:0 0 auto}
 .pw .st-trow{padding:4px 10px;min-height:0;gap:4px}
 .pw .st-trow[data-on="1"]{background:rgba(91,143,214,.25)}
-.pw-stage{grid-area:stage;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#07090d}
-.pw-frame{position:relative;flex:0 0 auto;transform-origin:center;background:linear-gradient(160deg,#1a2230,#0e1219);border:2px solid #3a4454;border-radius:18px;overflow:hidden}
+.pw-stage{grid-area:stage;position:relative;overflow:hidden;background:#07090d;touch-action:none}
+.pw-frame{position:absolute;left:0;top:0;transform-origin:0 0;background:linear-gradient(160deg,#1a2230,#0e1219);border:2px solid #3a4454;border-radius:18px;overflow:hidden}
+.pw-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;background:rgba(11,13,18,.85);border:1px solid #2a3446;border-radius:10px;padding:4px}
+.pw .pw-zoom button{min-width:36px;height:34px;padding:0 8px;border-radius:8px;background:rgba(27,34,48,.95);color:#cfe3ff;border:1px solid rgba(207,227,255,.22);font:600 15px/1 ui-monospace,Menlo,monospace;cursor:pointer}
+.pw-zoom-pct{font:600 11px ui-monospace,Menlo,monospace;color:#9fb0c8;min-width:42px;text-align:center}
+/* Fingers: handles big enough to take. */
+@media (pointer:coarse){
+  .pw-corner{width:24px;height:24px;right:-12px;bottom:-12px;border-radius:6px}
+  .pw-edge-r{width:20px;right:-10px}
+  .pw-edge-b{height:20px;bottom:-10px}
+}
 .pw-safe{position:absolute;border:1px dashed rgba(207,227,255,.12);pointer-events:none}
 .pw-hits{position:absolute;inset:0}
 .pw-behind{opacity:.45}
@@ -691,7 +826,7 @@ const STYLE = `
 }
 @media (max-width:1100px) and (orientation:portrait){
   .pw{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .pw .pw-stage{height:auto;padding:12px 0;align-items:flex-start}
+  .pw .pw-stage{min-height:200px}
   .pw .wk-details{display:flex;overflow:visible;border-left:0;border-top:1px solid #2a3446}
 }
 `

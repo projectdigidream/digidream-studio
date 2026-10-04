@@ -195,12 +195,12 @@ class Workshop {
     const names = Object.keys(sp.home(S))
     const problems = this.#problems()
     const top = el('div', { class: 'wk-top' }, [
-      button('‹ back', () => (S.leave ? S.leave() : this.close())),
+      button('‹ back', () => (S.leave ? S.leave() : this.close()), 'wk-back'),
       // Across to the sibling window. A monster's claw and a player's fist are
       // the same facility, so moving between them should not be a trip out to
       // the level and back in again.
       button(sp.sibling.label, () => (S.go ? S.go({ mob: 'monsters', weapon: 'weapons', player: 'player' }[sp.sibling.kind]) : this.open(sp.sibling.kind, null))),
-      sp.graph === false ? el('span', { class: 'st-muted', text: 'one player for the module; a map may override parts' }) : null,
+      sp.graph === false ? el('span', { class: 'st-muted wk-note', text: 'one player for the module; a map may override parts' }) : null,
       sp.graph === false ? null : chips([...names.map((n) => ({ id: n, label: n, on: n === this.mob })), { id: '+', label: `+ new ${sp.word}` }], async (it) => {
         if (it.id === '+') {
           const raw = await ask(`${sp.word} name (letters, digits, underscore)`, sp.kind === 'mob' ? 'grunt' : 'pistol')
@@ -214,7 +214,7 @@ class Workshop {
       // Said in the window, because the window is opened from a level and the
       // thing being edited is not the level's. One monster, one weapon, one
       // arsenal per MODULE -- both runtimes load them once per level.
-      sp.graph === false ? null : el('span', { class: 'st-muted', text: `${sp.word}s belong to the module, not to one map` }),
+      sp.graph === false ? null : el('span', { class: 'st-muted wk-note', text: `${sp.word}s belong to the module, not to one map` }),
       el('span', { style: 'flex:1 1 auto' }),
       problems.length ? el('span', { class: 'st-danger', text: `${problems.length} problem(s)`, title: problems.join('\n') }) : el('span', { class: 'st-muted', text: 'loads clean' }),
       el('div', { class: 'wk-tabs' }, [
