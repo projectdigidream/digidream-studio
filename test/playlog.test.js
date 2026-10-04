@@ -28,6 +28,8 @@ const check = (ok, label) => {
 check(isBad('[lua:maps/graphs.lua] [graphs] first.main.graph.json: 1 problems -- the graph is not loaded') && isBad('Uncaught TypeError: x is not a function (src/main.js:12)') &&
       isBad('[shell] the server exited (1)') && isBad('[graphs] lost.intro.graph.json: node \'fly\': the map has no camera path tagged 9'),
       'refusals, uncaught errors, a dead server and a missing path are failures')
+check(!isBad('[warning] [props] missing sprite BKEYA0 (/src/main.js:1527)') && isBad('[warning] the link failed to open') && isBad('[error] Uncaught TypeError: boom'),
+      'the game page\'s warnings stay in its log unless they say something failed; its errors are failures')
 check(!isBad('[triggers] first: 3 triggers on 2 events') && !isBad('[studio] wrote 40 files (512 KB) under modules/x') && !isBad('[graphs] first.main.graph.json: 0 problems'),
       'CONTROL: ordinary lines are not')
 const logs = { studio: ['[studio] launching the game'], server: ['[srv] up', '[graphs] x: 1 problems -- the graph is not loaded'], game: [] }

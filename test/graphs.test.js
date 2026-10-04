@@ -335,13 +335,15 @@ else if (em.ok) {
 
 // The cutscene on the server: on its own module, so it is the level loaded
 // at once; and again with a path the map lacks, which the engine refuses.
-async function serveOne (docs, port) {
-  const m = newModule('cut', 'cut')
+async function serveOne (docs, port, { module = null, maps = null } = {}) {
+  const m = module ?? newModule('cut', 'cut')
   const r = await emitModule(m, docs, { bake, runtime })
   if (!r.ok) return { ok: false, log: JSON.stringify(r.problems) }
   const dir = mkdtempSync(join(tmpdir(), 'dnp-cut-'))
   for (const f of r.files) { const p = join(dir, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, typeof f.bytes === 'string' ? f.bytes : Buffer.from(f.bytes)) }
-  const srv = spawn(SERVER, ['--port', String(port), '--module', dir], { cwd: join(ROOT, 'engine') })
+  // As a shell starts a play-test: the levels named, the first where players start.
+  const mapArgs = maps ? [...maps.flatMap((n) => ['--map', join(dir, 'maps', `${n}.dnpm`)]), '--spawn', 'start'] : []
+  const srv = spawn(SERVER, ['--port', String(port), '--module', dir, ...mapArgs], { cwd: join(ROOT, 'engine') })
   let log = ''
   srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
   await new Promise((res) => setTimeout(res, 2500))
@@ -379,6 +381,26 @@ if (existsSync(SERVER)) {
   const lost = await serveOne([{ ...gate, graphs: { travel: nowhere } }, yard], 34702)
   check(lost.ok && !/\[graphs\] gate\.travel\.graph\.json: 2 nodes/.test(lost.log) && /nowhere/.test(lost.log),
         `CONTROL: and refuses one sending them to a map it does not have, as the studio says (${lost.log.split('\n').filter((l) => /nowhere/.test(l)).slice(0, 2).join(' | ')})`)
+}
+
+// A PLAY-TEST OF A GAME GRAPH GOING TO ANOTHER MAP: the shells start the
+// server on the map being tested AND every other map of the module, so the
+// map change_map names is one the server has. CONTROL: started on the tested
+// map alone, as they used to, the game graph is refused -- the error a
+// play-test showed with the map right there in the module.
+if (existsSync(SERVER)) {
+  const tour = newModule('tour', 'tour')
+  tour.graphs = { travel: { vars: {}, nodes: [
+    { id: 'came', type: 'when_player_arrives', pos: { x: 0, y: 0 } },
+    { id: 'away', type: 'change_map', level: 'yard', spawn: 'door', pos: { x: 260, y: 0 } }], links: [['came.then', 'away.in']] } }
+  const gate = { ...structuredClone(plain), name: 'gate' }
+  const yard = { ...structuredClone(plain), name: 'yard' }
+  addSpawn(yard, 'door', 3, 3)
+  const all = await serveOne([gate, yard], 34705, { module: tour, maps: ['gate', 'yard'] })
+  check(all.ok && /\[graphs\] module\.travel\.graph\.json: 2 nodes, 1 links/.test(all.log) && !/there is no map/.test(all.log),
+        `a play-test started as the shells now start it loads a game graph going to the module's other map (${all.log.split('\n').filter((l) => /travel|no map|level/i.test(l)).slice(0, 3).join(' | ')})`)
+  const alone = await serveOne([gate, yard], 34706, { module: tour, maps: ['gate'] })
+  check(/there is no map 'yard'/.test(alone.log), `CONTROL: started on the tested map alone, the game graph is refused, as the play-test showed (${alone.log.split('\n').filter((l) => /no map/.test(l)).slice(0, 1).join('')})`)
 }
 
 console.log(`graphs: ${checks} checks, ${fails} failures`)

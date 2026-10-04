@@ -38,7 +38,13 @@ const FINE = /\b0 problems\b|\bno problems\b|loads clean/i
 export const tidy = (line) => line.replace(/(^|[\s[:(])\/[^[\]()]*?\/game\//g, '$1')
 
 /** Does this line look like a failure? */
-export const isBad = (line) => BAD.test(line) && !FINE.test(line)
+export const isBad = (line) => {
+  if (FINE.test(line)) return false
+  // The game page's warnings (a missing sprite) are in its log, not in the
+  // list of failures -- unless they say something failed outright.
+  if (/^\[(warning|log|info|verbose|debug)\]/.test(line)) return /\b(errors?|uncaught|refus\w*|fail\w*|exception)\b/i.test(line)
+  return BAD.test(line)
+}
 
 /**
  * The studio's part, written before the launch: what Play wrote and asked for.
