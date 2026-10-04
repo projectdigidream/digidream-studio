@@ -10,10 +10,10 @@
 //   - `sounds` and `metamap` are declared (empty / off).
 //
 import { packPath } from './soundpacks.js'
-import { migrateGraph } from './graphs_emit.js'
+import { migrateGraph, migrateGraphs, graphsOf, MAP_GRAPH, GAME_NAME } from './graphs_emit.js'
 import { migratePanels } from './panels_emit.js'
 
-export const MODULE_VERSION = 3
+export const MODULE_VERSION = 4
 
 export function newMetamap () { return { enabled: false, pitch: null, radius: 1, cells: {} } }
 
@@ -34,7 +34,13 @@ export function migrateModule (rec) {
     m.sounds.packs.push({ id: 'bank', name: 'bank', enabled: true })
     did.push('the module\'s sound bank is its first sound pack now')
   }
-  for (const d of Object.values(rec.docs ?? {})) if (migrateGraph(d.graph)) did.push(`${d.name}'s graph: node places moved to pos`)
+  // Version 4: many graphs each, by name -- the one a map had is its `main`,
+  // the module's its `game`. First, so everything after reads `graphs`.
+  if (migrateGraphs(m, GAME_NAME)) did.push(`the module's graph is now its graph '${GAME_NAME}'`)
+  for (const d of Object.values(rec.docs ?? {})) if (migrateGraphs(d, MAP_GRAPH)) did.push(`${d.name}'s graph is now its graph '${MAP_GRAPH}'`)
+  for (const owner of [m, ...Object.values(rec.docs ?? {})]) {
+    for (const [name, g] of graphsOf(owner)) if (migrateGraph(g)) did.push(`${owner.name ?? 'the module'}'s graph ${name}: node places moved to pos`)
+  }
   // Version 3: panels are the module's (panels_emit.js), not each map's.
   did.push(...migratePanels(m, Object.values(rec.docs ?? {})))
   if ((m.version ?? 1) < MODULE_VERSION) { m.version = MODULE_VERSION; did.push(`module document version ${MODULE_VERSION}`) }

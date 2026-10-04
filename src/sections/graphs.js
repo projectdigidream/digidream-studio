@@ -1,24 +1,26 @@
 //
-// Graphs: the game's graph and every map's, in one list.
+// Graphs: every graph of the module, the game's and each map's, in one list.
 //
-// The game's graph (module.graph) runs once in the game VM -- the players
-// coming and going, state kept across levels -- and a map's runs in its level.
+// A module and each of its maps may hold several graphs, each with its own
+// name (graphs_emit.js). The game's run once in the game VM -- the players
+// coming and going, state kept across levels -- and a map's in its level.
 // They talk by name: a `call` node starts the `on_call` nodes of that name on
 // the other side (docs/GRAPHS.md, Calls). So the list says, for each graph,
 // what it calls and what it answers, and a call that nothing answers is said.
 //
-import { el, button, muted } from '../ui.js'
-import { graphProblems } from '../graphs_emit.js'
+import { el, button, muted, ask } from '../ui.js'
+import { graphProblems, everyGraph, graphRoute, newGraph, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME } from '../graphs_emit.js'
 
 let S = null
 
-/** Every graph of the module: [{ key, label, graph, game }], the game's first. */
+/** Every graph: [{ key, scope, map, name, label, graph, game }], the game's first. */
 function allGraphs () {
-  return [{ key: 'game', label: 'the game', graph: S.module.graph ?? null, game: true },
-    ...Object.keys(S.docs).sort().map((n) => ({ key: n, label: n, graph: S.docs[n].graph ?? null, game: false }))]
+  return everyGraph(S.module, Object.keys(S.docs).sort().map((n) => S.docs[n])).map((g) => ({
+    ...g, game: g.scope === 'game', key: graphRoute(g.scope, g.map, g.name), label: g.scope === 'game' ? `the game · ${g.name}` : `${g.map} · ${g.name}`
+  }))
 }
 
-/** The names `kind` nodes ('call' or 'on_call') say, in one graph or all. */
+/** The names `kind` nodes ('call' or 'on_call') say, in the graphs given (all of them by default). */
 function namesOf (kind, graphs = allGraphs()) {
   const out = new Set()
   for (const g of graphs) for (const n of g.graph?.nodes ?? []) if (n.type === kind && typeof n.name === 'string' && n.name) out.add(n.name)
@@ -26,9 +28,9 @@ function namesOf (kind, graphs = allGraphs()) {
 }
 
 /**
- * Calls nothing answers: [{ graph, name }]. A call to the game is answered
- * by the game's graph; a call to a level by the graph of whatever level the
- * entity is in -- any map's, as far as the studio can tell.
+ * Calls nothing answers: [{ graph, name, to }]. A call to the game is
+ * answered by any of the game's graphs; a call to a level by the graphs of
+ * whatever level the entity is in -- any map's, as far as the studio can tell.
  */
 export function unansweredCalls () {
   const graphs = allGraphs()
@@ -45,10 +47,25 @@ export function unansweredCalls () {
   return out
 }
 
-function openGraphOf (g) {
-  if (g.game) return S.go('graph', 'game')
-  // A map's graph is edited with its map open: its picks are on that map.
-  ;(async () => { if (g.key !== S.docName) await S.openDoc(g.key); S.go('graph', g.key) })()
+/** Open one: a map's is edited with its map open, as its picks are on that map. */
+async function openGraphOf (scope, map, name) {
+  if (scope === 'map' && map !== S.docName) await S.openDoc(map)
+  S.go('graph', graphRoute(scope, map, name))
+}
+
+/** A new graph in the game (map null) or a map, under a name nothing there has. */
+export async function newGraphIn (map = null) {
+  const owner = map ? S.docs[map] : S.module
+  const taken = new Set(Object.keys(owner.graphs ?? {}))
+  const raw = await ask('graph name (letters, digits, underscore)', taken.size ? '' : (map ? MAP_GRAPH : GAME_NAME))
+  const name = cleanGraphName(raw)
+  if (!name) return null
+  if (!NAME_RE.test(name) || taken.has(name)) { S.status(`${map ?? 'the game'} has a graph called ${name} already`, 'warn'); return null }
+  ;(owner.graphs ??= {})[name] = newGraph()
+  if (map) { if (map === S.docName) S.commit(); else S.save() }
+  S.moduleChanged()
+  await openGraphOf(map ? 'map' : 'game', map, name)
+  return name
 }
 
 function showGraphs () {
@@ -56,26 +73,34 @@ function showGraphs () {
   const V = S.vocab
   if (!V.graph) { S.ui.showSheet('Graphs', [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]); return }
   const unanswered = unansweredCalls()
-  for (const g of allGraphs()) {
+  const all = allGraphs()
+  const row = (g) => {
     const nodes = g.graph?.nodes?.length ?? 0
     const problems = graphProblems(g.graph, V.graph, V.trigger, { game: g.game })
     const calls = [...namesOf('call', [g])]
     const answers = [...namesOf('on_call', [g])]
-    const lines = [nodes ? `${nodes} node${nodes > 1 ? 's' : ''}` : 'empty']
+    const lines = [nodes ? `${nodes} node${nodes > 1 ? 's' : ''}` : 'empty -- not written until it has a node']
     if (calls.length) lines.push(`calls ${calls.join(', ')}`)
     if (answers.length) lines.push(`answers ${answers.join(', ')}`)
-    body.push(el('div', { class: 'st-trow', 'data-graph': g.key, onclick: () => openGraphOf(g) }, [
-      el('span', { class: 'st-mark', text: g.game ? '🌐' : '🗺' }),
+    return el('div', { class: 'st-trow', 'data-graph': g.key, onclick: () => openGraphOf(g.scope, g.map, g.name) }, [
+      el('span', { class: 'st-mark', text: g.game ? '🌐' : '◇' }),
       el('div', { class: 'st-trow-text' }, [
-        el('div', { class: 'st-trow-name', text: g.game ? 'The game\'s graph' : g.label }),
+        el('div', { class: 'st-trow-name', text: g.name }),
         el('div', { class: 'st-muted', text: lines.join(' · ') }),
         problems.length ? el('div', { class: 'st-danger', text: `${problems.length} problem${problems.length > 1 ? 's' : ''}: ${problems[0]}` }) : null
       ].filter(Boolean))
-    ]))
-    if (g.game) body.push(el('div', { class: 'st-section-head', text: '🗺 the maps\' graphs' }))
+    ])
+  }
+  body.push(el('div', { class: 'st-section-head', text: '🌐 the game\'s graphs' }))
+  for (const g of all.filter((x) => x.game)) body.push(row(g))
+  body.push(button('+ new graph for the game', () => newGraphIn(null)))
+  for (const m of Object.keys(S.docs).sort()) {
+    body.push(el('div', { class: 'st-section-head', text: `🗺 ${m}` }))
+    for (const g of all.filter((x) => x.map === m)) body.push(row(g))
+    body.push(button(`+ new graph on ${m}`, () => newGraphIn(m)))
   }
   for (const u of unanswered) body.push(el('div', { class: 'st-warn-box', 'data-unanswered': u.name, text: `${u.graph} calls '${u.name}' (to ${u.to}), and no ${u.to === 'game' ? 'game graph' : 'map\'s graph'} has an on_call of that name` }))
-  body.push(muted('The game\'s graph runs once for the whole game: it hears players arrive and leave (on_player_enter, on_player_leave), and its variables are kept from level to level. A map\'s graph runs in its level, with the map\'s rooms, walls and things to pick. They reach each other by name: a "call" node starts every "on_call" of that name on the other side, with an entity and a value.'))
+  body.push(muted('As many graphs as you like, each with its own name: one for the doors, one for the shop, one for the boss. The game\'s run once for the whole game -- they hear players arrive and leave, and their variables are kept from level to level. A map\'s run in its level, with the map\'s rooms, walls and things to pick; each takes one of the map\'s script slots. Graphs reach each other by name: a "call" node starts every "on_call" of that name on the other side, with an entity and a value.'))
   S.ui.showSheet('Graphs', body)
 }
 
@@ -84,5 +109,6 @@ export function install (s) {
   S = s
   S.callNames = () => [...new Set([...namesOf('on_call'), ...namesOf('call')])].sort()
   S.unansweredCalls = unansweredCalls
+  S.newGraphIn = newGraphIn
   S.showGraphs = S.sectionAlias('graphs', showGraphs)
 }

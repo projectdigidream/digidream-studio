@@ -30,7 +30,7 @@ import { fxSchema } from './fxlib.js'
 import { openScreens } from './screens.js'
 import { openGraph } from './graphwin.js'
 import { openPanels } from './panelwin.js'
-import { graphProblems } from './graphs_emit.js'
+import { graphProblems, graphsOf, liveGraphs, graphFile } from './graphs_emit.js'
 import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
 import { parseAtlas } from '/src/render/atlas.js'
@@ -952,11 +952,15 @@ async function emitAll () {
   // A graph the runtime would refuse does not load at all, so it is said here
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
-    const gp = S.vocab.graph ? graphProblems(d.graph, S.vocab.graph, S.vocab.trigger) : []
-    if (gp.length) { S.status(`${d.name}'s graph: ${gp.join('; ')}`, 'error'); return null }
+    for (const [name, g] of graphsOf(d)) {
+      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger) : []
+      if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
+    }
   }
-  const mg = S.vocab.graph ? graphProblems(S.module.graph, S.vocab.graph, S.vocab.trigger, { game: true }) : []
-  if (mg.length) { S.status(`the game's graph: ${mg.join('; ')}`, 'error'); return null }
+  for (const [name, g] of graphsOf(S.module)) {
+    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { game: true }) : []
+    if (mg.length) { S.status(`the game's graph ${name}: ${mg.join('; ')}`, 'error'); return null }
+  }
   const sizes = { ...S.textureSizes }
   const assets = {}
   for (const [path, blob] of Object.entries(S.rec.assets ?? {})) assets[path] = new Uint8Array(await blob.arrayBuffer())
@@ -1047,7 +1051,7 @@ function scriptBudget () {
     hasMobs: Object.keys(S.module.mobs?.mobs ?? {}).length > 0 || Object.keys(S.module.mobs?.missiles ?? {}).length > 0,
     hasTriggers: (S.doc?.triggers?.length ?? 0) > 0,
     hasWeapons: hasWeapons(S.module),
-    graph: (S.doc?.graph?.nodes?.length ?? 0) > 0 ? `${S.docName}.graph.json` : null
+    graphs: liveGraphs(S.doc).map(([name]) => graphFile(S.docName, name))
   })
   const used = decls.length + 1
   const game = gameScripts(S.module).map(gameFileOf)

@@ -8,7 +8,7 @@
 // document only.
 //
 import { validate } from '../doc.js'
-import { graphProblems } from '../graphs_emit.js'
+import { graphProblems, graphsOf, NAME_RE } from '../graphs_emit.js'
 import { metamapProblems } from '../metamap.js'
 
 /** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg] } */
@@ -18,9 +18,15 @@ export function moduleProblems (S) {
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
     for (const p of V.validateTriggers(d, S.module.panels ?? d.panels)) out.maps.push({ map: d.name, msg: p })
-    if (V.graph) for (const p of graphProblems(d.graph, V.graph, V.trigger)) out.maps.push({ map: d.name, msg: `graph: ${p}` })
+    for (const [name, g] of graphsOf(d)) {
+      if (!NAME_RE.test(name)) out.maps.push({ map: d.name, msg: `graph '${name}': a name is 1 to 32 of a-z, 0-9, _` })
+      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger)) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
+    }
   }
-  if (V.graph) for (const p of graphProblems(S.module.graph, V.graph, V.trigger, { game: true })) out.graphs.push(`the game's graph: ${p}`)
+  for (const [name, g] of graphsOf(S.module)) {
+    if (!NAME_RE.test(name)) out.graphs.push(`the game's graph '${name}': a name is 1 to 32 of a-z, 0-9, _`)
+    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { game: true })) out.graphs.push(`the game's graph ${name}: ${p}`)
+  }
   for (const u of S.unansweredCalls?.() ?? []) out.graphs.push(`${u.graph} calls '${u.name}' (to ${u.to}), and nothing answers it`)
   if (S.module.mobs) out.monsters.push(...V.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }))
   if (S.module.weapons && V.weapon && Object.keys(S.module.weapons.weapons ?? {}).length) out.weapons.push(...V.validateWeapons(S.module))

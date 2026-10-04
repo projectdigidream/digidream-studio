@@ -30,7 +30,7 @@
 import { normalize, derive } from './topology.js'
 import { emitMap } from './mapfmt.js'
 import { emitMapLua, makeResolver } from './lua_emit.js'
-import { emitGraph, graphFile, hasGraph, GAME_GRAPH } from './graphs_emit.js'
+import { emitGraph, graphFile, gameGraphFile, hasGraph, liveGraphs } from './graphs_emit.js'
 import { triggerPanels, graphPanels } from './panels_emit.js'
 import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
@@ -188,7 +188,7 @@ export const PLAYER_GAME_FILE = 'player_setup.lua'
 export const GRAPH_GAME_RUNTIME = ['trigger_vocab.lua', 'triggers.lua', 'graph_vocab.lua', 'graphs.lua']
 
 /** Does the module have a graph of its own, for the game? */
-export const hasGameGraph = (module) => (module?.graph?.nodes?.length ?? 0) > 0
+export const hasGameGraph = (module) => hasGraph(module)
 
 /**
  * The module's game scripts, in load order, as module.txt says them: a file,
@@ -197,7 +197,8 @@ export const hasGameGraph = (module) => (module?.graph?.nodes?.length ?? 0) > 0
 export function gameScripts (module) {
   const out = hasWeapons(module) ? [...GAME_RUNTIME, GAME_FILE] : []
   if (hasMoveSounds(module)) out.push(PLAYER_GAME_RUNTIME, PLAYER_GAME_FILE)
-  if (hasGameGraph(module)) out.push(...GRAPH_GAME_RUNTIME.map((f) => `${f} shared`), GAME_GRAPH)
+  // Each of the module's graphs a game line of its own, after their runtimes.
+  if (hasGameGraph(module)) out.push(...GRAPH_GAME_RUNTIME.map((f) => `${f} shared`), ...liveGraphs(module).map(([name]) => gameGraphFile(name)))
   return out
 }
 
@@ -294,13 +295,15 @@ export function musicIndex (baked, tracks = null) {
  * (`mobs.weapon_runtime`) -- the ray, the missile and the blast are the mob
  * runtime's, which owns the monsters and their health.
  */
-export function scriptDecls (module, { hasMobs = false, hasTriggers = true, hasWeapons = false, graph = null } = {}) {
+export function scriptDecls (module, { hasMobs = false, hasTriggers = true, hasWeapons = false, graph = null, graphs = null } = {}) {
+  // The map's graph files, each a script line of its own (one slot each).
+  graphs = graphs ?? (graph ? [graph] : [])
   const decls = []
   if (hasMobs || hasWeapons) decls.push(`../../../${RUNTIME_DIR}/mob_vocab.lua`, `../../../${RUNTIME_DIR}/mobs.lua`)
   // A graph's verbs ARE the trigger runtime's (triggers.verbs), so a map with
   // a graph needs it whether or not it has a trigger table.
-  if (hasTriggers || graph) decls.push(`../../../${RUNTIME_DIR}/trigger_vocab.lua`, `../../../${RUNTIME_DIR}/triggers.lua`)
-  if (graph) decls.push(`../../../${RUNTIME_DIR}/graph_vocab.lua`, `../../../${RUNTIME_DIR}/graphs.lua`, graph)
+  if (hasTriggers || graphs.length) decls.push(`../../../${RUNTIME_DIR}/trigger_vocab.lua`, `../../../${RUNTIME_DIR}/triggers.lua`)
+  if (graphs.length) decls.push(`../../../${RUNTIME_DIR}/graph_vocab.lua`, `../../../${RUNTIME_DIR}/graphs.lua`, ...graphs)
   // After every runtime, because it calls into all of them.
   if (emitModuleLua(module) !== null) decls.push(MODULE_FILE)
   return decls
@@ -319,10 +322,10 @@ export const graphTakesPanels = (gv) => !!gv?.graph_fields?.some((f) => f.name =
 export async function emitLevel (module, doc, { bake, runtime, hooks = [], graphVocab = null }) {
   normalize(doc)
   const derived = derive(doc)
-  const withGraph = hasGraph(doc)
+  const live = liveGraphs(doc)
   const moduleLua = emitModuleLua(module, { hooks })
   const decls = scriptDecls(module, { hasMobs: emitMobsLua(module) !== null, hasTriggers: doc.triggers.length > 0, hasWeapons: hasWeapons(module),
-                                      graph: withGraph ? graphFile(doc.name) : null })
+                                      graphs: live.map(([name]) => graphFile(doc.name, name)) })
   const errors = []
   if (decls.length + 1 > CAP.scripts) {
     errors.push({ line: 0, msg: `a map can declare ${CAP.scripts} scripts and this module needs ${decls.length + 1}: ${decls.map((d) => d.split('/').pop()).join(', ')}.` })
@@ -337,26 +340,29 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [], graph
   const player = emitPlayerLua(module, doc)
   if (player !== null) lua.text += '\n' + player
   for (const p of lua.problems) errors.push({ line: 0, msg: p })
-  // The graph, its verbs' places resolved as the trigger table's are.
-  let graphText = null
-  if (withGraph) {
+  // The graphs, each its own file under its own name, their verbs' places
+  // resolved as the trigger table's are.
+  const graphTexts = {}
+  for (const [name, graph] of live) {
     const unresolved = []
-    const g = emitGraph(doc.graph, doc.name, makeResolver(doc, emitted, { problems: unresolved }), makeResolver(doc, emitted, { guards: false, problems: unresolved }),
-                        { panels: graphTakesPanels(graphVocab) ? graphPanels(doc.graph, module.panels) : null })
-    for (const p of [...g.problems, ...unresolved]) errors.push({ line: 0, msg: p })
-    graphText = g.text
+    const g = emitGraph(graph, name, makeResolver(doc, emitted, { problems: unresolved }), makeResolver(doc, emitted, { guards: false, problems: unresolved }),
+                        { panels: graphTakesPanels(graphVocab) ? graphPanels(graph, module.panels) : null })
+    for (const p of [...g.problems, ...unresolved]) errors.push({ line: 0, msg: `graph '${name}': ${p}` })
+    graphTexts[graphFile(doc.name, name)] = g.text
   }
-  if (errors.length) return { ok: false, mapText: emitted.text, luaText: lua.text, graphText, dnpm: null, copies: {}, errors, warnings: derived.warnings, emitted }
+  // The first, for a caller that asks about "the" graph.
+  const graphText = Object.values(graphTexts)[0] ?? null
+  if (errors.length) return { ok: false, mapText: emitted.text, luaText: lua.text, graphText, graphTexts, dnpm: null, copies: {}, errors, warnings: derived.warnings, emitted }
 
   const files = {}
   for (const name of RUNTIME_SCRIPTS) files[`${RUNTIME_DIR}/${name}`] = runtime[name]
   const mapsDir = `modules/${module.id}/maps`
   if (moduleLua !== null) files[`${mapsDir}/${MODULE_FILE}`] = moduleLua
-  if (graphText !== null) files[`${mapsDir}/${graphFile(doc.name)}`] = graphText
+  for (const [file, text] of Object.entries(graphTexts)) files[`${mapsDir}/${file}`] = text
   files[`${mapsDir}/${doc.name}.lua`] = lua.text
 
   const r = await bake({ mapPath: `${mapsDir}/${doc.name}.map`, mapText: emitted.text, files })
-  return { ok: r.ok, mapText: emitted.text, luaText: lua.text, graphText, dnpm: r.dnpm, copies: r.copies,
+  return { ok: r.ok, mapText: emitted.text, luaText: lua.text, graphText, graphTexts, dnpm: r.dnpm, copies: r.copies,
            errors: r.errors, warnings: derived.warnings, emitted, hash: r.hash }
 }
 
@@ -401,12 +407,14 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
     files.push({ path: `maps/${PLAYER_GAME_FILE}`, bytes: playerGame })
   }
 
-  // The game's graph: the runtimes it needs beside it, then the graph.
+  // The game's graphs: the runtimes they need beside them, then each graph.
   if (hasGameGraph(module)) {
     for (const name of GRAPH_GAME_RUNTIME) files.push({ path: `maps/${name}`, bytes: runtime[name] })
-    const g = emitGraph(module.graph, 'module', null, null, { panels: graphTakesPanels(graphVocab) ? graphPanels(module.graph, module.panels) : null })
-    files.push({ path: `maps/${GAME_GRAPH}`, bytes: g.text })
-    if (g.problems.length) problems.push({ map: 'module graph', errors: g.problems.map((msg) => ({ line: 0, msg })), warnings: [] })
+    for (const [name, graph] of liveGraphs(module)) {
+      const g = emitGraph(graph, name, null, null, { panels: graphTakesPanels(graphVocab) ? graphPanels(graph, module.panels) : null })
+      files.push({ path: `maps/${gameGraphFile(name)}`, bytes: g.text })
+      if (g.problems.length) problems.push({ map: 'module graph', errors: g.problems.map((msg) => ({ line: 0, msg: `graph '${name}': ${msg}` })), warnings: [] })
+    }
   }
 
   // A metamap the server would refuse is fatal there, so it is here.
@@ -417,7 +425,7 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
     files.push({ path: `maps/${doc.name}.studio.json`, bytes: JSON.stringify(doc, null, 2) })
     files.push({ path: `maps/${doc.name}.map`, bytes: r.mapText })
     files.push({ path: `maps/${doc.name}.lua`, bytes: r.luaText })
-    if (r.graphText) files.push({ path: `maps/${graphFile(doc.name)}`, bytes: r.graphText })
+    for (const [file, text] of Object.entries(r.graphTexts ?? {})) files.push({ path: `maps/${file}`, bytes: text })
     if (r.ok) {
       baked.push({ doc, dnpm: r.dnpm })
       files.push({ path: `maps/${doc.name}.dnpm`, bytes: r.dnpm })

@@ -25,6 +25,8 @@
 // Pure: the Panels window, the emitters and the tests all use it.
 //
 
+import { graphsOf } from './graphs_emit.js'
+
 export const NAME_RE = /^[a-z0-9_]{1,24}$/
 export const KINDS = ['label', 'button', 'toggle', 'slider', 'select']
 export const MAX_WIDGETS = 32
@@ -167,7 +169,7 @@ export function panelsInTriggers (doc) {
   for (const t of doc?.triggers ?? []) for (const a of t.actions ?? []) if (PANEL_VERBS.includes(a.a) && typeof a.panel === 'string') out.add(a.panel)
   // A graph's `action ui_open` runs the trigger runtime's verb, which reads
   // the trigger table's panels: those go there too.
-  for (const n of doc?.graph?.nodes ?? []) if (n.type === 'action' && PANEL_VERBS.includes(n.a) && typeof n.panel === 'string') out.add(n.panel)
+  for (const g of graphsOf(doc).map(([, g]) => g)) for (const n of g?.nodes ?? []) if (n.type === 'action' && PANEL_VERBS.includes(n.a) && typeof n.panel === 'string') out.add(n.panel)
   return out
 }
 
@@ -186,24 +188,27 @@ export function graphPanels (graph, panels) {
 }
 
 /**
- * Every place a panel is used: [{ graph: 'game' | map, node, how, widget? }].
+ * Every place a panel is used: [{ graph: 'game' | map, gname, node, how, widget? }]
+ * -- `gname` the graph's name in its map (or the module); a card has `trigger`.
  * `how` is 'opens', 'closes', 'sets', 'answers', 'closed', 'asks', or
  * 'trigger' for a trigger card.
  */
 export function panelUses (name, module, docs) {
   const HOW = { open_panel: 'opens', close_panel: 'closes', set_widget: 'sets', when_panel_used: 'answers', when_panel_closed: 'closed', panel_is_open: 'asks' }
   const out = []
-  const scan = (graph, label) => {
-    for (const n of graph?.nodes ?? []) {
-      if (n.panel !== name) continue
-      if (HOW[n.type]) out.push({ graph: label, node: n.id, how: HOW[n.type], widget: n.widget })
-      else if (n.type === 'action' && n.a === 'ui_open') out.push({ graph: label, node: n.id, how: 'opens' })
-      else if (n.type === 'action' && n.a === 'ui_close') out.push({ graph: label, node: n.id, how: 'closes' })
+  const scan = (owner, label) => {
+    for (const [gname, graph] of graphsOf(owner)) {
+      for (const n of graph?.nodes ?? []) {
+        if (n.panel !== name) continue
+        if (HOW[n.type]) out.push({ graph: label, gname, node: n.id, how: HOW[n.type], widget: n.widget })
+        else if (n.type === 'action' && n.a === 'ui_open') out.push({ graph: label, gname, node: n.id, how: 'opens' })
+        else if (n.type === 'action' && n.a === 'ui_close') out.push({ graph: label, gname, node: n.id, how: 'closes' })
+      }
     }
   }
-  scan(module?.graph, 'game')
+  scan(module, 'game')
   for (const d of docs ?? []) {
-    scan(d.graph, d.name)
+    scan(d, d.name)
     for (const t of d.triggers ?? []) for (const a of t.actions ?? []) if (PANEL_VERBS.includes(a.a) && a.panel === name) out.push({ graph: d.name, trigger: t.name, how: 'trigger' })
   }
   return out
@@ -265,13 +270,13 @@ export function fromScript (name, p, tpl = null) {
   return panel
 }
 
-/** A panel renamed: every trigger card and graph node naming it follows. */
+/** A panel renamed: every trigger card and graph node naming it follows (a map, or the module). */
 export function renamePanelRefs (doc, from, to) {
   for (const t of doc?.triggers ?? []) for (const a of t.actions ?? []) if (PANEL_VERBS.includes(a.a) && a.panel === from) a.panel = to
-  for (const n of doc?.graph?.nodes ?? []) if (n.panel === from) n.panel = to
+  for (const g of graphsOf(doc).map(([, g]) => g)) for (const n of g?.nodes ?? []) if (n.panel === from) n.panel = to
 }
 
-/** A widget renamed: graph nodes naming it follow. */
-export function renameWidgetRefs (graph, panel, from, to) {
-  for (const n of graph?.nodes ?? []) if (n.panel === panel && n.widget === from) n.widget = to
+/** A widget renamed: graph nodes naming it follow, in every graph of a map or the module. */
+export function renameWidgetRefs (owner, panel, from, to) {
+  for (const g of graphsOf(owner).map(([, g]) => g)) for (const n of g?.nodes ?? []) if (n.panel === panel && n.widget === from) n.widget = to
 }

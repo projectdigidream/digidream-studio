@@ -21,7 +21,7 @@ import { newDoc, addSector, addSpawn, CAP } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { makeResolver } from '../src/lua_emit.js'
-import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, GAME_GRAPH } from '../src/graphs_emit.js'
+import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, migrateGraphs, graphsOf, liveGraphs, gameGraphFile, graphFile, parseGraphRoute, graphRoute } from '../src/graphs_emit.js'
 import { emitLevel, emitModule, scriptDecls, moduleTxt, gameScripts, newModule, RUNTIME_SCRIPTS, MODULE_FILE } from '../src/module_emit.js'
 import { toLua } from '../src/lua.js'
 import { bake } from '../src/bake.js'
@@ -126,7 +126,7 @@ check(!('show' in shown) && shown.meta?.show?.[0] === 'add', 'which optional arg
 // The module: shared runtimes, then the graph, as module.txt game lines.
 const gm = newModule('gg', 'gg'); gm.graph = gameGraph
 const txt = moduleTxt(gm)
-check(/^game trigger_vocab\.lua shared\ngame triggers\.lua shared\ngame graph_vocab\.lua shared\ngame graphs\.lua shared\ngame module\.graph\.json$/m.test(txt),
+check(/^game trigger_vocab\.lua shared\ngame triggers\.lua shared\ngame graph_vocab\.lua shared\ngame graphs\.lua shared\ngame module\.game\.graph\.json$/m.test(txt),
       `module.txt runs the runtimes shared and then the game's graph (${gameScripts(gm).join(', ')})`)
 check(!/graph/.test(moduleTxt(newModule('p', 'p'))), 'CONTROL: a module without one says nothing of it')
 
@@ -248,17 +248,42 @@ const runtime = {}
 for (const name of RUNTIME_SCRIPTS) runtime[name] = readFileSync(join(SCRIPTS, name), 'utf8')
 const r = await emitLevel(module, doc, { bake, runtime, hooks: TV.events.map((e) => e.name) })
 check(r.ok, `the map with its graph bakes (${r.errors.map((e) => e.msg).join(' | ')})`)
-check(/script lifts\.graph\.json/.test(r.mapText) && /script \.\.\/\.\.\/\.\.\/engine\/maps\/scripts\/graphs\.lua/.test(r.mapText), 'the .map declares the graph after its runtime')
+check(/script lifts\.main\.graph\.json/.test(r.mapText) && /script \.\.\/\.\.\/\.\.\/engine\/maps\/scripts\/graphs\.lua/.test(r.mapText), 'the .map declares the graph after its runtime')
 check(/script module\.lua/.test(r.mapText) && /triggers\.load/.test(r.luaText) && !/mobs\.load/.test(r.luaText), 'the monsters stay in the module file and the map\'s file holds its own triggers')
 check(r.ok && Object.keys(r.copies).some((n) => n.endsWith('.graph.json')), 'mapc copies the graph beside the map, as it does every script')
 const plain = { ...doc, graph: undefined, name: 'plain' }
 const rp = await emitLevel(module, plain, { bake, runtime })
 check(rp.ok && /script module\.lua/.test(rp.mapText) && !/graph/.test(rp.mapText), 'CONTROL: a map without a graph declares no graph runtime')
 
-const em = await emitModule(gm, [{ ...plain, name: 'alley', graph: worldGraph }, { ...plain, name: 'answers', graph: levelGraph }], { bake, runtime })
+// --- many graphs, each with its own name --------------------------------------------------------
+const old1 = { name: 'm', sectors: {}, graph: levelGraph }
+const old2 = { id: 'mod', graph: gameGraph }
+check(migrateGraphs(old1, 'main') && old1.graphs.main === levelGraph && !('graph' in old1) && !migrateGraphs(old1, 'main') && migrateGraphs(old2, 'game') && old2.graphs.game,
+      'a map\'s one graph becomes its graph "main", the module\'s its "game", once')
+check(graphsOf({ sectors: {}, graph: levelGraph })[0][0] === 'main' && graphsOf({ id: 'x', graph: gameGraph })[0][0] === 'game', 'a document not yet moved reads as that one graph, under the name it will move to')
+check(liveGraphs({ graphs: { a: levelGraph, empty: newGraph() } }).map(([n]) => n).join() === 'a', 'an empty graph is kept in the document and not written')
+check(graphFile('alley', 'world') === 'alley.world.graph.json' && gameGraphFile('greeter') === 'module.greeter.graph.json', 'a map\'s graph is <map>.<name>.graph.json, the module\'s module.<name>.graph.json')
+check(JSON.stringify(parseGraphRoute(graphRoute('map', 'alley', 'world'))) === JSON.stringify({ scope: 'map', map: 'alley', name: 'world' }) &&
+      parseGraphRoute('game:greeter').scope === 'game' && parseGraphRoute('game').name === null, 'a graph\'s address goes there and back')
+const twoDecls = scriptDecls(module, { hasMobs: true, hasTriggers: true, graphs: ['lifts.doors.graph.json', 'lifts.boss.graph.json'] })
+check(twoDecls.indexOf('lifts.doors.graph.json') > -1 && twoDecls.indexOf('lifts.boss.graph.json') === twoDecls.indexOf('lifts.doors.graph.json') + 1 && twoDecls.filter((d) => d.endsWith('graphs.lua')).length === 1,
+      'a map with two graphs declares both, after one copy of their runtime')
+
+// The module: two graphs for the game, and a map with two of its own.
+const greeter = { vars: {}, nodes: [{ id: 'hi', type: 'when_player_arrives', pos: { x: 0, y: 0 } }, { id: 'say', type: 'action', a: 'log', text: 'hello', pos: { x: 260, y: 0 } }], links: [['hi.then', 'say.in']] }
+gm.graphs = { game: gameGraph, greeter }
+delete gm.graph
+const two = moduleTxt(gm)
+check(/^game module\.game\.graph\.json\ngame module\.greeter\.graph\.json$/m.test(two) && (two.match(/graphs\.lua shared/g) ?? []).length === 1,
+      `module.txt runs each of the game's graphs, after one copy of the runtimes (${gameScripts(gm).join(', ')})`)
+const em = await emitModule(gm, [{ ...plain, name: 'alley', graphs: { world: worldGraph, reward: levelGraph } }, { ...plain, name: 'answers', graphs: { main: levelGraph } }], { bake, runtime })
 const paths = em.files.map((f) => f.path)
-check(em.ok && paths.includes(`maps/${GAME_GRAPH}`) && ['triggers.lua', 'graphs.lua', 'graph_vocab.lua', 'trigger_vocab.lua'].every((n) => paths.includes(`maps/${n}`)),
-      `the module carries its game graph and the runtimes beside it (${em.problems.map((p) => JSON.stringify(p)).join(' | ')})`)
+check(em.ok && ['module.game.graph.json', 'module.greeter.graph.json', 'alley.world.graph.json', 'alley.reward.graph.json', 'answers.main.graph.json'].every((n) => paths.includes(`maps/${n}`)) &&
+      ['triggers.lua', 'graphs.lua', 'graph_vocab.lua', 'trigger_vocab.lua'].every((n) => paths.includes(`maps/${n}`)),
+      `the module carries every graph as its own file, and the runtimes beside them (${em.problems.map((p) => JSON.stringify(p)).join(' | ')})`)
+const alleyMap = String(em.files.find((f) => f.path === 'maps/alley.map').bytes)
+check(/script alley\.world\.graph\.json/.test(alleyMap) && /script alley\.reward\.graph\.json/.test(alleyMap), 'the map declares both its graphs')
+check(JSON.parse(em.files.find((f) => f.path === 'maps/alley.reward.graph.json').bytes).name === 'reward', 'each graph file carries its own name, the identity the engine keys it by')
 // The server: the game's graph runs once, and the levels keep their runtimes.
 const SERVER = join(ROOT, 'engine', 'build', 'server', 'dnp-server')
 if (!existsSync(SERVER)) console.log('graphs: no server build -- the module check is skipped')
@@ -271,11 +296,13 @@ else if (em.ok) {
   await new Promise((res) => setTimeout(res, 2500))
   srv.kill()
   if (process.env.DNP_GRAPHS_LOG) console.log(log)
-  check(/module\.graph\.json \(a graph, for the whole game\)/.test(log) && /\[graphs\] module\.graph\.json: 3 nodes, 3 links/.test(log),
-        `the server runs the game's graph once (${log.split('\n').filter((l) => /graph/.test(l)).join(' | ')})`)
+  check(/module\.game\.graph\.json \(a graph, for the whole game\)/.test(log) && /\[graphs\] module\.game\.graph\.json: 3 nodes, 3 links/.test(log) &&
+        /\[graphs\] module\.greeter\.graph\.json: 2 nodes, 1 links/.test(log),
+        `the server runs both of the game's graphs once (${log.split('\n').filter((l) => /graph/.test(l)).join(' | ')})`)
+  check(/\[graphs\] alley\.reward\.graph\.json: 3 nodes, 3 links/.test(log) && !/refus/i.test(log), 'and both of a map\'s graphs in its level, under their own names')
   check(/level 0: \S*triggers\.lua \(declared by the map\)/.test(log) && /level 0: \S*graphs\.lua \(declared by the map\)/.test(log),
         'and the level still runs its own trigger and graph runtimes (shared)')
-  check(/\[graphs\] alley\.graph\.json: 8 nodes, 7 links/.test(log) && !/alley\.graph\.json: .*(not in this map|refused|should be)/.test(log),
+  check(/\[graphs\] alley\.world\.graph\.json: 8 nodes, 7 links/.test(log) && !/alley\.world\.graph\.json: .*(not in this map|refused|should be)/.test(log),
         `and a map's world nodes load there, their picked room and wall found in the map (${log.split('\n').filter((l) => /alley/.test(l)).slice(0, 3).join(' | ')})`)
 }
 

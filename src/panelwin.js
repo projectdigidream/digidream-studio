@@ -26,7 +26,7 @@ import {
   KINDS, MAX_WIDGETS, SLOT_H, NAME_RE, cleanName, freeName, newPanel, addWidget, widgetsOf, withTemplates,
   panelProblems, panelUses, renamePanelRefs, renameWidgetRefs
 } from './panels_emit.js'
-import { newGraph } from './graphs_emit.js'
+import { newGraph, graphsOf, graphRoute, parseGraphRoute, MAP_GRAPH, GAME_NAME } from './graphs_emit.js'
 import { ANCHORS, HudView, parseLayout, uiScale } from '/src/render/layout.js'
 import { UiView } from '/src/render/ui.js'
 import { UI_KIND } from '/src/proto.js'
@@ -578,8 +578,8 @@ class PanelWindow {
         const n = cleanName(v)
         if (!n || this.panel.widgets.some((x) => x !== w && x.name === n)) { this.S.status('that name is empty or taken on this panel', 'warn'); this.render(); return }
         // Graph nodes that name it follow.
-        renameWidgetRefs(this.S.module.graph, this.name, w.name, n)
-        for (const d of Object.values(this.S.docs)) renameWidgetRefs(d.graph, this.name, w.name, n)
+        renameWidgetRefs(this.S.module, this.name, w.name, n)
+        for (const d of Object.values(this.S.docs)) renameWidgetRefs(d, this.name, w.name, n)
         w.name = n; ch()
       }),
       text(w.kind === 'label' ? 'text' : 'label', w.label ?? '', set('label'))]
@@ -688,8 +688,8 @@ class PanelWindow {
     const rows = [el('div', { class: 'st-section-head', text: '◇ graphs' })]
     const say = { opens: 'opens it', closes: 'closes it', sets: 'sets', answers: 'answers', closed: 'hears it closed', asks: 'asks if open', trigger: 'a card opens or closes it' }
     for (const u of uses) {
-      const where = u.graph === 'game' ? 'the game' : u.graph
-      rows.push(el('div', { class: 'st-trow', 'data-use': `${u.graph}:${u.node ?? u.trigger}`, onclick: () => this.#goTo(u) }, [
+      const where = u.trigger ? `${u.graph}'s cards` : `${u.graph === 'game' ? 'the game' : u.graph} · ${u.gname}`
+      rows.push(el('div', { class: 'st-trow', 'data-use': `${u.graph}:${u.gname ?? ''}:${u.node ?? u.trigger}`, onclick: () => this.#goTo(u) }, [
         el('span', { class: 'st-mark', text: u.graph === 'game' ? '🌐' : '🗺' }),
         el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: `${where} · ${u.node ?? u.trigger}` }),
           el('div', { class: 'st-muted', text: `${say[u.how]}${u.widget ? ` ${u.widget}` : ''}` })]),
@@ -697,7 +697,13 @@ class PanelWindow {
       ]))
     }
     if (!uses.length) rows.push(muted('Nothing opens it yet.'))
-    const targets = [...(this.nodesReady ? [['game', '🌐 the game\'s graph']] : []), ...Object.keys(S.docs).sort().map((n) => [n, `🗺 ${n}'s graph`])]
+    // Every graph there is, and a first one for a scope with none.
+    const scopeTargets = (owner, scope, map, first, icon, label) => {
+      const names = graphsOf(owner).map(([n]) => n)
+      return (names.length ? names : [first]).map((n) => [graphRoute(scope, map, n), `${icon} ${label} · ${n}${names.length ? '' : ' (new)'}`])
+    }
+    const targets = [...(this.nodesReady ? scopeTargets(S.module, 'game', null, GAME_NAME, '🌐', 'the game') : []),
+      ...Object.keys(S.docs).sort().flatMap((m) => scopeTargets(S.docs[m], 'map', m, MAP_GRAPH, '🗺', m))]
     rows.push(select('open it from', '', [['', 'choose a graph…'], ...targets], (g) => { if (g) this.#addNodes(g, 'open') }))
     rows.push(select('answer', '', [['', 'choose a widget…'], ...p.widgets.filter((w) => w.kind !== 'label').map((w) => [w.name, `${ICON[w.kind]} ${w.name}`])], (wn) => {
       if (!wn) return
@@ -718,9 +724,9 @@ class PanelWindow {
     const S = this.S
     if (u.trigger) { await S.go('map', u.graph); S.showTriggers?.(); return }
     S.graphFocus = u.node
-    if (u.graph === 'game') return S.go('graph', 'game')
+    if (u.graph === 'game') return S.go('graph', graphRoute('game', null, u.gname))
     if (u.graph !== S.docName) await S.openDoc(u.graph)
-    S.go('graph', u.graph)
+    S.go('graph', graphRoute('map', u.graph, u.gname))
   }
 
   /**
@@ -728,10 +734,14 @@ class PanelWindow {
    * graph, then go there with them picked. The engine's panel nodes when it
    * has them; otherwise the trigger words a map's graph runs today.
    */
-  async #addNodes (target, what, widget = null) {
+  async #addNodes (route, what, widget = null) {
     const S = this.S
-    const game = target === 'game'
-    const graph = game ? (S.module.graph ??= newGraph()) : (S.docs[target].graph ??= newGraph())
+    const to = parseGraphRoute(route)
+    const game = to.scope === 'game'
+    const target = to.map
+    const owner = game ? S.module : S.docs[target]
+    owner.graphs ??= {}
+    const graph = (owner.graphs[to.name] ??= newGraph())
     const ids = new Set(graph.nodes.map((n) => n.id))
     const id = (base) => { const b = freeName(base, ids); ids.add(b); return b }
     const y = graph.nodes.length ? Math.max(...graph.nodes.map((n) => n.pos?.y ?? 0)) + 180 : 0
@@ -754,11 +764,11 @@ class PanelWindow {
     }
     S.graphFocus = focus
     S.moduleChanged()
-    S.status(`added to ${game ? 'the game\'s' : `${target}'s`} graph: ${focus}`, 'ok')
-    if (game) return S.go('graph', 'game')
+    S.status(`added to ${game ? 'the game' : target}'s graph ${to.name}: ${focus}`, 'ok')
+    if (game) return S.go('graph', route)
     if (target !== S.docName) await S.openDoc(target)
     S.commit()
-    S.go('graph', target)
+    S.go('graph', route)
   }
 
   #rename (raw) {
@@ -769,7 +779,7 @@ class PanelWindow {
     S.module.panels[n] = S.module.panels[this.name]
     delete S.module.panels[this.name]
     // Every card and node that names it follows.
-    renamePanelRefs({ graph: S.module.graph }, this.name, n)
+    renamePanelRefs(S.module, this.name, n)
     for (const d of Object.values(S.docs)) renamePanelRefs(d, this.name, n)
     this.name = n
     this.changed()

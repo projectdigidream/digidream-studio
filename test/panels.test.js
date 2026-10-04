@@ -88,13 +88,13 @@ const old = {
 const a = { name: 'a', triggers: [{ name: 'open', event: 'on_interact', actions: [{ a: 'ui_open', panel: 'shop' }] }],
   panels: { shop: { title: 'Shop', widgets: [{ kind: 'label', id: 1, label: 'Hello' }, { kind: 'button', id: 2, label: 'Buy' }] } } }
 const b = { name: 'b', triggers: [{ name: 'open', event: 'on_interact', actions: [{ a: 'ui_open', panel: 'shop' }] }],
-  graph: { nodes: [{ id: 'o', type: 'action', a: 'ui_open', panel: 'shop' }], links: [] },
+  graphs: { main: { nodes: [{ id: 'o', type: 'action', a: 'ui_open', panel: 'shop' }], links: [] } },
   panels: { shop: { title: 'Other shop', widgets: [{ kind: 'button', id: 1, label: 'Leave' }] } } }
 const did = migratePanels(old, [a, b])
 check(old.panels.shop && old.panels.b_shop && !a.panels && !b.panels, `both maps' panels are the module's, the second renamed (${did.join('; ')})`)
 check(old.panels.shop.look.anchor === 'r' && old.panels.shop.look.w === 280 && old.panels.shop.widgets[1].slot.x === 12 && old.panels.shop.widgets[1].slot.w === 200,
       'a panel takes the template of its name as its look, slots and all')
-check(b.triggers[0].actions[0].panel === 'b_shop' && b.graph.nodes[0].panel === 'b_shop' && a.triggers[0].actions[0].panel === 'shop', 'the renamed one\'s cards and graph follow it')
+check(b.triggers[0].actions[0].panel === 'b_shop' && b.graphs.main.nodes[0].panel === 'b_shop' && a.triggers[0].actions[0].panel === 'shop', 'the renamed one\'s cards and graph follow it')
 check(!old.ui.panels, 'and the template it took is not kept a second time in the layout')
 check(fromScript('x', { widgets: [{ kind: 'button', id: 7, label: 'Go!' }] }).widgets[0].name === 'go', 'a script widget gets a name from its label')
 check(panelUses('b_shop', old, [a, b]).map((u) => u.how).sort().join() === 'opens,trigger', 'where a panel is used: a graph node and a card')
@@ -106,19 +106,19 @@ addSector(doc, rect(0, 0, 16, 8), { floorTex: 'F', ceilTex: 'C' })
 addSpawn(doc, 'start', 2, 2)
 normalize(doc)
 doc.triggers = []
-doc.graph = { vars: {}, nodes: [
+doc.graphs = { main: { vars: {}, nodes: [
   { id: 'press', type: 'event', event: 'on_interact' }, { id: 'open', type: 'action', a: 'ui_open', panel: 'shop' },
   { id: 'ui', type: 'event', event: 'on_ui_event' }, { id: 'is_buy', type: 'condition', c: 'widget_is', widget: buy.id },
   { id: 'say', type: 'action', a: 'log', text: 'bought' }],
-  links: [['press.then', 'open.in'], ['ui.then', 'is_buy.in'], ['is_buy.true', 'say.in']] }
+  links: [['press.then', 'open.in'], ['ui.then', 'is_buy.in'], ['is_buy.true', 'say.in']] } }
 const panels = { shop }
 const tp = triggerPanels(doc, panels)
 check(Object.keys(tp).join() === 'shop' && tp.shop.template === 'shop' && tp.shop.widgets.every((w) => !('name' in w)), 'a map\'s trigger table carries the panels its graph opens, as a script\'s panel')
 const emitted = emitMap(derive(doc), doc, [])
 const lua = emitMapLua(doc, emitted, { panels: tp })
 check(/triggers\.load/.test(lua.text) && /panels =/.test(lua.text) && lua.problems.length === 0, 'a map with a panel and no cards still writes a (cardless) trigger table')
-check(panelsInGraph(doc.graph).has('shop') && Object.keys(graphPanels(doc.graph, panels)).join() === 'shop', 'the graph names the panel it opens')
-check(!emitGraph(doc.graph, 'shopfloor', null).json.panels && emitGraph(doc.graph, 'shopfloor', null, null, { panels: graphPanels(doc.graph, panels) }).json.panels.shop.widgets[1].name === buy.name,
+check(panelsInGraph(doc.graphs.main).has('shop') && Object.keys(graphPanels(doc.graphs.main, panels)).join() === 'shop', 'the graph names the panel it opens')
+check(!emitGraph(doc.graphs.main, 'shopfloor', null).json.panels && emitGraph(doc.graphs.main, 'shopfloor', null, null, { panels: graphPanels(doc.graphs.main, panels) }).json.panels.shop.widgets[1].name === buy.name,
       'a graph carries its panels, with widget names, only when asked (a runtime that reads them)')
 
 const TRIGGERCHECK = join(ROOT, 'engine', 'build', 'lua', 'triggercheck')
@@ -140,7 +140,7 @@ if (!existsSync(TRIGGERCHECK)) {
   const both = run('graph', [
     'dofile("maps/scripts/graph_vocab.lua")', 'dofile("maps/scripts/graphs.lua")',
     table(tp),
-    `local ok, problems = graphs.load(${toLua(emitGraph(doc.graph, 'shopfloor', null).json)}, "shopfloor")`,
+    `local ok, problems = graphs.load(${toLua(emitGraph(doc.graphs.main, 'shopfloor', null).json)}, "shopfloor")`,
     'if not ok then error(table.concat(problems or {}, "\\n")) end'
   ].join('\n'))
   check(both.ok, `a graph opening the panel and answering its button with the trigger words loads beside it:\n${both.out}`)
@@ -165,7 +165,7 @@ else {
     srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
     await new Promise((res) => setTimeout(res, 2500))
     srv.kill()
-    check(/\[triggers\] shopfloor: 0 triggers/.test(log) && /\[graphs\] shopfloor\.graph\.json: 5 nodes, 3 links/.test(log) && !/refus|problem|error/i.test(log),
+    check(/\[triggers\] shopfloor: 0 triggers/.test(log) && /\[graphs\] shopfloor\.main\.graph\.json: 5 nodes, 3 links/.test(log) && !/refus|problem|error/i.test(log),
           `the server loads the map's panel table and the graph that opens it (${log.split('\n').filter((l) => /triggers|graphs|refus|error/i.test(l)).join(' | ')})`)
   }
 }

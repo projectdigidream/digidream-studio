@@ -1,34 +1,94 @@
 //
-// A map's graph: Blueprint-style nodes and links (docs/GRAPHS.md), as the
-// studio keeps it and as the engine reads it.
+// Graphs: Blueprint-style nodes and links (docs/GRAPHS.md), as the studio
+// keeps them and as the engine reads them.
 //
-// The document keeps `doc.graph = { vars, nodes, links }`, one per map -- a
-// level's graph, holding as many event chains as it wants. A node is
-// `{ id, type, pos: {x, y}, ...fields }`; a condition's or action's fields are its
-// trigger-vocabulary arguments, with geometry held as references (`{edge}`,
-// `{sector}`, `{trigger}`) exactly as a trigger card holds them, resolved to
-// indices with their guards at emit by the same resolver the trigger table
-// uses (lua_emit.js makeResolver). `pos` becomes the node's `meta`, which the
-// runtime never reads. (Not `x, y` on the node: teleport, the spawns and vfx
-// take arguments of those names, and a node's place on the board is not one.)
+// MANY, EACH WITH ITS OWN NAME. A map keeps `doc.graphs = { <name>: graph }`
+// and the module `module.graphs` the same way; a graph is `{ vars, nodes,
+// links }`, holding as many event chains as it wants. Its name is its identity
+// in its VM -- the engine refuses a second graph under a name already loaded
+// there, and keys a graph's saved state by it -- so names are unique within a
+// map (one level's VM) and within the module (the game VM). A level's graph
+// and a game graph live in different VMs and may share a name.
 //
-// The file is `maps/<map>.graph.json`, declared as one of the map's scripts
-// after the trigger and graph runtimes; the server decodes it and hands it to
-// graphs.load. The words are the trigger vocabulary's (events, conditions,
-// actions) plus graph_vocab's flow and data nodes, and that file -- generated
-// from graph_vocab.lua -- is what every pin here comes from.
+// A node is `{ id, type, pos: {x, y}, ...fields }`; a condition's or action's
+// fields are its trigger-vocabulary arguments, with geometry held as
+// references (`{edge}`, `{sector}`, `{trigger}`) exactly as a trigger card
+// holds them, resolved to indices with their guards at emit by the same
+// resolver the trigger table uses (lua_emit.js makeResolver). `pos` becomes
+// the node's `meta`, which the runtime never reads. (Not `x, y` on the node:
+// teleport, the spawns and vfx take arguments of those names.)
+//
+// A map's graph is the file `maps/<map>.<name>.graph.json`, declared as one of
+// the map's scripts after the trigger and graph runtimes; a module's is
+// `maps/module.<name>.graph.json`, a module.txt `game` line. Map names have no
+// dots and none can be `module` (module.lua is taken), so no two collide.
 //
 
 export const GRAPH_EXT = '.graph.json'
-export const graphFile = (mapName) => `${mapName}${GRAPH_EXT}`
-/**
- * The module's own graph, run once in the game VM (a module.txt `game` line):
- * it hears the players come and go and keeps the game's state across levels.
- * Named after module.lua, so no map can share its name.
- */
-export const GAME_GRAPH = 'module.graph.json'
+export const NAME_RE = /^[a-z0-9_]{1,32}$/
+/** The name a map's first graph is given, and a module's. */
+export const MAP_GRAPH = 'main'
+export const GAME_NAME = 'game'
+
+/** A map's graph's file. */
+export const graphFile = (mapName, name = MAP_GRAPH) => `${mapName}.${name}${GRAPH_EXT}`
+/** A module's graph's file, run once in the game VM. */
+export const gameGraphFile = (name = GAME_NAME) => `module.${name}${GRAPH_EXT}`
 
 export function newGraph () { return { vars: {}, nodes: [], links: [] } }
+
+/** "Doors & lifts" -> "doors_lifts": a name the engine and the files take. */
+export function cleanGraphName (s) {
+  return String(s ?? '').toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 32)
+}
+
+/**
+ * The graphs of a map or the module, [[name, graph]], in their order. A
+ * document from before there were many (one `graph`, not yet migrated) reads
+ * as that one under its migrated name.
+ */
+export function graphsOf (owner) {
+  if (owner?.graph && !owner.graphs) return [[owner.sectors ? MAP_GRAPH : GAME_NAME, owner.graph]]
+  return Object.entries(owner?.graphs ?? {})
+}
+
+/** The ones worth writing: a graph with no nodes does nothing, and is not declared. */
+export const liveGraphs = (owner) => graphsOf(owner).filter(([, g]) => (g?.nodes?.length ?? 0) > 0)
+
+/** Does this map (or the module) have a graph worth declaring? */
+export const hasGraph = (owner) => liveGraphs(owner).length > 0
+
+/** Every graph anywhere: [{ scope: 'game' | 'map', map, name, graph }], the module's first. */
+export function everyGraph (module, docs) {
+  const out = graphsOf(module).map(([name, graph]) => ({ scope: 'game', map: null, name, graph }))
+  for (const d of docs ?? []) for (const [name, graph] of graphsOf(d)) out.push({ scope: 'map', map: d.name, name, graph })
+  return out
+}
+
+/**
+ * A graph's address, as the Graph section's route says it: `game:<name>` for
+ * one of the module's, `<map>:<name>` for a map's. A bare `game` or `<map>` is
+ * that scope's first graph (or, with none, the one a first edit makes).
+ */
+export const graphRoute = (scope, map, name) => `${scope === 'game' ? 'game' : map}${name ? `:${name}` : ''}`
+export function parseGraphRoute (arg) {
+  if (!arg) return { scope: 'map', map: null, name: null }
+  const [head, name = null] = String(arg).split(':')
+  return head === 'game' ? { scope: 'game', map: null, name } : { scope: 'map', map: head, name }
+}
+
+/**
+ * Graphs saved when each map (and the module) had ONE, as `graph`: it is
+ * now the first of `graphs`, named `main` on a map and `game` on the module.
+ * Returns whether anything moved.
+ */
+export function migrateGraphs (owner, name) {
+  if (!owner?.graph) return false
+  owner.graphs ??= {}
+  owner.graphs[owner.graphs[name] ? cleanGraphName(`${name}_2`) : name] = owner.graph
+  delete owner.graph
+  return true
+}
 
 /**
  * Graphs saved when a node's place on the board was its `x, y` -- which
@@ -45,9 +105,6 @@ export function migrateGraph (graph) {
   }
   return moved
 }
-
-/** Does this map have a graph worth declaring? */
-export const hasGraph = (doc) => (doc?.graph?.nodes?.length ?? 0) > 0
 
 /** A node type's spec from graph_vocab.json, by name. */
 export function nodeSpecs (gv) { return new Map((gv?.nodes ?? []).map((n) => [n.name, n])) }

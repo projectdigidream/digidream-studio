@@ -1366,16 +1366,16 @@ await page.keyboard.press('Escape')
 {
   const built = await page.evaluate(async () => {
     const S = window.__studio
-    delete S.doc.graph
+    delete S.doc.graphs
     S.commit()
     await S.go('graph')
     const w = S.window
-    const pal = () => document.querySelector('.gw .wk-top select')
+    const pal = () => document.querySelector('.gw .wk-top .gw-palette')
     const pick = (v) => { const s = pal(); s.value = v; s.dispatchEvent(new Event('change')) }
     pick('event:on_interact')
     pick('act:')
     await new Promise((r) => setTimeout(r, 300))
-    return { nodes: S.doc.graph?.nodes.map((n) => `${n.type}:${n.id}`), drawn: document.querySelectorAll('.gw .gw-node').length }
+    return { nodes: S.doc.graphs?.main?.nodes.map((n) => `${n.type}:${n.id}`), drawn: document.querySelectorAll('.gw .gw-node').length }
   })
   check(built.nodes?.join() === 'event:interact,action:do' && built.drawn === 2, `nodes are added from the vocabulary's menu and drawn (${JSON.stringify(built)})`)
   const pins = await page.evaluate(() => {
@@ -1393,8 +1393,8 @@ await page.keyboard.press('Escape')
     const S = window.__studio
     const { emitLevel } = await import('/studio/src/module_emit.js')
     const r = await emitLevel(S.module, S.doc, { bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name) })
-    return { links: S.doc.graph?.links, curves: document.querySelectorAll('.gw .gw-link').length, ok: r.ok, errors: r.errors.map((e) => e.msg),
-             declares: /script first\.graph\.json/.test(r.mapText), file: r.graphText && JSON.parse(r.graphText).links }
+    return { links: S.doc.graphs?.main?.links, curves: document.querySelectorAll('.gw .gw-link').length, ok: r.ok, errors: r.errors.map((e) => e.msg),
+             declares: /script first\.main\.graph\.json/.test(r.mapText), file: r.graphText && JSON.parse(r.graphText).links }
   })
   check(JSON.stringify(linked.links) === JSON.stringify([['interact.then', 'do.in']]) && linked.curves === 1, `dragging from a pin to a pin links them (${JSON.stringify(linked.links)})`)
   check(linked.ok && linked.declares && linked.file?.length === 1, `and the map bakes declaring its graph (${linked.errors.join(' | ') || 'no errors'})`)
@@ -1405,9 +1405,9 @@ await page.keyboard.press('Escape')
     w.picked = { kind: 'node', id: 'do' }; w.render()
     ;[...document.querySelectorAll('.gw .wk-details button')].find((b) => /delete node/.test(b.textContent)).click()
     await new Promise((r) => setTimeout(r, 100))
-    const after = { nodes: S.doc.graph?.nodes.length, links: S.doc.graph?.links.length }
+    const after = { nodes: S.doc.graphs?.main?.nodes.length, links: S.doc.graphs?.main?.links.length }
     w.close()
-    delete S.doc.graph; S.commit()
+    delete S.doc.graphs; S.commit()
     return after
   })
   check(undone.nodes === 1 && undone.links === 0, `deleting a node takes its links with it (${JSON.stringify(undone)})`)
@@ -1429,12 +1429,12 @@ await page.keyboard.press('Escape')
     window.__keptEntities = S.doc.entities
     S.doc.entities = []
     const mob = addEntity(S.doc, 'mob', 'imp', cx + 1, cy, room.floor)
-    S.doc.graph = { vars: {}, links: [['press.then', 'tp.in']], nodes: [
+    S.doc.graphs = { main: { vars: {}, links: [['press.then', 'tp.in']], nodes: [
       { id: 'press', type: 'event', event: 'on_interact', pos: { x: 0, y: 0 } },
       { id: 'tp', type: 'action', a: 'teleport', pos: { x: 280, y: 0 } },
       { id: 'tag', type: 'condition', c: 'sector_tag_is', pos: { x: 0, y: 260 } },
       { id: 'kind', type: 'condition', c: 'entity_kind_is', pos: { x: 280, y: 260 } },
-      { id: 'wait', type: 'delay', ticks: 30, pos: { x: 560, y: 0 } }] }
+      { id: 'wait', type: 'delay', ticks: 30, pos: { x: 560, y: 0 } }] } }
     S.commit()
     await S.go('graph')
     await new Promise((r) => setTimeout(r, 300))
@@ -1446,7 +1446,7 @@ await page.keyboard.press('Escape')
     // Links are drawn on the next frame, once the pins have places.
     for (let i = 0; i < 20 && !document.querySelector('.gw .wk-edge.gw-exec-link'); i++) await new Promise((r) => setTimeout(r, 50))
     const link = document.querySelector('.gw .wk-edge.gw-exec-link')
-    return { sid, mob: mob.id, center: { x: cx, y: cy, floor: room.floor }, ticks: S.doc.graph.nodes.find((n) => n.id === 'wait').ticks,
+    return { sid, mob: mob.id, center: { x: cx, y: cy, floor: room.floor }, ticks: S.doc.graphs.main.nodes.find((n) => n.id === 'wait').ticks,
              arrow: link?.getAttribute('marker-end') ?? null, pointBtn: !!node('tp')?.querySelector('button') }
   })
   check(setup.ticks === 90, `a node's field is edited on the board itself (ticks ${setup.ticks})`)
@@ -1479,7 +1479,7 @@ await page.keyboard.press('Escape')
   await new Promise((r) => setTimeout(r, 200))
   const picked = await page.evaluate((sid) => {
     const S = window.__studio
-    const n = (id) => S.doc.graph.nodes.find((x) => x.id === id)
+    const n = (id) => S.doc.graphs.main.nodes.find((x) => x.id === id)
     return { tp: [n('tp').x, n('tp').y, n('tp').z], tag: n('tag').tag, roomTag: S.doc.sectors[sid].tag, kind: n('kind').name, back: !document.querySelector('.sd-page').hidden }
   }, setup.sid)
   check(hidden, 'picking on the map steps the board aside')
@@ -1487,7 +1487,7 @@ await page.keyboard.press('Escape')
         `a teleport's place is a tap on the floor, at that floor (${JSON.stringify(picked.tp)})`)
   check(picked.tag > 0 && picked.tag === picked.roomTag, `a tag is a tap on the room, which is given one if it had none (${picked.tag}/${picked.roomTag})`)
   check(picked.kind === 'imp' && picked.back, `a thing's name is a tap on one placed on the map, and the board comes back (${JSON.stringify(picked)})`)
-  await page.evaluate(async (mob) => { const S = window.__studio; delete S.doc.graph; S.doc.entities = window.__keptEntities; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map') }, setup.mob)
+  await page.evaluate(async (mob) => { const S = window.__studio; delete S.doc.graphs; S.doc.entities = window.__keptEntities; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map') }, setup.mob)
 }
 
 // THE PANEL EDITOR: a panel designed where the player sees it -- drawn by the
@@ -1562,18 +1562,18 @@ await page.keyboard.press('Escape')
   const wired = await page.evaluate(async () => {
     const S = window.__studio
     const map = Object.keys(S.docs)[0]
-    delete S.docs[map].graph
+    delete S.docs[map].graphs
     const pick = (label, value) => { const s = [...document.querySelectorAll('.pw .wk-details .st-row')].find((r) => r.firstChild?.textContent === label)?.querySelector('select'); s.value = value; s.dispatchEvent(new Event('change')) }
-    pick('open it from', map)
+    pick('open it from', `${map}:main`)
     await new Promise((r) => setTimeout(r, 600))
-    const first = { route: S.route(), nodes: S.docs[map].graph?.nodes.map((n) => `${n.type}:${n.a ?? ''}:${n.panel ?? ''}`), picked: S.window?.picked?.id }
+    const first = { route: S.route(), nodes: S.docs[map].graphs?.main?.nodes.map((n) => `${n.type}:${n.a ?? ''}:${n.panel ?? ''}`), picked: S.window?.picked?.id }
     await S.go('panels', 'shop')
     await new Promise((r) => setTimeout(r, 300))
     pick('answer', 'buy')
     await new Promise((r) => setTimeout(r, 200))
-    pick('answer buy in', map)
+    pick('answer buy in', `${map}:main`)
     await new Promise((r) => setTimeout(r, 600))
-    const g = S.docs[map].graph
+    const g = S.docs[map].graphs.main
     const { graphProblems } = await import('/studio/src/graphs_emit.js')
     await S.go('panels', 'shop')
     await new Promise((r) => setTimeout(r, 300))
@@ -1583,7 +1583,7 @@ await page.keyboard.press('Escape')
     const hud = r ? JSON.parse(String(r.files.find((f) => f.path === 'assets/ui/hud.json')?.bytes ?? '{}')) : {}
     const out = { map, first, nodes: g.nodes.map((n) => n.type + (n.c ? `:${n.c}:${n.widget}` : '')), links: g.links, problems: graphProblems(g, S.vocab.graph, S.vocab.trigger), uses,
                   ok: !!r, luaPanels: /panels = \{/.test(lua) && /template = "shop"/.test(lua), template: !!hud.panels?.shop, ready: !!S.vocab.graph.nodes.some((n) => n.name === 'open_panel') }
-    delete S.docs[map].graph; delete S.module.panels; S.moduleChanged()
+    delete S.docs[map].graphs; delete S.module.panels; S.moduleChanged()
     return out
   })
   const viaNodes = wired.ready
@@ -1597,26 +1597,99 @@ await page.keyboard.press('Escape')
   await page.evaluate(async () => { await window.__studio.go('home') })
 }
 
+// MANY GRAPHS: a map holds several, each with its own name -- a new one made
+// from the bar's picker, edited apart from the first, switched between,
+// renamed; the Graphs section lists them all and the module writes each as
+// its own file, declared by the map; deleting one asks first.
+{
+  await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map', Object.keys(S.docs)[0])
+    S.doc.graphs = { main: { vars: {}, nodes: [{ id: 'press', type: 'event', event: 'on_interact', pos: { x: 0, y: 0 } }], links: [] } }
+    S.commit()
+    await S.go('graph')
+    await new Promise((r) => setTimeout(r, 300))
+    const sel = document.querySelector('.gw .gw-graphs')
+    sel.value = '\u0000new'; sel.dispatchEvent(new Event('change'))
+  })
+  await page.waitForSelector('dialog[open] input', { timeout: 3000 }).catch(() => {})
+  await page.keyboard.type('doors')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => window.__studio.window?.gname === 'doors', { timeout: 3000 }).catch(() => {})
+  const made = await page.evaluate(async () => {
+    const S = window.__studio
+    const pal = document.querySelector('.gw .wk-top .gw-palette')
+    pal.value = 'node:delay'; pal.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    const out = { names: Object.keys(S.doc.graphs), gname: S.window.gname, hash: location.hash, doors: S.doc.graphs.doors?.nodes.map((n) => n.type), main: S.doc.graphs.main.nodes.map((n) => n.type),
+                  picker: [...document.querySelectorAll('.gw .gw-graphs option')].map((o) => o.value).filter((v) => v !== '\u0000new') }
+    const sel = document.querySelector('.gw .gw-graphs')
+    sel.value = 'main'; sel.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 400))
+    out.back = { gname: S.window.gname, drawn: [...document.querySelectorAll('.gw .gw-node')].map((n) => n.dataset.node) }
+    return out
+  })
+  check(made.names.join() === 'main,doors' && made.gname === 'doors' && /graph\/first%3Adoors/.test(made.hash) && made.picker.join() === 'main,doors',
+        `a new graph is made from the bar's picker, named in the studio's dialog, and its address follows (${JSON.stringify(made)})`)
+  check(made.doors?.join() === 'delay' && made.main.join() === 'event', 'a node goes into the graph being edited, and the other is untouched')
+  check(made.back.gname === 'main' && made.back.drawn.join() === 'press', `the picker switches between them (${JSON.stringify(made.back)})`)
+  const renamed = await page.evaluate(async () => {
+    const S = window.__studio
+    const name = [...document.querySelectorAll('.gw .wk-details .st-row')].find((r) => r.firstChild?.textContent === 'name' && r.closest('.wk-details'))
+    const inputs = [...document.querySelectorAll('.gw .wk-details .st-row')].filter((r) => r.firstChild?.textContent === 'name').map((r) => r.querySelector('input'))
+    const box = inputs.at(-1)
+    box.value = 'Lifts'; box.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    await S.go('graphs')
+    await new Promise((r) => setTimeout(r, 200))
+    const rows = [...document.querySelectorAll('[data-graph]')].map((r) => r.dataset.graph)
+    const r = await S.emitAll()
+    const paths = (r?.files ?? []).map((f) => f.path)
+    const map = r ? String(r.files.find((f) => f.path === 'maps/first.map').bytes) : ''
+    return { names: Object.keys(S.doc.graphs), rows, files: paths.filter((p) => p.endsWith('.graph.json')), declares: ['first.lifts.graph.json', 'first.doors.graph.json'].every((f) => map.includes(`script ${f}`)), had: !!name }
+  })
+  check(renamed.names.join() === 'lifts,doors', `renaming keeps the graph and its place in the order (${renamed.names.join()})`)
+  check(renamed.rows.includes('first:lifts') && renamed.rows.includes('first:doors'), `the Graphs section lists both (${renamed.rows.join(', ')})`)
+  check(renamed.files.includes('maps/first.lifts.graph.json') && renamed.files.includes('maps/first.doors.graph.json') && renamed.declares,
+        `the module writes each as its own file, and the map declares both (${renamed.files.join(', ')})`)
+  await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('graph', 'first:doors')
+    await new Promise((r) => setTimeout(r, 300))
+    ;[...document.querySelectorAll('.gw .wk-details button')].find((b) => b.textContent === 'delete graph').click()
+  })
+  await page.waitForSelector('dialog[open]', { timeout: 3000 }).catch(() => {})
+  await page.evaluate(() => document.querySelector('dialog[open] button[type=submit]').click())
+  await new Promise((r) => setTimeout(r, 400))
+  const deleted = await page.evaluate(async () => {
+    const S = window.__studio
+    const out = { names: Object.keys(S.doc.graphs), gname: S.window.gname }
+    delete S.doc.graphs; S.commit(); await S.go('map')
+    return out
+  })
+  check(deleted.names.join() === 'lifts' && deleted.gname === 'lifts', `deleting a graph asks first, and the window moves to the one left (${JSON.stringify(deleted)})`)
+}
+
 // THE WORLD'S NODES: the menu grouped the designer's way, a door added with
 // its speed already chosen, and its room picked on the map.
 {
   const menu = await page.evaluate(async () => {
     const S = window.__studio
     await S.go('map', Object.keys(S.docs)[0])
-    delete S.doc.graph; S.commit()
+    delete S.doc.graphs; S.commit()
     await S.go('graph')
-    const sel = document.querySelector('.gw .wk-top select')
+    const sel = document.querySelector('.gw .wk-top .gw-palette')
     const groups = [...sel.querySelectorAll('optgroup')].map((g) => g.label)
     sel.value = 'node:open_door'; sel.dispatchEvent(new Event('change'))
     await new Promise((r) => setTimeout(r, 200))
-    const n = S.doc.graph.nodes[0]
+    const n = S.doc.graphs.main.nodes[0]
     const sid = S.doc.order[0]; const room = S.doc.sectors[sid]
     const cx = room.verts.reduce((a, v) => a + v.x, 0) / room.verts.length
     const cy = room.verts.reduce((a, v) => a + v.y, 0) / room.verts.length
     // Near a corner, inside: the middle of the room has things placed in it.
     const v0 = room.verts[0]
     const { graphProblems } = await import('/studio/src/graphs_emit.js')
-    return { groups, n: { ...n }, sid, center: { x: v0.x + 0.12 * (cx - v0.x) + 0.5, y: v0.y + 0.12 * (cy - v0.y) + 0.5, floor: room.floor }, before: graphProblems(S.doc.graph, S.vocab.graph, S.vocab.trigger),
+    return { groups, n: { ...n }, sid, center: { x: v0.x + 0.12 * (cx - v0.x) + 0.5, y: v0.y + 0.12 * (cy - v0.y) + 0.5, floor: room.floor }, before: graphProblems(S.doc.graphs?.main, S.vocab.graph, S.vocab.trigger),
              btn: [...document.querySelectorAll('.gw [data-node="open_door"] button')].map((b) => b.textContent) }
   })
   check(menu.groups.slice(0, 3).join() === 'when …,do to a thing,move the map' && menu.groups.includes('trigger words'), `the node menu is grouped the designer's way (${menu.groups.join(', ')})`)
@@ -1638,9 +1711,9 @@ await page.keyboard.press('Escape')
     const { graphProblems } = await import('/studio/src/graphs_emit.js')
     const { emitLevel } = await import('/studio/src/module_emit.js')
     const r = await emitLevel(S.module, S.doc, { bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name) })
-    const out = { status: document.querySelector('.st-status')?.textContent, pending: S.pick?.kinds ?? null, sector: S.doc.graph.nodes[0].sector, problems: graphProblems(S.doc.graph, S.vocab.graph, S.vocab.trigger),
+    const out = { status: document.querySelector('.st-status')?.textContent, pending: S.pick?.kinds ?? null, sector: S.doc.graphs.main.nodes[0].sector, problems: graphProblems(S.doc.graphs?.main, S.vocab.graph, S.vocab.trigger),
                   file: r.graphText ? JSON.parse(r.graphText).nodes[0] : null, ok: r.ok, errors: r.errors.map((e) => e.msg) }
-    delete S.doc.graph; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map')
+    delete S.doc.graphs; S.commit(); S.viewport.setMode('iso'); S.ui.setView('iso'); await S.go('map')
     return out
   })
   check(picked.sector?.sector && picked.problems.length === 0, `the door's room is a tap on it (${JSON.stringify(picked.sector)} ${picked.problems.join(' | ')}; tapped ${JSON.stringify(p)}, ${picked.status}, pending ${picked.pending})`)
@@ -1653,16 +1726,18 @@ await page.keyboard.press('Escape')
 {
   const listed = await page.evaluate(async () => {
     const S = window.__studio
-    delete S.module.graph
+    delete S.module.graphs
     S.moduleChanged()
+    // One for the game, so the section has it to list.
+    S.module.graphs = { game: { vars: {}, nodes: [], links: [] } }
     await S.go('graphs')
     const rows = [...document.querySelectorAll('[data-graph]')].map((r) => r.dataset.graph)
-    document.querySelector('[data-graph="game"]').click()
+    document.querySelector('[data-graph="game:game"]').click()
     await new Promise((r) => setTimeout(r, 300))
-    const opts = [...document.querySelector('.gw .wk-top select').options].map((o) => o.value)
+    const opts = [...document.querySelector('.gw .wk-top .gw-palette').options].map((o) => o.value)
     return { rows, maps: Object.keys(S.docs), scope: S.window?.scope, title: document.querySelector('.gw .wk-title')?.textContent, opts }
   })
-  check(listed.rows[0] === 'game' && listed.maps.every((m) => listed.rows.includes(m)), `the Graphs section lists the game's graph, then every map's (${listed.rows.join(', ')})`)
+  check(listed.rows[0] === 'game:game', `the Graphs section lists the game's graphs first (${listed.rows.join(', ')})`)
   check(listed.scope === 'game' && /game/.test(listed.title ?? ''), `and opens the game's (${listed.title})`)
   check(listed.opts.includes('event:on_player_enter') && !listed.opts.includes('event:on_interact') && listed.opts.includes('node:call') && listed.opts.includes('node:on_call'),
         'its menu offers what the game hears and calls, not a level\'s events')
@@ -1670,12 +1745,12 @@ await page.keyboard.press('Escape')
         'and of the world\'s nodes, only those that need no level')
   const game = await page.evaluate(async () => {
     const S = window.__studio
-    const pick = (v) => { const s = document.querySelector('.gw .wk-top select'); s.value = v; s.dispatchEvent(new Event('change')) }
+    const pick = (v) => { const s = document.querySelector('.gw .wk-top .gw-palette'); s.value = v; s.dispatchEvent(new Event('change')) }
     pick('event:on_player_enter')
     pick('node:call')
     await new Promise((r) => setTimeout(r, 200))
     const verbs = (() => { pick('act:'); return [...document.querySelector('.gw [data-node="do"] select').options].map((o) => o.value) })()
-    return { nodes: S.module.graph?.nodes.map((n) => `${n.type}:${n.id}`), call: S.module.graph?.nodes.find((n) => n.type === 'call'), verbs, mapGraph: !!S.doc.graph }
+    return { nodes: S.module.graphs?.game?.nodes.map((n) => `${n.type}:${n.id}`), call: S.module.graphs?.game?.nodes.find((n) => n.type === 'call'), verbs, mapGraph: !!S.doc.graphs }
   })
   check(game.nodes?.join() === 'event:player_enter,call:call,action:do' && game.call?.to === 'level' && !game.mapGraph,
         `nodes go into the module's graph, not the map's; a call from the game goes to the level (${JSON.stringify(game.nodes)})`)
@@ -1683,7 +1758,7 @@ await page.keyboard.press('Escape')
   // The level answers: on_call 'reward', whose value is the counter's step.
   const lvl = await page.evaluate(async () => {
     const S = window.__studio
-    const g = S.module.graph
+    const g = S.module.graphs.game
     g.nodes = g.nodes.filter((n) => n.id !== 'do')
     g.nodes.find((n) => n.type === 'call').name = 'reward'
     g.links = [['player_enter.then', 'call.in'], ['player_enter.entity', 'call.entity']]
@@ -1691,10 +1766,11 @@ await page.keyboard.press('Escape')
     await S.go('graphs')
     const unanswered = [...document.querySelectorAll('[data-unanswered]')].map((x) => x.dataset.unanswered)
     const name = Object.keys(S.docs)[0]
-    S.docs[name].graph = { vars: {}, nodes: [
+    S.docs[name].graphs = { main: { vars: {}, nodes: [
       { id: 'heard', type: 'on_call', name: 'reward', pos: { x: 0, y: 0 } },
-      { id: 'add', type: 'action', a: 'counter_add', counter: 'gold', pos: { x: 320, y: 0 } }], links: [['heard.then', 'add.in']] }
-    document.querySelector(`[data-graph="${name}"]`).click()
+      { id: 'add', type: 'action', a: 'counter_add', counter: 'gold', pos: { x: 320, y: 0 } }], links: [['heard.then', 'add.in']] } }
+    S.showGraphs()
+    document.querySelector(`[data-graph="${name}:main"]`).click()
     await new Promise((r) => setTimeout(r, 600))
     S.commit()
     await new Promise((r) => setTimeout(r, 200))
@@ -1726,16 +1802,16 @@ await page.keyboard.press('Escape')
     const { graphProblems } = await import('/studio/src/graphs_emit.js')
     const r = await S.emitAll()
     await S.go('graphs')
-    return { links: S.doc.graph.links, row: row?.textContent ?? '', curve: document.querySelectorAll('.gw .gw-data-link').length,
-             problems: graphProblems(S.doc.graph, S.vocab.graph, S.vocab.trigger), ok: !!r,
+    return { links: S.doc.graphs.main.links, row: row?.textContent ?? '', curve: document.querySelectorAll('.gw .gw-data-link').length,
+             problems: graphProblems(S.doc.graphs?.main, S.vocab.graph, S.vocab.trigger), ok: !!r,
              files: (r?.files ?? []).map((f) => f.path).filter((p) => /graph|module\.txt/.test(p)),
              txt: r ? String(r.files.find((f) => f.path === 'module.txt').bytes) : '',
              unanswered: [...document.querySelectorAll('[data-unanswered]')].length }
   })
   check(fed.links.some(([f, t]) => f === 'heard.value' && t === 'add.by') && /← heard\.value/.test(fed.row), `a value dragged into an argument's pin feeds it, and the field says so (${JSON.stringify(fed.links)} / ${fed.row})`)
-  check(fed.ok && fed.files.includes('maps/module.graph.json') && /game graphs\.lua shared/.test(fed.txt), `the module is written with its game graph (${fed.files.join(', ')})`)
+  check(fed.ok && fed.files.includes('maps/module.game.graph.json') && /game graphs\.lua shared/.test(fed.txt), `the module is written with its game graph (${fed.files.join(', ')})`)
   check(fed.unanswered === 0, 'and with the map answering, no call is left unanswered')
-  await page.evaluate(async () => { const S = window.__studio; delete S.module.graph; S.moduleChanged(); delete S.doc.graph; S.commit(); await S.go('map') })
+  await page.evaluate(async () => { const S = window.__studio; delete S.module.graphs; S.moduleChanged(); delete S.doc.graphs; S.commit(); await S.go('map') })
 }
 
 // WRONG ROOMS: a room that makes the bake fail is marked on the map in red and
@@ -1988,13 +2064,13 @@ await page.keyboard.press('Escape')
   check(Math.abs(panned.zx - body.zx - 60) < 3 && JSON.stringify(panned.look) === JSON.stringify(body.look), `dragging the panel's body pans the view and leaves the panel where it is (${Math.round(panned.zx - body.zx)})`)
   const graph = await page.evaluate(async () => {
     const S = window.__studio
-    S.doc.graph = { vars: {}, nodes: [0, 1, 2, 3, 4].map((i) => ({ id: `n${i}`, type: 'delay', ticks: 30, pos: { x: i * 300, y: (i % 2) * 400 } })), links: [] }
+    S.doc.graphs = { main: { vars: {}, nodes: [0, 1, 2, 3, 4].map((i) => ({ id: `n${i}`, type: 'delay', ticks: 30, pos: { x: i * 300, y: (i % 2) * 400 } })), links: [] } }
     S.commit(); await S.go('graph')
     await new Promise((r) => setTimeout(r, 500))
     document.querySelector('.gw [data-zoom="fit"]').click()
     const b = document.querySelector('.gw .wk-board').getBoundingClientRect()
     const inside = [...document.querySelectorAll('.gw .gw-node')].every((n) => { const q = n.getBoundingClientRect(); return q.left >= b.left - 1 && q.right <= b.right + 1 && q.top >= b.top - 1 && q.bottom <= b.bottom + 1 })
-    delete S.doc.graph; S.commit()
+    delete S.doc.graphs; S.commit()
     return { inside, z: S.window.view.z }
   })
   check(graph.inside && graph.z < 1, `the graph's ⤢ puts every node in view (${JSON.stringify(graph)})`)

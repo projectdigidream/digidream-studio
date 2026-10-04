@@ -14,18 +14,19 @@
 // link to select it, and delete it from the side panel. Drag a node by its
 // title; drag the board to pan, pinch or wheel to zoom.
 //
-// TWO SCOPES. A map's graph (doc.graph, undone with the map) runs in its level;
-// the GAME'S graph (module.graph) runs once in the game VM, hears the players
-// come and go, and keeps its variables across levels. The game has no level of
+// TWO SCOPES, MANY GRAPHS. A map's graphs (doc.graphs, undone with the map)
+// run in its level; the GAME'S (module.graphs) run once in the game VM, hear
+// the players come and go, and keep their variables across levels. Each has
+// its own name, picked in the bar, where a new one is made too. The game has no level of
 // its own, so its palette offers only graph_vocab's `game` words -- what acts
 // on a level is done by `call`ing that level's graph, whose `on_call` takes it.
 //
 // A condition's or action's argument of a pinnable type has a data pin in its
 // row on the node: linked, it takes the value at run time and its field says so.
 //
-import { el, row, text, select, button, muted, number, toggle, ask } from './ui.js'
+import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog } from './ui.js'
 import { argFields } from './argform.js'
-import { newGraph, nodeSpecs, pinsOf, graphProblems } from './graphs_emit.js'
+import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME } from './graphs_emit.js'
 
 const CATEGORY = { event: 'ev', condition: 'cond', action: 'act', branch: 'flow', sequence: 'flow', delay: 'flow', once: 'flow',
                    get_var: 'data', set_var: 'act', add_var: 'act', literal: 'data', compare: 'data', math: 'data', logic: 'data', random: 'data',
@@ -54,12 +55,22 @@ const MENU = [
 ]
 
 let win = null
-/** @param arg  'game' for the module's graph; otherwise the map's being edited */
+/**
+ * @param arg  a graph's address (graphs_emit.js graphRoute): `game[:name]`
+ *             for one of the module's, `<map>[:name]` (or nothing) for one of
+ *             the map being edited; without a name, that scope's first.
+ */
 export function openGraph (S, arg = null) {
   win ??= new GraphWindow(S)
-  const scope = arg === 'game' ? 'game' : 'map'
-  if (scope !== win.scope) { win.picked = null; win.view = { x: 40, y: 40, z: 1 } }
+  const to = parseGraphRoute(arg)
+  const scope = to.scope
+  const owner = scope === 'game' ? S.module : S.doc
+  const name = to.name ?? graphsOf(owner)[0]?.[0] ?? (scope === 'game' ? GAME_NAME : MAP_GRAPH)
+  const key = `${scope}:${scope === 'game' ? '' : S.docName}:${name}`
+  if (key !== win.key) { win.picked = null; win.view = { x: 40, y: 40, z: 1 } }
+  win.key = key
   win.scope = scope
+  win.gname = name
   win.open()
   return win
 }
@@ -71,6 +82,7 @@ class GraphWindow {
     this.picked = null          // { kind: 'node', id } | { kind: 'link', index }
     this.pane = 'board'
     this.scope = 'map'
+    this.gname = MAP_GRAPH
     this.root = el('div', { class: 'wk gw', 'data-pane': this.pane })
     this.root.hidden = true
     document.body.appendChild(this.root)
@@ -80,9 +92,11 @@ class GraphWindow {
   get gv () { return this.S.vocab.graph }
   get tv () { return this.S.vocab.trigger }
   get game () { return this.scope === 'game' }
-  get graph () { return this.game ? this.S.module.graph : this.S.doc.graph }
+  /** The map being edited, or the module: whose graphs these are. */
+  get owner () { return this.game ? this.S.module : this.S.doc }
+  get graph () { return this.owner.graphs?.[this.gname] }
   /** The graph, made when the first node or variable is added. */
-  ensure () { return this.game ? (this.S.module.graph ??= newGraph()) : (this.S.doc.graph ??= newGraph()) }
+  ensure () { const o = this.owner; o.graphs ??= {}; return (o.graphs[this.gname] ??= newGraph()) }
 
   // The words this scope may use: the game hears and does only graph_vocab's
   // `game` lists; a level hears everything but the players' coming and going.
@@ -124,10 +138,44 @@ class GraphWindow {
 
   /** A change: to the map's document (undone with the map, re-baked) or the module's. */
   changed ({ redraw = true } = {}) {
-    const g = this.graph
-    const empty = g && !g.nodes.length && !g.links.length && !Object.keys(g.vars ?? {}).length
-    if (this.game) { if (empty) delete this.S.module.graph; this.S.moduleChanged() } else { if (empty) delete this.S.doc.graph; this.S.commit() }
+    // An empty graph is kept -- it has a name someone gave it -- and simply
+    // not written (graphs_emit.js liveGraphs).
+    if (this.game) this.S.moduleChanged(); else this.S.commit()
     if (redraw) this.render()
+  }
+
+  /** Switch to another of this scope's graphs, or make one. */
+  async pickGraph (name) {
+    if (name === '\u0000new') {
+      const taken = new Set(graphsOf(this.owner).map(([n]) => n))
+      const raw = await ask('graph name (letters, digits, underscore)', '')
+      const n = cleanGraphName(raw)
+      if (!n) { this.render(); return }
+      if (taken.has(n)) { this.S.status(`there is a graph called ${n} here already`, 'warn'); this.render(); return }
+      this.gname = n
+      this.ensure()
+      this.changed({ redraw: false })
+    } else this.gname = name
+    this.picked = null
+    this.view = { x: 40, y: 40, z: 1 }
+    this.key = `${this.scope}:${this.game ? '' : this.S.docName}:${this.gname}`
+    // The address follows, so a reload comes back here.
+    if (this.S.go) await this.S.go('graph', graphRoute(this.scope, this.S.docName, this.gname))
+    this.render()
+  }
+
+  /** Rename this graph: its name is its identity in its VM, and its file's. */
+  rename (raw) {
+    const n = cleanGraphName(raw)
+    const o = this.owner
+    if (!n || n === this.gname) { this.render(); return }
+    if (!NAME_RE.test(n) || o.graphs?.[n]) { this.S.status('that name is empty or taken here', 'warn'); this.render(); return }
+    // Kept in its place in the order.
+    o.graphs = Object.fromEntries(Object.entries(o.graphs ?? {}).map(([k, v]) => [k === this.gname ? n : k, v]))
+    if (!o.graphs[n]) o.graphs[n] = newGraph()
+    this.gname = n
+    this.key = `${this.scope}:${this.game ? '' : this.S.docName}:${n}`
+    this.changed()
   }
 
   /**
@@ -174,7 +222,8 @@ class GraphWindow {
     const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
-      el('span', { class: 'wk-title', text: this.game ? '◇ the game\'s graph' : `◇ graph · ${S.docName}` }),
+      el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
+      this.#graphPicker(),
       this.#palette(),
       el('div', { class: 'wk-tabs gw-panes' }, [['board', 'board'], ['details', 'details']].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.pane === v ? '1' : '0', onclick: () => { this.pane = v; this.root.dataset.pane = v } }))),
@@ -204,6 +253,16 @@ class GraphWindow {
     const side = el('div', { class: 'wk-details' }, this.#details(problems))
     this.root.replaceChildren(top, el('div', { class: 'wk-graph' }, [board]), side)
     requestAnimationFrame(() => this.#drawLinks())
+  }
+
+  /** This scope's graphs, by name, and a new one. */
+  #graphPicker () {
+    const names = graphsOf(this.owner).map(([n]) => n)
+    if (!names.includes(this.gname)) names.push(this.gname)
+    const sel = el('select', { class: 'gw-graphs', 'data-graphs': '1' }, [...names.map((n) => el('option', { value: n, text: `${n}${n === this.gname && !this.graph ? ' (new)' : ''}` })), el('option', { value: '\u0000new', text: '+ new graph…' })])
+    sel.value = this.gname
+    sel.addEventListener('change', () => this.pickGraph(sel.value))
+    return sel
   }
 
   // --- adding ---------------------------------------------------------------------
@@ -644,6 +703,7 @@ class GraphWindow {
           : 'This map has no graph yet. Add a "when …" node from the menu above: it is where a run starts. Then do something, ask something, wait, count.'))
     }
     rows.push(...this.#varsRows())
+    rows.push(...this.#graphRows())
     rows.push(muted(this.game
       ? 'The game\'s graph runs once, in the game, not in any level: it hears the players arrive and leave, and its variables are kept from level to level and saved with the game. What happens in a level is a "call" to it (to: level), which that level\'s "on_call" of the same name takes.'
       : 'A graph runs beside the map\'s triggers, with the same words: its events, conditions and actions are the trigger cards\'. It adds flow (branch, sequence, delay, once), data (variables, numbers, comparisons) and calls to and from the game\'s graph. A run is at most 256 steps, so a loop drawn by mistake cannot stall the game.'))
@@ -705,6 +765,25 @@ class GraphWindow {
       this.picked = null; ch()
     }, 'st-danger'))
     return rows
+  }
+
+  /** This graph: its name, and deleting it. */
+  #graphRows () {
+    const others = graphsOf(this.owner).filter(([n]) => n !== this.gname).map(([n]) => n)
+    return [el('div', { class: 'st-section-head', text: `graph · ${this.gname}` }),
+      text('name', this.gname, (v) => this.rename(v)),
+      el('div', { class: 'st-row' }, [
+        button('+ new graph', () => this.pickGraph('\u0000new')),
+        this.graph ? button('delete graph', async () => {
+          if (!await confirmDialog(`delete the graph ${this.gname}${this.game ? '' : ` of ${this.S.docName}`}? Its nodes go with it.`)) return
+          delete this.owner.graphs[this.gname]
+          this.gname = others[0] ?? (this.game ? GAME_NAME : MAP_GRAPH)
+          this.picked = null
+          this.changed()
+          if (this.S.go) this.S.go('graph', graphRoute(this.scope, this.S.docName, this.gname))
+        }, 'st-danger') : null
+      ].filter(Boolean)),
+      muted(`${this.game ? 'The game' : this.S.docName} ${others.length ? `has ${others.length} other graph${others.length > 1 ? 's' : ''} (${others.join(', ')})` : 'has no other graph'}. Each runs on its own, under its own name${this.game ? '' : ', and takes one of the map\'s script slots'}; an empty one is not written.`)]
   }
 
   #varsRows () {
