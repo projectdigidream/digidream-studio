@@ -10,10 +10,11 @@
 import { validate } from '../doc.js'
 import { graphProblems, graphsOf, NAME_RE } from '../graphs_emit.js'
 import { metamapProblems } from '../metamap.js'
+import { skyProblems } from '../sky_emit.js'
 
-/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg] } */
+/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg] } */
 export function moduleProblems (S) {
-  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [] }
+  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [] }
   const V = S.vocab
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
@@ -28,6 +29,10 @@ export function moduleProblems (S) {
     if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { game: true, maps: Object.keys(S.docs) })) out.graphs.push(`the game's graph ${name}: ${p}`)
   }
   for (const u of S.unansweredCalls?.() ?? []) out.graphs.push(`${u.graph} calls '${u.name}' (to ${u.to}), and nothing answers it`)
+  // The skies: pictures missing or too few (docs/SKY.md).
+  const tex = S.allTextureNames?.() ?? null
+  out.sky.push(...skyProblems(S.module.sky, tex, 'the module\'s sky'))
+  for (const d of Object.values(S.docs)) out.sky.push(...skyProblems(d.sky, tex, `${d.name}'s sky`))
   if (S.module.mobs) out.monsters.push(...V.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }))
   if (S.module.weapons && V.weapon && Object.keys(S.module.weapons.weapons ?? {}).length) out.weapons.push(...V.validateWeapons(S.module))
   out.metamap.push(...metamapProblems(S.module.metamap, Object.keys(S.docs)))

@@ -118,6 +118,12 @@ function sectorForm (s, doc, ctx) {
     slider('thickness', s.thickness, { min: 0, max: 16, step: 0.25 }, (v, done) => { s.thickness = v; done ? ctx.commit() : ctx.preview() }),
     texButton('floor tex', s.floorTex, ctx, (n) => { s.floorTex = n; ctx.commit() }),
     texButton('ceiling tex', s.ceilTex, ctx, (n) => { s.ceilTex = n; ctx.commit() }),
+    // OPEN TO THE SKY (docs/SKY.md): DOOM's sky flat, F_SKY1, is a window onto
+    // the level's sky; the texture it replaced is kept to go back to.
+    toggle('ceiling open to the sky', /^F_SKY/i.test(s.ceilTex ?? ''), (v) => {
+      if (v) { s.ceilWas = s.ceilTex; s.ceilTex = 'F_SKY1' } else { s.ceilTex = s.ceilWas ?? s.floorTex; delete s.ceilWas }
+      ctx.commit()
+    }),
     // Every wall of the sector at once, one field at a time. The same three
     // fields a single wall has, so a room is textured without tapping each
     // side -- and `(none)` clears a field just as it does on one wall.

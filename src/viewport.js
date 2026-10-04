@@ -124,6 +124,17 @@ export class Viewport {
    */
   setPose (pose) { this.pose = pose; this.dirty = true }
 
+  /**
+   * The client's Sky (render/sky.js) behind the level, as the game draws it.
+   * Not in the plan view: looking straight down an orthographic camera there
+   * is no direction to see a sky in.
+   */
+  setSky (sky) {
+    this.sky = sky
+    this.scene.add(sky.background)
+    this.dirty = true
+  }
+
   /** Move the target so that what was under one screen point is under another. */
   panBy (dx, dy) {
     const cx = innerWidth / 2; const cy = innerHeight / 2
@@ -154,6 +165,11 @@ export class Viewport {
 
   render () {
     this.#place()
+    if (this.sky) {
+      const show = this.mode !== 'plan' && this.sky.sky.kind !== 0
+      this.sky.background.visible = show
+      if (show) this.sky.update(this.camera)
+    }
     // A sprite stands upright in the game's world, so under a pitched camera it
     // shows foreshortened by the pitch's cosine. The markers are screen-aligned
     // sprites, so the same is done to their height here: what the level view

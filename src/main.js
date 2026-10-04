@@ -22,6 +22,8 @@ import { install as installSettings } from './sections/settings.js'
 import { install as installScripts } from './sections/scripts.js'
 import { install as installGraphs } from './sections/graphs.js'
 import { install as installStyle } from './sections/style.js'
+import { install as installSky } from './mapeditor/sky.js'
+import { install as installSkySection } from './sections/sky.js'
 import { install as installCamera } from './mapeditor/camera.js'
 import { install as installNeighbours } from './mapeditor/neighbours.js'
 import { migratePlayer, overrides, paramNames } from './player.js'
@@ -128,6 +130,8 @@ await openModule((await S.store.list())[0]?.id ?? null)
 
 stage('the picture', 0.85)
 S.viewport = new Viewport(document.body)
+// The sky, before any map is drawn: a sky flat takes its material when it is built.
+installSky(S)
 // The module's own pictures come from the record's blobs; everything else the
 // shell serves. Decoded once each, whatever the number of bakes.
 S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {} })
@@ -221,7 +225,7 @@ S.sectionAlias = sectionAlias
 // `save` is a const further down; reached through a wrapper so this runs first.
 S.save = () => save()
 Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starterDoc, showInspector, emitAll })
-for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installGraphs, installStyle, installCamera, installNeighbours]) install(S)
+for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installGraphs, installStyle, installSkySection, installCamera, installNeighbours]) install(S)
 await S.loadPacks()
 S.router.register({
   id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
@@ -230,6 +234,8 @@ S.router.register({
     S.ui.layer.dataset.page = '0'
     S.ui.layer.dataset.workshop = '0'
     if (arg && S.docs[arg] && arg !== S.docName) await openDoc(arg)
+    // The sky this map is drawn under, as it is now (the Sky section may have changed it).
+    S.applySky?.()
     S.viewport.resize?.()
     redraw()
     S.viewport.dirty = true
@@ -248,6 +254,7 @@ pageSection('sounds', 'Sounds', '🔊', /^Sounds$/, () => S.showSounds())
 windowSection('screens', 'Screens', '▣', () => openScreens(S))
 windowSection('panels', 'Panels', '▢', (name) => openPanels(S, name))
 pageSection('style', 'Style', '🎨', /^Style$/, (name) => S.showStyle(name ?? null))
+pageSection('sky', 'Sky', '🌌', /^Sky$/, (map) => S.showSky(map ?? null))
 pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
 pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
 windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
@@ -423,6 +430,7 @@ async function openDoc (name) {
   S.selection = null
   S.draw = { corners: [], rect: null }
   if (S.ui) { S.ui.hideSheet(); S.ui.setHistory(false, false); frameToDoc(); S.applyCamera(); redraw(); previewNow() }
+  S.applySky?.()
 }
 
 function starterDoc (name) {
@@ -886,6 +894,8 @@ S.suggest = (arg, owner) => {
   if (arg === 'kind' && (owner === 'when_dies' || owner === 'when_hurt')) return Object.keys(S.module.mobs?.mobs ?? {})
   if (arg === 'prop') return S.propNames()
   if (arg === 'texture') return S.textureNames
+  // A sky's picture (the set_sky node): any texture, the module's first.
+  if (arg === 'image' && owner === 'set_sky') return S.allTextureNames?.() ?? S.textureNames
   if (arg === 'param' && owner === 'add_effect') return paramNames()
   return null
 }
@@ -1084,6 +1094,7 @@ function showMapSettings () {
   S.ui.showSheet(`Map ${S.docName}`, [
     text('extra Lua', S.doc.extraLua, (v) => { S.doc.extraLua = v; S.commit() }, { multiline: true, placeholder: '-- hand-written Lua, kept verbatim' }),
     el('div', { class: 'st-row' }, [button('🎥 camera…', () => S.showCamera()), button('◇ graph…', () => S.go('graph')), button('♪ music cues…', () => S.go('music'))]),
+    el('div', { class: 'st-row' }, [button(`🌌 sky${S.doc.sky ? ' (own)' : S.module.sky ? ' (the module\'s)' : ''}…`, () => S.go('sky', S.docName))]),
     el('div', { class: 'st-row' }, [
       button(`🧍 player${own.length ? ` (own ${own.join(', ')})` : ''}…`, () => { S.playerScope = 'map'; S.go('player') }),
       button(`▣ screens${S.doc.ui ? ' (own)' : ''}…`, () => { S.screensScope = 'map'; S.go('screens') })

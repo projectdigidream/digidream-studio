@@ -38,6 +38,7 @@ import { emitPlayerLua, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlaye
 import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
 import { toLua } from './lua.js'
+import { skyLines } from './sky_emit.js'
 import { uiFiles } from './ui_emit.js'
 import { metamapText, metamapProblems } from './metamap.js'
 import { mergeBanks, packPath } from './soundpacks.js'
@@ -249,7 +250,7 @@ export function emitGameLua (module) {
 export const CONTROLS = ['platformer', 'fps']
 export const PERSIST = ['levels', 'saves', 'server']
 
-export function moduleTxt (module) {
+export function moduleTxt (module, docs = []) {
   const L = [`name    ${module.name}`, `id      ${module.id}`]
   for (const line of (module.about ?? '').split('\n')) if (line.trim()) L.push(`about   ${line}`)
   // Platformer is the engine's default, so it goes unsaid; a module that says
@@ -257,6 +258,8 @@ export function moduleTxt (module) {
   if (module.controls === 'fps') L.push('controls fps')
   for (const p of PERSIST) if (module.persist?.includes(p)) L.push(`persist ${p}`)
   for (const f of gameScripts(module)) L.push(`game ${f}`)
+  // The skies (docs/SKY.md): the module's, then each map's own, by name.
+  L.push(...skyLines(module, docs))
   return L.join('\n') + '\n'
 }
 
@@ -403,7 +406,7 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   const files = []
   const problems = []
   const used = new Set()
-  files.push({ path: 'module.txt', bytes: moduleTxt(module) })
+  files.push({ path: 'module.txt', bytes: moduleTxt(module, docs) })
   files.push({ path: 'module.studio.json', bytes: JSON.stringify(module, null, 2) })
   const props = emitProps(module)
   files.push({ path: 'assets/props.txt', bytes: props })

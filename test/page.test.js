@@ -2378,6 +2378,66 @@ await page.keyboard.press('Escape')
   }
 }
 
+// THE SKY: the module's sky set in its section and drawn by the client's own
+// Sky in the preview and behind the level; a map's own sky; a ceiling opened
+// to the sky from the inspector (docs/SKY.md).
+{
+  const sky = await page.evaluate(async () => {
+    const S = window.__studio
+    delete S.module.sky
+    await S.go('sky')
+    await new Promise((r) => setTimeout(r, 300))
+    ;[...document.querySelectorAll('.sd-page button')].find((b) => /give the module a sky/.test(b.textContent)).click()
+    await new Promise((r) => setTimeout(r, 300))
+    const pic = [...document.querySelectorAll('.sd-page .st-row')].find((r) => r.firstChild?.textContent === 'picture')?.querySelector('input[type=text]')
+    pic.value = 'SKY1'; pic.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 1200))
+    const canvas = document.querySelector('[data-sky-preview] canvas')
+    return { sky: S.module.sky, canvas: !!canvas && canvas.width > 0, words: document.querySelector('.sd-page')?.textContent.match(/module\.txt: sky default [^\n]*?SKY1/)?.[0] ?? '' }
+  })
+  check(sky.sky?.kind === 'strip' && sky.sky.images[0] === 'SKY1' && sky.canvas && /sky default strip SKY1/.test(sky.words), `the module's sky is set in its section and previewed by the client's Sky (${JSON.stringify(sky.sky)})`)
+  const level = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map', Object.keys(S.docs)[0])
+    S.viewport.setMode('iso'); S.ui.setView('iso')
+    await new Promise((r) => setTimeout(r, 1500))
+    S.viewport.render()
+    const iso = { kind: S.levelSky.sky.kind, shown: S.levelSky.background.visible }
+    S.viewport.setMode('plan'); S.ui.setView('plan'); S.viewport.render()
+    return { iso, plan: S.levelSky.background.visible }
+  })
+  check(level.iso.kind === 1 && level.iso.shown && !level.plan, `the level view draws the same sky behind the map in 3D, not from above (${JSON.stringify(level)})`)
+  const own = await page.evaluate(async () => {
+    const S = window.__studio
+    const name = S.docName
+    await S.go('sky', name)
+    await new Promise((r) => setTimeout(r, 300))
+    ;[...document.querySelectorAll('.sd-page .st-row')].find((r) => /has a sky of its own/.test(r.firstChild?.textContent ?? ''))?.querySelector('button').click()
+    await new Promise((r) => setTimeout(r, 300))
+    const kind = [...document.querySelectorAll('.sd-page .st-row')].find((r) => r.firstChild?.textContent === 'kind')?.querySelector('select')
+    kind.value = 'panorama'; kind.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 300))
+    const { moduleTxt } = await import('/studio/src/module_emit.js')
+    const txt = moduleTxt(S.module, Object.values(S.docs))
+    // A ceiling opened to the sky, and closed again.
+    await S.go('map', name)
+    const sid = S.doc.order[0]
+    const was = S.doc.sectors[sid].ceilTex
+    S.selection = { kind: 'sector', id: sid }
+    S.showInspector()
+    await new Promise((r) => setTimeout(r, 200))
+    const tog = () => [...document.querySelectorAll('.st-sheet .st-row')].find((r) => r.firstChild?.textContent === 'ceiling open to the sky')?.querySelector('button')
+    tog().click()
+    const opened = S.doc.sectors[sid].ceilTex
+    tog().click()
+    const closed = S.doc.sectors[sid].ceilTex
+    delete S.doc.sky; delete S.module.sky; S.commit(); S.moduleChanged(); S.ui.hideSheet(); S.viewport.setMode('iso'); S.ui.setView('iso')
+    return { name, docSky: txt.match(new RegExp(`^sky ${name} .*$`, 'm'))?.[0], dflt: txt.match(/^sky default .*$/m)?.[0], opened, closed, was }
+  })
+  check(own.docSky === `sky ${own.name} panorama SKY1` && own.dflt === 'sky default strip SKY1', `a map takes a sky of its own, written beside the module's (${own.docSky} / ${own.dflt})`)
+  check(own.opened === 'F_SKY1' && own.closed === own.was, `the inspector opens a ceiling to the sky and closes it again (${own.opened} -> ${own.closed})`)
+}
+
 // THE PLAY LOG: a page of its own; in a browser (no shell, no Play) it says so.
 {
   const pl = await page.evaluate(async () => {
