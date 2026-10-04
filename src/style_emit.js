@@ -99,7 +99,10 @@ export function panelStyleRef (name, st, own = {}) {
   const fallback = {}
   if (st) {
     const p = st.panel ?? {}
-    for (const [k, v] of [['bg', p.bg], ['color', st.color], ['border', p.border], ['radius', p.radius], ['size', st.size], ['weight', st.weight]]) if (v !== undefined && v !== null && v !== '') fallback[k] = v
+    // Not the border when the box has a picture: a `border` written over the
+    // style resets the 9-slice (CSS border resets border-image) -- and a
+    // pictured box has no border of its own to keep.
+    for (const [k, v] of [['bg', p.bg], ['color', st.color], ['border', p.image ? undefined : p.border], ['radius', p.radius], ['size', st.size], ['weight', st.weight]]) if (v !== undefined && v !== null && v !== '') fallback[k] = v
   }
   return { use: name, ...fallback, ...own }
 }

@@ -124,10 +124,12 @@ class PanelWindow {
       this.hud = new HudView({ host: frame, touch: false, insets: dev.insets, size: { width: dev.width, height: dev.height } })
       this.hud.root.classList.add('pw-behind')
       this.view = new UiView({
-        host: frame, size: { width: dev.width, height: dev.height }, insets: dev.insets,
+        host: frame, size: { width: dev.width, height: dev.height }, insets: dev.insets, ...(this.S.uiAssetOpts?.() ?? {}),
         onEvent: (uiId, wid, value) => this.#heard(wid, value),
         onChange: () => { if (this.mode === 'try' && this.view && !this.view.panels.size && !this.redrawing) this.#heard(0, 0) }
       })
+      // The module's pictures where the client's UiView draws a style's 9-slice (sections/style.js).
+      this.S.useModulePictures?.(frame)
       this.empty = el('div', { class: 'pw-empty', text: 'No panels yet. + new panel above.' })
       this.hits = el('div', { class: 'pw-hits' })
       frame.append(this.empty, this.hits)

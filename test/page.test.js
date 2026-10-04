@@ -44,7 +44,10 @@ page.on('pageerror', (e) => errors.push(String(e)))
 // Resource failures are recorded from the response hook below, with their
 // URL; the console's version of the same event names nothing.
 page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()) })
-page.on('response', (r) => { if (r.status() === 404 && !/favicon/.test(r.url())) errors.push(`404 ${r.url()}`) })
+// The one 404 tolerated: a style's picture under /ui/, asked by the client's
+// UiView before the studio points it at the module's own copy -- until the
+// client takes an assetUrl (docs/UI_STYLES.md 6.1), when it stops being asked.
+page.on('response', (r) => { if (r.status() === 404 && !/favicon/.test(r.url()) && !(/\/ui\/skins\//.test(r.url()) && !globalThis.__assetUrlSupported)) errors.push(`404 ${r.url()}`) })
 await page.goto(URL_, { waitUntil: 'networkidle0' })
 try {
   await page.waitForFunction(() => document.getElementById('boot')?.hidden === true, { timeout: 60000 })
@@ -52,6 +55,7 @@ try {
   console.log('  boot did not finish:', await page.evaluate(() => document.getElementById('bootmsg')?.textContent), errors.slice(0, 5))
 }
 check(await page.evaluate(() => document.getElementById('boot')?.hidden === true), 'the studio boots')
+globalThis.__assetUrlSupported = await page.evaluate(async () => !!(await import('/src/render/layout.js')).UI_STYLES?.assetUrl).catch(() => false)
 check(errors.length === 0, `no page errors during boot (${errors.slice(0, 3).join(' | ')})`)
 
 // THE STUDIO OPENS ON THE MODULE: its home, with a rail of its sections; the
@@ -2323,11 +2327,14 @@ await page.keyboard.press('Escape')
       const r2 = [...card2.querySelectorAll('.st-row')].find((x) => x.firstChild?.textContent === 'panel picture'); const sel = r2.querySelector('select'); sel.value = 'skins/rockwall1.png'; sel.dispatchEvent(new Event('change'))
       await new Promise((r) => setTimeout(r, 300))
       const preview = document.querySelector('[data-style-preview="stone"] .dnp-ui')
-      return { st: S.module.style.styles.stone, slice: !!document.querySelector('[data-style="stone"] canvas.sd-slice'), preview: !!preview, previewBg: preview ? getComputedStyle(preview).backgroundColor : '' }
+      return { st: S.module.style.styles.stone, slice: !!document.querySelector('[data-style="stone"] canvas.sd-slice'), preview: !!preview, previewBg: preview ? getComputedStyle(preview).backgroundColor : '',
+               skin: preview?.style.borderImage ?? '', font: preview ? getComputedStyle(preview).fontFamily : '', support: document.querySelector('[data-style-support]')?.dataset.styleSupport }
     })
     check(styled.st?.font === 'Andale Mono' && styled.st?.panel?.image === 'skins/rockwall1.png' && styled.st.panel.slice?.length === 4 && styled.slice,
           `a style takes the font and the picture as a 9-slice, its slice lines drawn over it (${JSON.stringify(styled.st?.panel)})`)
     check(styled.preview && styled.previewBg === 'rgb(18, 18, 22)', `and a sample panel in it is drawn by the client's UiView, in the style's colours (${styled.previewBg})`)
+    check(/blob:/.test(styled.skin) && /Andale Mono/.test(styled.font) && /"fonts":true/.test(styled.support ?? ''),
+          `the client draws its 9-slice from the module's own picture and its font, now that it draws styles (${styled.skin.slice(0, 60)} / ${styled.font})`)
     // Subtitles: on, a colour of their own.
     const subbed = await page.evaluate(async () => {
       const S = window.__studio

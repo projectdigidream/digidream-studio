@@ -55,6 +55,34 @@ const pictureUrl = (file) => {
   if (!urls.has(path)) urls.set(path, URL.createObjectURL(blob))
   return urls.get(path)
 }
+/**
+ * THE MODULE'S PICTURES IN A PREVIEW. The client draws a 9-slice as
+ * `url("/ui/<file>")` -- right in the game, where /ui/ serves the module's
+ * files. The studio keeps them in the module's own store, not on a server, so
+ * under a preview drawn by the client's own UiView every such URL is pointed
+ * at the module's copy: now, and whenever the client sets one again (a
+ * button's pressed look, set while it is held).
+ */
+export function useModulePictures (host) {
+  const fix = (node) => {
+    const bi = node.style?.borderImage
+    if (!bi || !bi.includes('/ui/')) return
+    const m = /url\("?\/ui\/([^")]+)"?\)/.exec(bi)
+    const url = m ? pictureUrl(m[1]) : null
+    if (url) node.style.borderImage = bi.replace(m[0], `url("${url}")`)
+  }
+  const sweep = () => { fix(host); for (const n of host.querySelectorAll('*')) fix(n) }
+  sweep()
+  if (!host.__pictures) {
+    host.__pictures = new MutationObserver((list) => { for (const r of list) { if (r.type === 'attributes') fix(r.target); else for (const n of r.addedNodes) if (n.nodeType === 1) { fix(n); for (const k of n.querySelectorAll('*')) fix(k) } } })
+    host.__pictures.observe(host, { attributes: true, attributeFilter: ['style'], subtree: true, childList: true })
+  }
+  return sweep
+}
+
+/** Where a client view finds the module's files, once it can be told (UI_STYLES.md 6.1). */
+export const assetOpts = () => (support()?.assetUrl ? { assetUrl: (f) => pictureUrl(f) ?? `/ui/${f}` } : {})
+
 const pictures = () => Object.keys(S.rec.assets ?? {}).filter((p) => /^ui\/skins\/[^/]+\.png$/.test(p)).map((p) => p.slice(3)).sort()
 
 // --- importing -----------------------------------------------------------------------
@@ -277,11 +305,12 @@ function stylePreview (name, st) {
     slots: [{ widget: 1, anchor: 'tl', x: 10, y: 8, w: 220 }, { widget: 2, anchor: 'tl', x: 10, y: 40, w: 220 }, { widget: 3, anchor: 'tl', x: 10, y: 76, w: 220, h: 36 }] }
   const layout = Layout.parseLayout(withStyle({ version: 1, panels: { sample: tpl } }, S.module.style)).layout
   try {
-    const view = new UiView({ onEvent: () => {}, host, layout, size: { width: 320, height: 210 } })
+    const view = new UiView({ onEvent: () => {}, host, layout, size: { width: 320, height: 210 }, ...assetOpts() })
     view.open({ uiId: 1, title: 'A panel', template: 'sample', widgets: [
       { kind: UI_KIND.LABEL, id: 1, label: 'What will it be?', value: 0, lo: 0, hi: 0, options: [] },
       { kind: UI_KIND.BUTTON, id: 2, label: 'Buy', value: 0, lo: 0, hi: 0, options: [] },
       { kind: UI_KIND.SLIDER, id: 3, label: 'How many', value: 3, lo: 0, hi: 9, options: [] }] })
+    useModulePictures(host)
     // Centred by its height, which it has only once it is on the page.
     requestAnimationFrame(() => view.relayout())
   } catch (e) { host.textContent = `preview: ${e.message}` }
@@ -330,6 +359,8 @@ function subtitleRows (fams) {
 export function install (s) {
   S = s
   S.loadStyleFonts = loadStyleFonts
+  S.useModulePictures = useModulePictures
+  S.uiAssetOpts = assetOpts
   S.showStyle = S.sectionAlias('style', showStyle)
 }
 

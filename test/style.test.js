@@ -49,6 +49,8 @@ check(plain.children[1].style.size === SUBTITLES.children[1].style.size && plain
 // --- a styled panel ---------------------------------------------------------------------------
 const ref = panelStyleRef('parchment', style.styles.parchment, { radius: 12 })
 check(ref.use === 'parchment' && ref.bg === '#e9dcc0' && ref.color === '#3a2a1a' && ref.radius === 12, `a styled panel names its style, with the style's colours beside it and its own over them (${JSON.stringify(ref)})`)
+check(!('border' in ref), 'a style whose box is a picture gives no border beside its name: a border written over it would wipe the 9-slice')
+check(panelStyleRef('plain', newStyle()).border === newStyle().panel.border, 'CONTROL: one without a picture keeps its border')
 const shop = newPanel('Shop'); addWidget(shop, 'button', 'Buy')
 shop.look.styleName = 'parchment'
 const t = templateOf(shop, style.styles)
