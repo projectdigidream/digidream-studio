@@ -157,7 +157,7 @@ const split = (s) => { const i = String(s).lastIndexOf('.'); return i < 0 ? [s, 
  * @param tv  trigger_vocab.json
  * @returns [string]
  */
-export function graphProblems (graph, gv, tv, { game = false, paths = null } = {}) {
+export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null } = {}) {
   const problems = []
   if (!graph) return problems
   // A GAME graph (a module's, in the game VM) may use only what the game
@@ -185,6 +185,11 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null } = {
     }
     // What the game has no level for: refused in the game's graph.
     if (game && spec.level_only) problems.push(`${where}: a ${n.type} acts on a level, and the game has none -- call the level's graph (a call node, to level) and do it there`)
+    // Another map the module lacks: the engine refuses the graph at load. (A
+    // map given by its number is the server's to judge.)
+    if (maps && n.type === 'change_map' && typeof n.level === 'string' && n.level !== '' && !/^\d+$/.test(n.level) && !maps.includes(n.level.toLowerCase().replace(/\.(map|dnpm)$/, ''))) {
+      problems.push(`${where}: no map called ${n.level} in the module, and the server refuses a graph that goes to one it does not have`)
+    }
     // A camera path the map lacks: the engine refuses the graph at load.
     if (paths && n.path !== undefined && (n.type === 'camera_flythrough' || n.type === 'camera_track') && !paths.has(n.path)) {
       problems.push(`${where}: no camera path with tag ${n.path} on this map (Camera → camera paths)`)

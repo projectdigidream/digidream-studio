@@ -170,5 +170,64 @@ else {
   }
 }
 
+// THE GAME'S GRAPHS OPEN PANELS TOO: the module's panels they open written
+// as a cardless trigger table in the game VM (module_panels.lua), loaded
+// after the shared runtimes and before the graphs; the server loads the lot.
+// CONTROL: the same graph with no such table is refused at load.
+{
+  const { gameScripts, emitGamePanelsLua, GAME_PANELS_FILE } = await import('../src/module_emit.js')
+  const gameShop = { vars: {}, nodes: [
+    { id: 'came', type: 'when_player_arrives' }, { id: 'open', type: 'action', a: 'ui_open', panel: 'shop' },
+    { id: 'ui', type: 'event', event: 'on_ui_event' }, { id: 'is_buy', type: 'condition', c: 'widget_is', widget: buy.id },
+    { id: 'say', type: 'action', a: 'log', text: 'sold' }],
+    links: [['came.then', 'open.in'], ['ui.then', 'is_buy.in'], ['is_buy.true', 'say.in']] }
+  const gm = newModule('gp', 'gp')
+  gm.panels = { shop }
+  gm.graphs = { shopkeeper: gameShop }
+  const lines = gameScripts(gm)
+  check(lines.indexOf(GAME_PANELS_FILE) > lines.indexOf('triggers.lua shared') && lines.indexOf(GAME_PANELS_FILE) < lines.indexOf('module.shopkeeper.graph.json'),
+        `module.txt loads the game's panels after the trigger runtime and before the graphs (${lines.join(', ')})`)
+  check(/triggers\.load/.test(emitGamePanelsLua(gm)) && /template = "shop"/.test(emitGamePanelsLua(gm)) && emitGamePanelsLua({ ...gm, graphs: {} }) === null,
+        'the table holds the panels the game\'s graphs open, and is not written without one')
+  if (existsSync(SERVER)) {
+    const runtime = {}
+    for (const n of RUNTIME_SCRIPTS) runtime[n] = readFileSync(join(ROOT, 'engine', 'maps', 'scripts', n), 'utf8')
+    const serve = async (mod, port) => {
+      const r = await emitModule(mod, [doc], { bake, runtime })
+      if (!r.ok) return JSON.stringify(r.problems)
+      const out = mkdtempSync(join(tmpdir(), 'dnp-gp-'))
+      for (const f of r.files) { const p = join(out, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, typeof f.bytes === 'string' ? f.bytes : Buffer.from(f.bytes)) }
+      const srv = spawn(SERVER, ['--port', String(port), '--module', out], { cwd: join(ROOT, 'engine') })
+      let log = ''
+      srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
+      await new Promise((res) => setTimeout(res, 2500))
+      srv.kill()
+      return log
+    }
+    const log = await serve(gm, 34699)
+    if (process.env.DNP_PANELS_LOG) console.log(log)
+    check(/\[triggers\] module: 0 triggers/.test(log) && /\[graphs\] module\.shopkeeper\.graph\.json: 5 nodes, 3 links/.test(log) && /a graph, for the whole game/.test(log),
+          `the server loads the game's panel table and the game graph that opens the shop (${log.split('\n').filter((l) => /module|shopkeeper|refus|panel/i.test(l)).slice(0, 4).join(' | ')})`)
+  }
+  // Where ui_open looks: the trigger runtime's panels in the game VM. With the
+  // table the shop is there; without it, nothing -- and ui_open would find no panel.
+  if (existsSync(TRIGGERCHECK)) {
+    const dir = mkdtempSync(join(tmpdir(), 'dnp-gp-tc-'))
+    const probe = (withTable) => {
+      const f = join(dir, `probe${withTable ? 1 : 0}.lua`)
+      writeFileSync(f, ['dnp = dnp or {}', 'dnp.is_game = function() return true end',
+        withTable ? emitGamePanelsLua(gm) : '',
+        // triggercheck insists on triggers of its own, so the answer is a line said.
+        'print((triggers.panels ~= nil and triggers.panels.shop ~= nil) and "PANEL_FOUND shop" or "PANEL_MISSING shop")'].join('\n'))
+      const r = spawnSync(TRIGGERCHECK, ['.', f], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+      const out = r.stderr + r.stdout
+      return { ok: /PANEL_FOUND shop/.test(out), out }
+    }
+    const withIt = probe(true)
+    check(withIt.ok, `in the game VM the shop is where ui_open looks for it, once the table is loaded:\n${withIt.out}`)
+    check(!probe(false).ok, 'CONTROL: without the table it is not, so the table is what lets a game graph open the panel')
+  }
+}
+
 console.log(`panels: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

@@ -20,12 +20,12 @@ export function moduleProblems (S) {
     for (const p of V.validateTriggers(d, S.module.panels ?? d.panels)) out.maps.push({ map: d.name, msg: p })
     for (const [name, g] of graphsOf(d)) {
       if (!NAME_RE.test(name)) out.maps.push({ map: d.name, msg: `graph '${name}': a name is 1 to 32 of a-z, 0-9, _` })
-      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
+      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
     if (!NAME_RE.test(name)) out.graphs.push(`the game's graph '${name}': a name is 1 to 32 of a-z, 0-9, _`)
-    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { game: true })) out.graphs.push(`the game's graph ${name}: ${p}`)
+    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { game: true, maps: Object.keys(S.docs) })) out.graphs.push(`the game's graph ${name}: ${p}`)
   }
   for (const u of S.unansweredCalls?.() ?? []) out.graphs.push(`${u.graph} calls '${u.name}' (to ${u.to}), and nothing answers it`)
   if (S.module.mobs) out.monsters.push(...V.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }))

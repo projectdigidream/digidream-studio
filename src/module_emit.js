@@ -37,6 +37,7 @@ import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
 import { emitPlayerLua, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
 import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
+import { toLua } from './lua.js'
 import { uiFiles } from './ui_emit.js'
 import { metamapText, metamapProblems } from './metamap.js'
 import { mergeBanks, packPath } from './soundpacks.js'
@@ -197,9 +198,32 @@ export const hasGameGraph = (module) => hasGraph(module)
 export function gameScripts (module) {
   const out = hasWeapons(module) ? [...GAME_RUNTIME, GAME_FILE] : []
   if (hasMoveSounds(module)) out.push(PLAYER_GAME_RUNTIME, PLAYER_GAME_FILE)
-  // Each of the module's graphs a game line of its own, after their runtimes.
-  if (hasGameGraph(module)) out.push(...GRAPH_GAME_RUNTIME.map((f) => `${f} shared`), ...liveGraphs(module).map(([name]) => gameGraphFile(name)))
+  // Each of the module's graphs a game line of its own, after their runtimes
+  // -- and after the panels they open, which the runtime checks them against.
+  if (hasGameGraph(module)) {
+    out.push(...GRAPH_GAME_RUNTIME.map((f) => `${f} shared`))
+    if (emitGamePanelsLua(module) !== null) out.push(GAME_PANELS_FILE)
+    out.push(...liveGraphs(module).map(([name]) => gameGraphFile(name)))
+  }
   return out
+}
+
+/**
+ * THE GAME'S PANELS. A graph's `ui_open` is the trigger runtime's verb, which
+ * opens a panel of the trigger table loaded in its VM. A level has its map's
+ * table; the game VM has none -- so the game's graphs get one: a cardless
+ * table holding the module's panels they open, loaded once in the game VM
+ * after the shared runtimes and before the graphs. The panel is then the
+ * game's (it survives a level change), and its buttons come back to the
+ * game's graphs as `on_ui_event`.
+ */
+export const GAME_PANELS_FILE = 'module_panels.lua'
+export function emitGamePanelsLua (module) {
+  const panels = module.panels ? triggerPanels(module, module.panels) : {}
+  if (!Object.keys(panels).length) return null
+  return ['-- module_panels.lua -- written by the studio from module.studio.json.',
+    '-- The panels the game\'s graphs open (ui_open), as a trigger table of no cards.',
+    `triggers.load${toLua({ name: 'module', panels, triggers: [] })}`, ''].join('\n')
 }
 
 /** A game line's file, without its ` shared`. */
@@ -410,6 +434,8 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   // The game's graphs: the runtimes they need beside them, then each graph.
   if (hasGameGraph(module)) {
     for (const name of GRAPH_GAME_RUNTIME) files.push({ path: `maps/${name}`, bytes: runtime[name] })
+    const panelsLua = emitGamePanelsLua(module)
+    if (panelsLua !== null) files.push({ path: `maps/${GAME_PANELS_FILE}`, bytes: panelsLua })
     for (const [name, graph] of liveGraphs(module)) {
       const g = emitGraph(graph, name, null, null, { panels: graphTakesPanels(graphVocab) ? graphPanels(graph, module.panels) : null })
       files.push({ path: `maps/${gameGraphFile(name)}`, bytes: g.text })

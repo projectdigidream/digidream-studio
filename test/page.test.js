@@ -1725,6 +1725,69 @@ await page.keyboard.press('Escape')
   check(!stopped.scene && stopped.pose === null && stopped.graph && stopped.route === 'graph', `■ ends it: the camera given back, the graph window there again (${JSON.stringify(stopped)})`)
 }
 
+// GOING TO ANOTHER MAP, and A PANEL THE GAME OPENS: change_map chooses one of
+// the module's maps and a spawn point there; the panel editor puts the
+// opening into the game's graph, and the module is written with the game's
+// own table of the panels its graphs open.
+{
+  const travel = await page.evaluate(async () => {
+    const S = window.__studio
+    const { addSpawn } = await import('/studio/src/doc.js')
+    const here = Object.keys(S.docs)[0]
+    S.docs.yard = S.starterDoc('yard')
+    addSpawn(S.docs.yard, 'door', 2, 2, 0)
+    await S.go('map', here)
+    S.doc.graphs = { travel: { vars: {}, nodes: [
+      { id: 'go', type: 'when_level_starts', pos: { x: 0, y: 0 } },
+      { id: 'away', type: 'change_map', level: 'yard', pos: { x: 260, y: 0 } }], links: [['go.then', 'away.in']] } }
+    S.commit()
+    await S.go('graph', `${here}:travel`)
+    await new Promise((r) => setTimeout(r, 400))
+    const node = () => document.querySelector('.gw [data-node="away"]')
+    const level = [...node().querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === 'yard'))
+    const more = node().querySelector('.gw-more')
+    more.value = 'spawn'; more.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    const spawn = [...node().querySelectorAll('select')].find((x) => [...x.options].some((o) => o.value === 'door'))
+    const maps = level ? [...level.options].map((o) => o.value).filter(Boolean) : []
+    spawn.value = 'door'; spawn.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    const { graphProblems } = await import('/studio/src/graphs_emit.js')
+    const g = S.doc.graphs.travel
+    const clean = graphProblems(g, S.vocab.graph, S.vocab.trigger, { maps: Object.keys(S.docs) })
+    g.nodes[1].level = 'nowhere'
+    const lost = graphProblems(g, S.vocab.graph, S.vocab.trigger, { maps: Object.keys(S.docs) })
+    delete S.doc.graphs; S.commit()
+    return { maps, here, spawn: g.nodes[1].spawn, clean, lost }
+  })
+  check(travel.maps.includes('yard') && travel.maps.includes(travel.here) && travel.spawn === 'door', `change_map chooses a map of the module and a spawn point there by its tag (${JSON.stringify(travel)})`)
+  check(travel.clean.length === 0 && travel.lost.some((p) => /no map called nowhere/.test(p)), 'and a map the module lacks is named')
+  const gamePanel = await page.evaluate(async () => {
+    const S = window.__studio
+    const { newPanel, addWidget } = await import('/studio/src/panels_emit.js')
+    const p = newPanel('Shop'); addWidget(p, 'button', 'Buy')
+    S.module.panels = { shop: p }
+    delete S.module.graphs
+    S.moduleChanged()
+    await S.go('panels', 'shop')
+    await new Promise((r) => setTimeout(r, 400))
+    const sel = [...document.querySelectorAll('.pw .wk-details .st-row')].find((r) => r.firstChild?.textContent === 'open it from')?.querySelector('select')
+    const offered = [...sel.options].map((o) => o.value)
+    sel.value = 'game:game'; sel.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 600))
+    const node = S.module.graphs?.game?.nodes?.[0]
+    const r = await S.emitAll()
+    const txt = r ? String(r.files.find((f) => f.path === 'module.txt').bytes) : ''
+    const table = r ? String(r.files.find((f) => f.path === 'maps/module_panels.lua')?.bytes ?? '') : ''
+    delete S.module.graphs; delete S.module.panels; delete S.docs.yard; S.moduleChanged(); await S.go('map')
+    return { offered, route: S.route(), node, txt, table: /triggers\.load/.test(table) && /template = "shop"/.test(table) }
+  })
+  check(gamePanel.offered.includes('game:game') && gamePanel.node?.a === 'ui_open' && gamePanel.node?.panel === 'shop',
+        `the panel editor opens a panel from the game's graph too (${JSON.stringify(gamePanel.node)})`)
+  check(/game triggers\.lua shared\n(?:.*\n)*game module_panels\.lua\ngame module\.game\.graph\.json/.test(gamePanel.txt) && gamePanel.table,
+        `and the module gives the game its own table of the panels its graphs open, before the graphs (${gamePanel.txt.split('\n').filter((l) => /^game/.test(l)).join(', ')})`)
+}
+
 // THE WORLD'S NODES: the menu grouped the designer's way, a door added with
 // its speed already chosen, and its room picked on the map.
 {

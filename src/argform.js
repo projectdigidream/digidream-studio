@@ -160,6 +160,20 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
                         { placeholder: 'e.g. 0.25 or -4/48' })
         break
       case 'string': case 'value':
+        // ANOTHER MAP of the module, by the name the server lists it under.
+        if (a.name === 'level' && ctx.maps) {
+          const names = ctx.maps()
+          rows.push(row(label, selectOf(cur === undefined ? '' : String(cur), [['', '(choose a map)'], ...(cur !== undefined && cur !== '' && !names.includes(String(cur)) ? [[String(cur), `${cur} -- not a map of the module`]] : []), ...names.map((n) => [n, n])], (v) => set(v || undefined))))
+          return
+        }
+        // A SPAWN POINT by its tag: on the map a change_map goes to, or on this one.
+        if (a.name === 'spawn' && ctx.spawnsOf) {
+          const there = owner === 'change_map' ? obj.level : null
+          const tags = ctx.spawnsOf(there)
+          rows.push(row(label, selectOf(cur ?? '', [['', owner === 'change_map' ? '(the map\'s start)' : '(none)'], ...(cur && !tags.includes(cur) ? [[cur, `${cur} -- not on ${there ?? 'this map'}`]] : []), ...tags.map((t) => [t, t])], (v) => set(v || undefined))))
+          if (cur && !tags.includes(cur) && owner === 'change_map') rows.push(muted(`${there ?? 'that map'} has no spawn point tagged ${cur}: the player would arrive at its start`))
+          return
+        }
         // A PANEL of the module's, and a widget of it by name: chosen, not typed.
         if (a.type === 'string' && a.name === 'panel' && ctx.panels) {
           const names = ctx.panels()

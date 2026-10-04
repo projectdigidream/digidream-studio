@@ -953,12 +953,12 @@ async function emitAll () {
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
     for (const [name, g] of graphsOf(d)) {
-      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
+      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
       if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
-    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { game: true }) : []
+    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { game: true, maps: Object.keys(S.docs) }) : []
     if (mg.length) { S.status(`the game's graph ${name}: ${mg.join('; ')}`, 'error'); return null }
   }
   const sizes = { ...S.textureSizes }

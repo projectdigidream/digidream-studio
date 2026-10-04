@@ -702,7 +702,10 @@ class PanelWindow {
       const names = graphsOf(owner).map(([n]) => n)
       return (names.length ? names : [first]).map((n) => [graphRoute(scope, map, n), `${icon} ${label} · ${n}${names.length ? '' : ' (new)'}`])
     }
-    const targets = [...(this.nodesReady ? scopeTargets(S.module, 'game', null, GAME_NAME, '🌐', 'the game') : []),
+    // The game's graphs open panels too: with the panel nodes when the engine
+    // has them, else with ui_open, whose panels the studio writes into the
+    // game VM's own trigger table (module_emit.js, module_panels.lua).
+    const targets = [...scopeTargets(S.module, 'game', null, GAME_NAME, '🌐', 'the game'),
       ...Object.keys(S.docs).sort().flatMap((m) => scopeTargets(S.docs[m], 'map', m, MAP_GRAPH, '🗺', m))]
     rows.push(select('open it from', '', [['', 'choose a graph…'], ...targets], (g) => { if (g) this.#addNodes(g, 'open') }))
     rows.push(select('answer', '', [['', 'choose a widget…'], ...p.widgets.filter((w) => w.kind !== 'label').map((w) => [w.name, `${ICON[w.kind]} ${w.name}`])], (wn) => {
@@ -715,7 +718,7 @@ class PanelWindow {
     }
     rows.push(muted(this.nodesReady
       ? 'A panel is answered in the graph that opens it: one the game opens, by the game\'s graph; one a map opens, by that map\'s.'
-      : 'Until the engine has panel nodes (docs/PANELS.md), a map\'s graph opens a panel with the trigger words -- do ui_open -- and hears a press as when on_ui_event + if widget_is. The game\'s graph waits for the panel nodes.'))
+      : 'Until the engine has panel nodes (docs/PANELS.md), a graph opens a panel with the trigger words -- do ui_open -- and hears a press as when on_ui_event + if widget_is. The game\'s graphs do too: the studio gives the game its own table of the panels they open, so a panel the game opens stays open from level to level and its buttons come back to the game\'s graphs.'))
     return rows
   }
 

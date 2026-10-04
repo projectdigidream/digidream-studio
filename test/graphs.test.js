@@ -358,5 +358,28 @@ if (existsSync(SERVER)) {
         `CONTROL: and refuses it where the path is missing, as the studio says (${bad.log.split('\n').filter((l) => /graph|path/i.test(l)).slice(0, 3).join(' | ')})`)
 }
 
+// GOING TO ANOTHER MAP: change_map names one of the module's maps, and a spawn
+// point there by its tag; a map the module lacks is named, as the server
+// refuses the graph.
+const travel = { vars: {}, nodes: [
+  { id: 'go', type: 'when_level_starts', pos: { x: 0, y: 0 } },
+  { id: 'away', type: 'change_map', level: 'yard', spawn: 'door', fade: 0.5, pos: { x: 260, y: 0 } }], links: [['go.then', 'away.in']] }
+check(graphProblems(travel, GV, TV, { maps: ['gate', 'yard'] }).length === 0, `a change_map to a map of the module is clean (${graphProblems(travel, GV, TV, { maps: ['gate', 'yard'] }).join(' | ')})`)
+const nowhere = structuredClone(travel); nowhere.nodes[1].level = 'nowhere'
+check(graphProblems(nowhere, GV, TV, { maps: ['gate', 'yard'] }).some((p) => /no map called nowhere/.test(p)), 'CONTROL: one to a map the module lacks is named')
+const byNumber = structuredClone(travel); byNumber.nodes[1].level = '2'
+check(graphProblems(byNumber, GV, TV, { maps: ['gate', 'yard'] }).length === 0, 'a map given by its number is left to the server')
+if (existsSync(SERVER)) {
+  const gate = { ...structuredClone(plain), name: 'gate', graphs: { travel } }
+  const yard = { ...structuredClone(plain), name: 'yard' }
+  addSpawn(yard, 'door', 3, 3)
+  const ok = await serveOne([gate, yard], 34701)
+  check(ok.ok && /\[graphs\] gate\.travel\.graph\.json: 2 nodes, 1 links/.test(ok.log),
+        `the server loads a graph that sends players to another map's door (${ok.log.split('\n').filter((l) => /travel|refus/i.test(l)).slice(0, 3).join(' | ')})`)
+  const lost = await serveOne([{ ...gate, graphs: { travel: nowhere } }, yard], 34702)
+  check(lost.ok && !/\[graphs\] gate\.travel\.graph\.json: 2 nodes/.test(lost.log) && /nowhere/.test(lost.log),
+        `CONTROL: and refuses one sending them to a map it does not have, as the studio says (${lost.log.split('\n').filter((l) => /nowhere/.test(l)).slice(0, 2).join(' | ')})`)
+}
+
 console.log(`graphs: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

@@ -54,6 +54,7 @@ const MENU = [
   ['move the map', (s) => (s.category === 'sector' || s.category === 'wall') && (s.exec_in ?? []).length],
   ['🎬 cutscene', (s) => s.category === 'cinematic'],
   ['🎥 camera', (s) => s.category === 'camera'],
+  ['🚪 maps', (s) => s.category === 'maps'],
   ['read', (s) => ['entity', 'sector', 'wall'].includes(s.category) && !(s.exec_in ?? []).length],
   ['flow', (s) => ['branch', 'sequence', 'delay', 'once', 'call'].includes(s.name)],
   ['data', (s) => ['get_var', 'set_var', 'add_var', 'literal', 'compare', 'math', 'logic', 'random'].includes(s.name)]
@@ -248,7 +249,10 @@ class GraphWindow {
           S.go('map').then(() => { S.showCamera?.(); if (p) S.editPath?.(p.id) })
         }
       }),
-      ...(S.panelCtx?.() ?? {})
+      ...(S.panelCtx?.() ?? {}),
+      // The module's maps, and the spawn points of one (or of this map).
+      maps: () => Object.keys(S.docs).sort(),
+      spawnsOf: (map) => [...new Set(((map ? S.docs[map] : S.doc)?.spawns ?? []).map((p) => p.tag).filter(Boolean))].sort()
     }
   }
 
@@ -259,7 +263,7 @@ class GraphWindow {
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
-    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game, paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
       el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
@@ -477,8 +481,9 @@ class GraphWindow {
       } else {
         out.push(...this.#argRows(spec.args, shown, argPins, linked, (args) => [
           // Places, rooms and walls together, so x, y and z are one tap.
-          ...argFields(args.filter((a) => a.type !== 'value'), n, ctx, [], n.type),
-          ...args.filter((a) => a.type === 'value').map((a) => { const r = this.#literalRow(a.name, n, a.name); r.dataset.arg = a.name; return r })
+          // A map is chosen from the module's (argform), not typed; other values are literals.
+          ...argFields(args.filter((a) => a.type !== 'value' || a.name === 'level'), n, ctx, [], n.type),
+          ...args.filter((a) => a.type === 'value' && a.name !== 'level').map((a) => { const r = this.#literalRow(a.name, n, a.name); r.dataset.arg = a.name; return r })
         ]))
       }
     }
@@ -797,8 +802,8 @@ class GraphWindow {
       const linked = this.#linkedArgs(n)
       const own = (spec.args ?? []).filter((a) => !linked.has(a.name))
       for (const a of (spec.args ?? []).filter((x) => linked.has(x.name))) rows.push(row(a.name, el('span', { class: 'gw-from', text: `← linked from ${linked.get(a.name)}` })))
-      rows.push(...argFields(own.filter((a) => a.type !== 'value'), n, ctx, [], n.type))
-      for (const a of own.filter((x) => x.type === 'value')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
+      rows.push(...argFields(own.filter((a) => a.type !== 'value' || a.name === 'level'), n, ctx, [], n.type))
+      for (const a of own.filter((x) => x.type === 'value' && x.name !== 'level')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
     }
     rows.push(button('delete node', () => {
       g.nodes.splice(g.nodes.indexOf(n), 1)
