@@ -2275,6 +2275,102 @@ await page.keyboard.press('Escape')
   if (booted) await page.evaluate(async () => { const S = window.__studio; delete S.docs.second; await S.openDoc(Object.keys(S.docs)[0]); S.save(); await new Promise((r) => setTimeout(r, 900)) })
 }
 
+// STYLE: a font and a picture imported, a named panel style using the picture
+// as a 9-slice, a panel taking the style, the subtitles restyled -- and the
+// module written with all of it in its layout (docs/UI_STYLES.md).
+{
+  const { existsSync } = await import('node:fs')
+  const FONT = '/System/Library/Fonts/Supplemental/Andale Mono.ttf'
+  const PNG = new URL('../../modules/starter/assets/textures/ROCKWALL1.png', import.meta.url).pathname
+  if (!existsSync(FONT) || !existsSync(PNG)) console.log('  (style: no font or picture to import here -- skipped)')
+  else {
+    await page.evaluate(async () => { await window.__studio.go('style') })
+    await new Promise((r) => setTimeout(r, 300))
+    const pick = async (label, file) => {
+      const [chooser] = await Promise.all([
+        page.waitForFileChooser({ timeout: 10000 }),
+        page.evaluate((label) => [...document.querySelectorAll('.sd-page button')].find((b) => b.textContent.startsWith(label)).click(), label)
+      ])
+      await chooser.accept([file])
+      await new Promise((r) => setTimeout(r, 1200))
+    }
+    await pick('+ import fonts', FONT)
+    await pick('+ import pictures', PNG)
+    const imported = await page.evaluate(() => {
+      const S = window.__studio
+      const f = S.module.style?.fonts?.[0]
+      const sample = document.querySelector('[data-font] .sd-font-sample')
+      return { font: f, asset: !!S.rec.assets?.[`ui/${f?.file}`], loaded: [...document.fonts].some((x) => x.family.replace(/"/g, '') === f?.family && x.status === 'loaded'),
+               sampleFont: sample ? getComputedStyle(sample).fontFamily : '', picture: !!S.rec.assets?.['ui/skins/rockwall1.png'], thumb: !!document.querySelector('[data-picture="skins/rockwall1.png"] img') }
+    })
+    check(imported.font?.family === 'Andale Mono' && imported.asset && imported.loaded && /Andale Mono/.test(imported.sampleFont), `a font is imported, kept in the module, loaded, and its sample shown in it (${JSON.stringify(imported.font)})`)
+    check(imported.picture && imported.thumb, 'a picture is imported and shown')
+    // A named style, through the studio's own dialog.
+    await page.evaluate(() => [...document.querySelectorAll('.sd-page button')].find((b) => b.textContent === '+ new style').click())
+    await page.waitForSelector('dialog[open] input', { timeout: 3000 }).catch(() => {})
+    await page.keyboard.down('Meta'); await page.keyboard.press('a'); await page.keyboard.up('Meta')
+    await page.keyboard.type('stone')
+    await page.keyboard.press('Enter')
+    await new Promise((r) => setTimeout(r, 600))
+    const styled = await page.evaluate(async () => {
+      const S = window.__studio
+      const st = S.module.style.styles?.stone
+      const card = document.querySelector('[data-style="stone"]')
+      const choose = (label, value) => { const r = [...card.querySelectorAll('.st-row')].find((x) => x.firstChild?.textContent === label); const sel = r.querySelector('select'); sel.value = value; sel.dispatchEvent(new Event('change')) }
+      choose('font', 'Andale Mono')
+      await new Promise((r) => setTimeout(r, 300))
+      const card2 = document.querySelector('[data-style="stone"]')
+      const r2 = [...card2.querySelectorAll('.st-row')].find((x) => x.firstChild?.textContent === 'panel picture'); const sel = r2.querySelector('select'); sel.value = 'skins/rockwall1.png'; sel.dispatchEvent(new Event('change'))
+      await new Promise((r) => setTimeout(r, 300))
+      const preview = document.querySelector('[data-style-preview="stone"] .dnp-ui')
+      return { st: S.module.style.styles.stone, slice: !!document.querySelector('[data-style="stone"] canvas.sd-slice'), preview: !!preview, previewBg: preview ? getComputedStyle(preview).backgroundColor : '' }
+    })
+    check(styled.st?.font === 'Andale Mono' && styled.st?.panel?.image === 'skins/rockwall1.png' && styled.st.panel.slice?.length === 4 && styled.slice,
+          `a style takes the font and the picture as a 9-slice, its slice lines drawn over it (${JSON.stringify(styled.st?.panel)})`)
+    check(styled.preview && styled.previewBg === 'rgb(18, 18, 22)', `and a sample panel in it is drawn by the client's UiView, in the style's colours (${styled.previewBg})`)
+    // Subtitles: on, a colour of their own.
+    const subbed = await page.evaluate(async () => {
+      const S = window.__studio
+      const r = [...document.querySelectorAll('.sd-page [data-subtitles] .st-row')].find((x) => x.firstChild?.textContent === 'the module styles its subtitles')
+      r.querySelector('button').click()
+      await new Promise((r) => setTimeout(r, 300))
+      const text = [...document.querySelectorAll('.sd-page [data-subtitles] .st-row')].find((x) => x.firstChild?.textContent === 'text')?.querySelector('input[type=color]')
+      text.value = '#00ff88'; text.dispatchEvent(new Event('change'))
+      await new Promise((r) => setTimeout(r, 400))
+      const line = [...document.querySelectorAll('[data-sub-preview] .dnp-hud div')].find((d) => d.textContent === 'This hall was sealed for a hundred years.')
+      return { sub: S.module.style.subtitle, color: line ? getComputedStyle(line).color : '' }
+    })
+    check(subbed.sub?.color === '#00ff88' && subbed.color === 'rgb(0, 255, 136)', `the subtitles take a colour, drawn by the client's HudView (${subbed.color})`)
+    // A panel takes the style; the module is written with it.
+    const written = await page.evaluate(async () => {
+      const S = window.__studio
+      const { newPanel, addWidget } = await import('/studio/src/panels_emit.js')
+      const p = newPanel('Shop'); addWidget(p, 'button', 'Buy')
+      S.module.panels = { shop: p }
+      S.moduleChanged()
+      await S.go('panels', 'shop')
+      await new Promise((r) => setTimeout(r, 400))
+      const sel = document.querySelector('.pw [data-panel-style]')
+      sel.value = 'stone'; sel.dispatchEvent(new Event('change'))
+      await new Promise((r) => setTimeout(r, 400))
+      const drawn = document.querySelector('.pw .dnp-ui-t')
+      const r = await S.emitAll()
+      const hud = r ? JSON.parse(String(r.files.find((f) => f.path === 'assets/ui/hud.json').bytes)) : {}
+      const paths = (r?.files ?? []).map((f) => f.path)
+      const out = { styleName: p.look.styleName, drawnBg: drawn ? getComputedStyle(drawn).backgroundColor : '', tpl: hud.panels?.shop?.style, fonts: hud.fonts, styles: Object.keys(hud.styles ?? {}),
+                    sub: hud.hud?.find((e) => e.id === 'subtitle')?.children?.[1]?.style?.color, files: paths.filter((x) => /assets\/ui\/(fonts|skins)/.test(x)) }
+      delete S.module.style; delete S.module.panels
+      for (const k of Object.keys(S.rec.assets)) if (k.startsWith('ui/')) delete S.rec.assets[k]
+      S.moduleChanged(); await S.go('map')
+      return out
+    })
+    check(written.styleName === 'stone' && written.drawnBg === 'rgb(18, 18, 22)', `a panel takes the style in the panel editor, drawn in its colours (${written.drawnBg})`)
+    check(written.tpl?.use === 'stone' && written.fonts?.[0]?.family === 'Andale Mono' && written.styles.includes('stone') && written.sub === '#00ff88' &&
+          written.files.some((x) => x.endsWith('.ttf')) && written.files.includes('assets/ui/skins/rockwall1.png'),
+          `and the module is written with the fonts, the style, the subtitle and the files beside its layout (${written.files.join(', ')})`)
+  }
+}
+
 // THE PLAY LOG: a page of its own; in a browser (no shell, no Play) it says so.
 {
   const pl = await page.evaluate(async () => {

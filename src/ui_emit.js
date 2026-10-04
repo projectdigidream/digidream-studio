@@ -14,6 +14,7 @@
 //
 
 import { withTemplates } from './panels_emit.js'
+import { withStyle, hasStyle } from './style_emit.js'
 
 export const UI_DIR = 'assets/ui'
 export const DEFAULT_FILE = 'hud.json'
@@ -40,13 +41,17 @@ export function newLayout (base) {
  */
 export function uiFiles (module, docs) {
   const panels = module.panels && Object.keys(module.panels).length ? module.panels : null
-  if (!module.ui && !panels) return []
+  const style = hasStyle(module.style) ? module.style : null
+  if (!module.ui && !panels && !style) return []
+  // Every layout a level draws from: its panels and the module's style
+  // (fonts, named styles, the theme, the subtitle line; style_emit.js).
+  const complete = (L) => withStyle(withTemplates(L, panels, style?.styles), style)
   const index = { version: 1, default: DEFAULT_FILE, maps: {} }
-  const files = [{ path: `${UI_DIR}/${DEFAULT_FILE}`, bytes: JSON.stringify(withTemplates(module.ui ?? { version: 1 }, panels), null, 1) }]
+  const files = [{ path: `${UI_DIR}/${DEFAULT_FILE}`, bytes: JSON.stringify(complete(module.ui ?? { version: 1 }), null, 1) }]
   for (const doc of docs) {
     if (!doc.ui) continue
     index.maps[doc.name] = mapFile(doc.name)
-    files.push({ path: `${UI_DIR}/${mapFile(doc.name)}`, bytes: JSON.stringify(withTemplates(doc.ui, panels), null, 1) })
+    files.push({ path: `${UI_DIR}/${mapFile(doc.name)}`, bytes: JSON.stringify(complete(doc.ui), null, 1) })
   }
   if (!Object.keys(index.maps).length) delete index.maps
   files.unshift({ path: `${UI_DIR}/index.json`, bytes: JSON.stringify(index, null, 1) })

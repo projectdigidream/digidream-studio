@@ -26,6 +26,7 @@
 //
 
 import { graphsOf } from './graphs_emit.js'
+import { panelStyleRef } from './style_emit.js'
 
 export const NAME_RE = /^[a-z0-9_]{1,24}$/
 export const KINDS = ['label', 'button', 'toggle', 'slider', 'select']
@@ -95,15 +96,20 @@ export function contentOf (name, panel, opts = {}) {
   return { title: panel.title ?? name, template: name, widgets: widgetsOf(panel, opts) }
 }
 
-/** The panel's LOOK as a layout template (docs/UI_LAYOUT.md 5.2). */
-export function templateOf (panel) {
+/**
+ * The panel's LOOK as a layout template (docs/UI_LAYOUT.md 5.2). With a named
+ * style (`look.styleName`, the module's Style section) its `style` is that
+ * name and the style's colours beside it (style_emit.js panelStyleRef).
+ */
+export function templateOf (panel, styles = null) {
   const L = panel.look ?? {}
   const t = { anchor: L.anchor ?? 'c', x: L.x ?? 0, y: L.y ?? 0, w: L.w ?? 320 }
   if (L.h !== undefined) t.h = L.h
   t.modal = !!L.modal
   if (L.closeable === false) t.closeable = false
   if (L.showTitle === false) t.title = { show: false }
-  if (L.style && Object.keys(L.style).length) t.style = { ...L.style }
+  if (L.styleName) t.style = panelStyleRef(L.styleName, styles?.[L.styleName], L.style ?? {})
+  else if (L.style && Object.keys(L.style).length) t.style = { ...L.style }
   t.slots = (panel.widgets ?? []).map((w) => {
     const s = w.slot ?? {}
     const sl = { widget: w.id, anchor: 'tl', x: s.x ?? 0, y: s.y ?? 0, w: s.w ?? 120 }
@@ -116,11 +122,11 @@ export function templateOf (panel) {
 }
 
 /** A layout with the module's panel templates in it, over any of the same name. */
-export function withTemplates (layout, panels) {
+export function withTemplates (layout, panels, styles = null) {
   const out = JSON.parse(JSON.stringify(layout ?? { version: 1 }))
   if (!panels || !Object.keys(panels).length) return out
   out.panels = { ...(out.panels ?? {}) }
-  for (const [name, p] of Object.entries(panels)) out.panels[name] = templateOf(p)
+  for (const [name, p] of Object.entries(panels)) out.panels[name] = templateOf(p, styles)
   return out
 }
 

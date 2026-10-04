@@ -22,6 +22,7 @@
 import { el, row, number, text, select, toggle, button, muted, ask, confirmDialog } from './ui.js'
 import { anchorFor } from './ui_emit.js'
 import { DEVICES } from './screens.js'
+import { withStyle } from './style_emit.js'
 import {
   KINDS, MAX_WIDGETS, SLOT_H, NAME_RE, cleanName, freeName, newPanel, addWidget, widgetsOf, withTemplates,
   panelProblems, panelUses, renamePanelRefs, renameWidgetRefs
@@ -135,7 +136,8 @@ class PanelWindow {
     const stage = this.stage
     const frame = this.frame
     this.dev = dev
-    const layout = parseLayout(withTemplates(S.module.ui ?? { version: 1 }, this.panels)).layout
+    // The layout the game draws from: the panels, and the module's style.
+    const layout = parseLayout(withStyle(withTemplates(S.module.ui ?? { version: 1 }, this.panels, S.module.style?.styles), S.module.style)).layout
     this.layout = layout
     this.hud.setLayout(layout)
     this.hud.update({ hp: 75, 'hud.hp_max': 100, ...this.sample })
@@ -543,6 +545,16 @@ class PanelWindow {
     return [el('div', { class: 'st-section-head', text: `▸ ${this.name}` }),
       text('name', this.name, (v) => this.#rename(v)),
       text('title', p.title ?? '', (v) => { p.title = v; ch() }),
+      // A named style of the module's (the Style section): the whole look, shared.
+      el('div', { class: 'st-row' }, [el('label', { text: 'style' }),
+        (() => {
+          const names = Object.keys(this.S.module.style?.styles ?? {})
+          const sel = el('select', { 'data-panel-style': '1' }, [el('option', { value: '', text: names.length ? '(its own colours)' : '(no styles yet)' }), ...names.map((n) => el('option', { value: n, text: n }))])
+          sel.value = L.styleName ?? ''
+          sel.addEventListener('change', () => { if (sel.value) L.styleName = sel.value; else delete L.styleName; ch() })
+          return sel
+        })(),
+        button('🎨', () => this.S.go('style', L.styleName || null))]),
       toggle('title bar', L.showTitle !== false, (v) => { L.showTitle = v; ch() }),
       toggle('the player can close it (×)', L.closeable !== false, (v) => { L.closeable = v; ch() }),
       toggle('modal: dims the game, takes the touch input', !!L.modal, (v) => { L.modal = v; ch() }),

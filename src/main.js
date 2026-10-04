@@ -21,6 +21,7 @@ import { install as installTextures } from './sections/textures.js'
 import { install as installSettings } from './sections/settings.js'
 import { install as installScripts } from './sections/scripts.js'
 import { install as installGraphs } from './sections/graphs.js'
+import { install as installStyle } from './sections/style.js'
 import { install as installCamera } from './mapeditor/camera.js'
 import { install as installNeighbours } from './mapeditor/neighbours.js'
 import { migratePlayer, overrides, paramNames } from './player.js'
@@ -220,7 +221,7 @@ S.sectionAlias = sectionAlias
 // `save` is a const further down; reached through a wrapper so this runs first.
 S.save = () => save()
 Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starterDoc, showInspector, emitAll })
-for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installGraphs, installCamera, installNeighbours]) install(S)
+for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installGraphs, installStyle, installCamera, installNeighbours]) install(S)
 await S.loadPacks()
 S.router.register({
   id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
@@ -246,6 +247,7 @@ pageSection('music', 'Music', '♪', /^Soundtrack/, () => S.showMusic())
 pageSection('sounds', 'Sounds', '🔊', /^Sounds$/, () => S.showSounds())
 windowSection('screens', 'Screens', '▣', () => openScreens(S))
 windowSection('panels', 'Panels', '▢', (name) => openPanels(S, name))
+pageSection('style', 'Style', '🎨', /^Style$/, (name) => S.showStyle(name ?? null))
 pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
 pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
 windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
@@ -388,6 +390,8 @@ async function openModule (id, { show = true } = {}) {
   // The module's sound packs, read and merged (sections/sounds.js); at boot
   // the section is installed after the first module opens and loads them then.
   await S.loadPacks?.()
+  // The module's own fonts, so the Style section's samples and previews show them.
+  await S.loadStyleFonts?.()
   for (const [path, blob] of Object.entries(rec.assets ?? {})) {
     if (path.startsWith('textures/') && path.endsWith('.png')) S.imageUrls.set(path.slice(9, -4), URL.createObjectURL(blob))
     if (path.startsWith('sprites/') && path.endsWith('.png')) S.spriteUrls.set(path.slice(8, -4), URL.createObjectURL(blob))
