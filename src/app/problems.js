@@ -11,10 +11,11 @@ import { validate } from '../doc.js'
 import { graphProblems, graphsOf, NAME_RE } from '../graphs_emit.js'
 import { metamapProblems } from '../metamap.js'
 import { skyProblems } from '../sky_emit.js'
+import { playerProblems } from '../player.js'
 
-/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg] } */
+/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg] } */
 export function moduleProblems (S) {
-  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [] }
+  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [] }
   const V = S.vocab
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
@@ -33,6 +34,8 @@ export function moduleProblems (S) {
   const tex = S.allTextureNames?.() ?? null
   out.sky.push(...skyProblems(S.module.sky, tex, 'the module\'s sky'))
   for (const d of Object.values(S.docs)) out.sky.push(...skyProblems(d.sky, tex, `${d.name}'s sky`))
+  // The player's lines: a value of the wrong kind (docs/PLAYER.md).
+  out.player.push(...playerProblems(S.module, Object.values(S.docs)))
   if (S.module.mobs) out.monsters.push(...V.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }))
   if (S.module.weapons && V.weapon && Object.keys(S.module.weapons.weapons ?? {}).length) out.weapons.push(...V.validateWeapons(S.module))
   out.metamap.push(...metamapProblems(S.module.metamap, Object.keys(S.docs)))
@@ -43,5 +46,5 @@ export function moduleProblems (S) {
 
 /** How many problems each rail entry has. */
 export function badgeCounts (p) {
-  return { maps: new Set(p.maps.map((x) => x.map)).size + (p.metamap.length ? 1 : 0), graphs: p.graphs.length, monsters: p.monsters.length, weapons: p.weapons.length, sounds: p.sounds.length }
+  return { maps: new Set(p.maps.map((x) => x.map)).size + (p.metamap.length ? 1 : 0), graphs: p.graphs.length, monsters: p.monsters.length, weapons: p.weapons.length, sounds: p.sounds.length, player: p.player?.length ?? 0 }
 }

@@ -34,7 +34,7 @@ import { emitGraph, graphFile, gameGraphFile, hasGraph, liveGraphs } from './gra
 import { triggerPanels, graphPanels } from './panels_emit.js'
 import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
-import { emitPlayerLua, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
+import { playerLines, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
 import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
 import { toLua } from './lua.js'
@@ -152,7 +152,7 @@ export function newModule (id, name = id) {
     weapons: { ammo: {}, health: null, weapons: {}, pickups: {} },
     // Which record draws a player, and which state each animation condition
     // picks. `prop` names one of `props` above.
-    player: null,             // { prop, blend, when, body, moves, start } -- every map's; a map overrides with playerOverride
+    player: null,             // { prop, blend, when, body, set, start } -- every map's; a map overrides with playerOverride
     vfx: [],                  // [{ id, type: 'particles'|'tracer', ... }] -- bursts and tracers
     controls: 'platformer',   // or 'fps' (module.txt `controls`)
     persist: [],              // any of PERSIST (module.txt `persist`)
@@ -260,6 +260,8 @@ export function moduleTxt (module, docs = []) {
   for (const f of gameScripts(module)) L.push(`game ${f}`)
   // The skies (docs/SKY.md): the module's, then each map's own, by name.
   L.push(...skyLines(module, docs))
+  // How the player moves (docs/PLAYER.md): the module's, then each map's own.
+  L.push(...playerLines(module, docs))
   return L.join('\n') + '\n'
 }
 
@@ -361,11 +363,6 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [], graph
   // The module's panels this map opens through its trigger table; a document
   // from before panels were the module's still carries its own.
   const lua = emitMapLua(doc, emitted, { panels: module.panels ? triggerPanels(doc, module.panels) : (doc.panels ?? null) })
-  // The player, resolved for this map: the module's with the map's override
-  // over it, so the file says what this map's player is rather than a base
-  // and a correction.
-  const player = emitPlayerLua(module, doc)
-  if (player !== null) lua.text += '\n' + player
   for (const p of lua.problems) errors.push({ line: 0, msg: p })
   // The graphs, each its own file under its own name, their verbs' places
   // resolved as the trigger table's are.

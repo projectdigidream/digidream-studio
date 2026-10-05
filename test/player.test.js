@@ -1,26 +1,28 @@
 //
 // The player: what the studio may author about one, and what it may not.
 //
-// THE ENGINE OWNS A PLAYER'S BODY. `set_body_param` refuses a player outright
-// -- "a player's body comes from the catalogue and their session" -- so the
-// studio cannot write a speed. What it can do is modify it through the EFFECT
-// STACK, which is what the generated block does, and this is where that is
-// held to the runtime's own words.
+// HOW A PLAYER MOVES IS THE MODULE'S TO SAY: `player` lines in module.txt
+// (docs/PLAYER.md), values the server builds each arriving player from. This
+// holds the studio's table to the engine's names, types and defaults, and its
+// lines to what the server reads.
 //
 // The other half is the merge. Everything a module defines is one file now
 // (a map may declare eight scripts and three runtimes cost six), and the
 // server harvests hooks PER CHUNK -- so two parts of that file both defining
 // `on_tick` would leave one of them. That is the case with real teeth here.
 //
-// ORACLES: maps/scripts/*.lua under LuaJIT against the stub world, and
-// core/include/dnp/physics/params_table.hpp for the parameter names.
+// ORACLES: maps/scripts/*.lua under LuaJIT against the stub world;
+// core/include/dnp/physics/params_table.hpp for the names and types;
+// docs/PLAYER.md's tables for the defaults; dnp-server reading the lines.
 //
-import { readFileSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
-import { join } from 'node:path'
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
+import { spawnSync, spawn } from 'node:child_process'
+import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
-import { emitPlayerLua, paramNames, newPlayer, playerFor, migratePlayer, overrides, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua, hasMoveSounds } from '../src/player.js'
-import { emitModuleLua, emitGameLua, moduleTxt, gameScripts } from '../src/module_emit.js'
+import { paramNames, paramOf, PLAYER_PARAMS, paramText, playerLines, playerProblems, baseValue, newPlayer, playerFor, migratePlayer, overrides, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua, hasMoveSounds } from '../src/player.js'
+import { emitModuleLua, emitGameLua, moduleTxt, gameScripts, newModule, emitModule, RUNTIME_SCRIPTS } from '../src/module_emit.js'
+import { newDoc, addSector, addSpawn } from '../src/doc.js'
+import { bake } from '../src/bake.js'
 import { ROOT } from './oracle.js'
 
 const LUAJIT = join(ROOT, 'engine', 'third_party', 'luajit', 'src', 'luajit')
@@ -44,42 +46,64 @@ const offered = paramNames()
 const unknown = offered.filter((n) => !engine.has(n))
 check(unknown.length === 0, `every parameter the studio offers is one the engine has (${unknown.join(', ') || 'all of them'})`)
 check(offered.includes('move_speed') && offered.includes('jump_impulse'), 'including the two anybody asks for first')
+// Every parameter but the body's size (the size tab's, written into each map),
+// each of the engine's type.
+const TYPES = { Fx: 'number', Bool: 'switch', U8: 'count' }
+const typed = new Map([...header.matchAll(/DNP_PARAM\(\s*(\w+),\s*ParamType::(\w+)/g)].map((m) => [m[1], TYPES[m[2]]]))
+const missing = [...engine].filter((n) => n !== 'field' && n !== 'radius' && n !== 'height' && !paramOf(n))
+check(missing.length === 0, `every parameter the engine has is offered (${missing.join(', ') || 'all of them'})`)
+const wrongType = paramNames().filter((n) => typed.get(n) !== paramOf(n).type)
+check(wrongType.length === 0, `each as the engine types it (${wrongType.map((n) => `${n} ${paramOf(n).type}, engine ${typed.get(n)}`).join('; ') || 'all agree'})`)
+// The defaults are docs/PLAYER.md §3's, read out of its tables.
+{
+  const doc = readFileSync(join(ROOT, 'docs', 'PLAYER.md'), 'utf8')
+  const def = new Map()
+  for (const m of doc.matchAll(/^\| `(\w+)`(?: \/ `(\w+)`)? \| ([^|]+) \|/gm)) {
+    const vals = m[3].trim().replace(/−/g, '-').split(/\s*\/\s*/)
+    def.set(m[1], vals[0]); if (m[2]) def.set(m[2], vals[1] ?? vals[0])
+  }
+  const read = (n, t) => t === 'switch' ? t && def.get(n) === 'on' : Number(def.get(n))
+  const off = paramNames().filter((n) => !def.has(n) || read(n, paramOf(n).type) !== paramOf(n).def)
+  check(def.size > 30 && off.length === 0, `each default is PLAYER.md's (${off.map((n) => `${n} ${paramOf(n).def}, doc ${def.get(n)}`).join('; ') || `${def.size} read, all agree`})`)
+}
 
 // --- what it writes -----------------------------------------------------------------------
+check(paramText('move_speed', 9.5) === '9.5' && paramText('jump_impulse', 11) === '11' && paramText('swing_damping', 0.003) === '0.003' &&
+      paramText('attack_sweep_from', -0.125) === '-0.125' && paramText('hover_enabled', true) === 'on' && paramText('climb_enabled', false) === 'off' &&
+      paramText('max_jumps', 1.4) === '1' && paramText('move_speed', 1e-7) === '0' && paramText('dash_speed', 0.1 + 0.2) === '0.3',
+      'values are written in the server\'s words: exact decimals, never an exponent; on/off; whole counts')
 const module = {
   id: 'p', scripts: {},
-  player: { prop: 'hero', blend: null, when: {}, moves: { move_speed: { mul: 1.5 }, jump_impulse: { add: 2 } }, start: { weapons: ['fists', 'shotgun'] } }
+  player: { prop: 'hero', blend: null, when: {}, set: { jump_impulse: 11, move_speed: 9.5, max_jumps: 1, hover_enabled: true }, start: { weapons: ['fists', 'shotgun'] } }
 }
-const lua = emitPlayerLua(module)
+const docsP = [{ name: 'moon', playerOverride: { set: { gravity_scale: 0.6 } } }, { name: 'plain' }]
+check(playerLines(module, docsP).join('|') === 'player move_speed 9.5|player jump_impulse 11|player max_jumps 1|player hover_enabled on|player moon gravity_scale 0.6',
+      `the lines: the module's in the table's order, then a map's own under its name (${playerLines(module, docsP).join(' | ')})`)
+check(/^player jump_impulse 11$/m.test(moduleTxt(module, docsP)) && /^player moon gravity_scale 0.6$/m.test(moduleTxt(module, docsP)), 'module.txt carries them')
+check(!/^player /m.test(moduleTxt({ id: 'x', name: 'x', player: newPlayer() }, [{ name: 'a' }])), 'CONTROL: an untouched player says nothing, so the engine\'s defaults hold')
+check(baseValue({ controls: 'fps' }, 'turn_speed') === 1000 && baseValue({ controls: 'fps' }, 'move_relative') === true && baseValue({}, 'turn_speed') === 4,
+      'what is unset is the engine\'s, or what first-person controls set')
+check(playerProblems({ player: { set: { max_jumps: 300, hover_enabled: 'yes', nope: 1 } } }).length === 3 && playerProblems(module, docsP).length === 0,
+      'a count out of range, a switch that is not one, a name the engine lacks are said; CONTROL: good values are not')
 // What they hold is the GAME's: the weapons run once for the whole game, so
 // the starting kit is written into the game file, not into any map.
 const armed = { ...module, weapons: { ammo: {}, weapons: { fists: { phases: { ready: {} }, initial: 'ready' }, shotgun: { phases: { ready: {} }, initial: 'ready' } } } }
 const game = emitGameLua(armed)
 check(/weapons\.initial_weapons = \{ "fists", "shotgun" \}/.test(game ?? ''), `what the player starts holding is named, in the game file (${/initial_weapons[^\n]*/.exec(game ?? '')?.[0]})`)
-check(!/initial_weapons/.test(lua), 'and not in a map, where a level would hand them a fresh kit on arrival')
-check(/add_effect\("move_speed", "mul", fx\.parse\("1\.5"\), nil, "studio_player"\)/.test(lua) ||
-      /add_effect\("move_speed", "mul", /.test(lua), 'a modifier goes through the effect stack, tagged so a second arrival replaces it')
-check(/e:add_effect\("jump_impulse", "add", fx\.int\(2\)/.test(lua), 'and an addition is written as the whole number it is')
-check(emitPlayerLua({ id: 'x' }) === null, 'CONTROL: a module that says nothing about the player writes nothing')
-check(emitPlayerLua({ id: 'x', player: newPlayer() }) === null, 'CONTROL: nor does an untouched one')
 
 // --- the module's player, and a map's override -----------------------------------------
 //
 // The player is set up once for the module; a map overrides exactly what it
 // names and follows the module in everything else.
 {
-  const mod = { id: 'm', player: { ...newPlayer(), body: { radius: 0.5, height: 2 }, moves: { move_speed: { mul: 1.5 }, gravity_scale: { mul: 0.5 } }, start: { weapons: ['fists'] } } }
+  const mod = { id: 'm', player: { ...newPlayer(), body: { radius: 0.5, height: 2 }, set: { move_speed: 12, gravity_scale: 0.5 }, start: { weapons: ['fists'] } } }
   const plain = {}
-  const giant = { playerOverride: { body: { radius: 1, height: 4 }, moves: { gravity_scale: {}, jump_impulse: { add: 3 } } } }
+  const giant = { playerOverride: { body: { radius: 1, height: 4 }, set: { gravity_scale: 1, jump_impulse: 12 } } }
   const a = playerFor(mod, plain)
   const b = playerFor(mod, giant)
-  check(a.body.height === 2 && a.moves.move_speed.mul === 1.5, 'a map with no override is the module\'s player')
-  check(b.body.height === 4 && b.moves.move_speed.mul === 1.5 && b.moves.jump_impulse.add === 3, 'an override replaces what it names and inherits the rest')
-  check(!('gravity_scale' in b.moves), 'an override that modifies nothing turns the module\'s modifier off on that map')
+  check(a.body.height === 2 && a.set.move_speed === 12, 'a map with no override is the module\'s player')
+  check(b.body.height === 4 && b.set.move_speed === 12 && b.set.jump_impulse === 12 && b.set.gravity_scale === 1, 'an override replaces what it names and inherits the rest')
   check(overrides(giant).join() === 'size,moves' && overrides(plain).length === 0, `what a map overrides is listed by name (${overrides(giant)})`)
-  const lua = emitPlayerLua(mod, giant)
-  check(/jump_impulse/.test(lua) && !/gravity_scale/.test(lua), 'a map\'s Lua carries its resolved player, not the module\'s plus a correction')
-  check(/gravity_scale/.test(emitPlayerLua(mod, plain)), 'CONTROL: the plain map still carries the module\'s modifier')
 
   // Maps written when the size was each map's own.
   const docs = { one: { body: { radius: 0.5, height: 2 } }, two: { body: { radius: 0.5, height: 2 } }, big: { body: { radius: 1, height: 3 } } }
@@ -96,6 +120,51 @@ check(emitPlayerLua({ id: 'x', player: newPlayer() }) === null, 'CONTROL: nor do
   const kit = { k: { playerOverride: { weapons: ['fists'] } }, both: { playerOverride: { weapons: null, body: { radius: 1, height: 3 } } } }
   check(migratePlayer({ id: 'z', player: newPlayer() }, kit) && !kit.k.playerOverride && kit.both.playerOverride.body && !('weapons' in kit.both.playerOverride),
         `a map's own starting kit is dropped, and an override with nothing left goes with it (${JSON.stringify(kit)})`)
+  // MODIFIERS, from when movement went through the effect stack, become the
+  // values they came to: the engine's (or the scheme's) value × mul + add.
+  const old = { id: 'o', controls: 'fps', player: { ...newPlayer(), set: undefined, moves: { move_speed: { mul: 1.5 }, jump_impulse: { add: 2 }, turn_speed: { mul: 0.5 }, max_jumps: { add: -1 }, swing_damping: { mul: 2 } } } }
+  delete old.player.set
+  const oldDocs = { low: { playerOverride: { moves: { gravity_scale: { mul: 0.5 }, move_speed: {} } } }, bare: { playerOverride: { moves: {} } } }
+  check(migratePlayer(old, oldDocs), 'old modifiers are migrated')
+  const s = old.player.set
+  check(s.move_speed === 12 && s.jump_impulse === 11 && s.turn_speed === 500 && s.max_jumps === 1 && s.swing_damping === 0.006 && !('moves' in old.player),
+        `each modifier becomes its value, on top of the scheme's (${JSON.stringify(s)})`)
+  check(oldDocs.low.playerOverride.set.gravity_scale === 0.5 && oldDocs.low.playerOverride.set.move_speed === 8 && !oldDocs.bare.playerOverride,
+        `a map's own: a modifier its value, one that modified nothing the plain value, an empty override gone (${JSON.stringify(oldDocs)})`)
+  check(!migratePlayer(old, oldDocs), 'and a second run finds nothing to do')
+}
+
+// --- the server reads every line the studio writes ---------------------------------------
+const SERVER = join(ROOT, 'engine', 'build', 'server', 'dnp-server')
+if (!existsSync(SERVER)) console.log('player: no server build -- the server check is skipped')
+else {
+  const runtime = {}
+  for (const n of RUNTIME_SCRIPTS) runtime[n] = readFileSync(join(ROOT, 'engine', 'maps', 'scripts', n), 'utf8')
+  const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+  const serve = async (mod, ds, port, extraTxt = '') => {
+    const real = ds.map((d) => { const doc = newDoc(d.name); addSector(doc, rect(0, 0, 16, 8), { floorTex: 'F', ceilTex: 'C' }); addSpawn(doc, 'start', 2, 2); if (d.playerOverride) doc.playerOverride = d.playerOverride; return doc })
+    const r = await emitModule(mod, real, { bake, runtime })
+    const dir = mkdtempSync(join(tmpdir(), 'dnp-player-srv-'))
+    for (const f of r.files) { const p = join(dir, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, (typeof f.bytes === 'string' ? f.bytes : Buffer.from(f.bytes))) }
+    if (extraTxt) writeFileSync(join(dir, 'module.txt'), readFileSync(join(dir, 'module.txt'), 'utf8') + extraTxt)
+    const srv = spawn(SERVER, ['--port', String(port), '--module', dir], { cwd: join(ROOT, 'engine') })
+    let log = ''
+    srv.stderr.on('data', (d) => { log += d }); srv.stdout.on('data', (d) => { log += d })
+    await new Promise((res) => setTimeout(res, 2000))
+    srv.kill()
+    return { ok: r.ok, txt: readFileSync(join(dir, 'module.txt'), 'utf8'), log }
+  }
+  // Every parameter set to a value of its type, module-wide and on one map.
+  const every = {}
+  for (const g of PLAYER_PARAMS) for (const p of g.params) every[p.name] = p.type === 'switch' ? !p.def : p.type === 'count' ? 3 : p.def + 0.125
+  const full = { ...newModule('players', 'players'), player: { ...newPlayer(), set: every } }
+  const fdocs = [{ name: 'moon', playerOverride: { set: { gravity_scale: 0.6, max_jumps: 0, flight_enabled: true } } }, { name: 'plain' }]
+  const good = await serve(full, fdocs, 34717)
+  const said = good.log.split('\n').filter((l) => /module\.txt: .*player/.test(l))
+  check(good.ok && (good.txt.match(/^player /gm) ?? []).length === paramNames().length + 3 && said.length === 0 && /level\(s\)/.test(good.log),
+        `the server reads every player line the studio writes, without a word (${(good.txt.match(/^player /gm) ?? []).length} lines; ${said.join(' | ') || 'none said'})`)
+  const bad = await serve(full, fdocs, 34718, 'player max_jumps lots\n')
+  check(/module\.txt: player max_jumps lots -- a count is a whole number/.test(bad.log), `CONTROL: a line it cannot read it reports, so the silence above means something (${bad.log.split('\n').filter((l) => /player max_jumps lots/.test(l)).join(' | ')})`)
 }
 
 // --- the merge must not lose a hook ---------------------------------------------------------
@@ -129,12 +198,6 @@ if (!existsSync(LUAJIT)) {
   const r = run(`dofile("${f}")\non_tick()\nprint(COUNT_A, COUNT_B)\n`)
   check(r.status === 0 && /^1\s+1/m.test(r.out), `both handlers run, as two chunks did (${r.out.trim().split('\n').pop()})`)
 
-  // And the player's own block loads against the real runtimes, in a map's
-  // chunk -- after the map's own Lua, whose on_tick it must keep.
-  const g = join(dir, 'player.lua')
-  writeFileSync(g, 'MAP_TICKS = 0\nfunction on_tick() MAP_TICKS = MAP_TICKS + 1 end\n' + emitPlayerLua(module, {}))
-  const r2 = run(`dofile("tools/mobcheck/stub.lua")\ndofile("maps/scripts/weapon_vocab.lua")\ndofile("maps/scripts/weapons.lua")\ndofile("${g}")\non_tick()\nprint("ok", type(on_tick), MAP_TICKS)\n`)
-  check(r2.status === 0 && /ok\s+function\s+1/.test(r2.out), `the player's block loads, and the map's own on_tick still runs:\n${r2.out}`)
 }
 
 // --- the player's sounds -----------------------------------------------------------------

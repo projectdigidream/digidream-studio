@@ -726,41 +726,44 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
         `one map's own size leaves the module and the other maps alone (${JSON.stringify(size)})`)
   check(size.undoable, 'and it is a change to the map, so it undoes with it')
   check(size.after === null, `switching the override off leaves nothing behind (${JSON.stringify(size.after)})`)
-  // One movement parameter overridden on one map: that map's Lua carries the
-  // resolved set, the other map's the module's.
+  // One movement parameter overridden on one map: module.txt gets a line
+  // under that map's name, and none for the other map.
   const perMap = await page.evaluate(async () => {
     const S = window.__studio
-    const { emitPlayerLua } = await import('/studio/src/player.js')
+    const { playerLines } = await import('/studio/src/player.js')
     S.workshop.tab = 'moves'; S.workshop.render()
     const card = document.querySelector('.wk-details .st-card[data-param="jump_impulse"]')
     card.querySelector('button').click()
-    const r = { own: S.doc.playerOverride?.moves?.jump_impulse, mine: emitPlayerLua(S.module, S.doc), other: emitPlayerLua(S.module, S.docs.second) }
+    const said = card.textContent
+    S.workshop.render()
+    const input = document.querySelector('.wk-details .st-card[data-param="jump_impulse"] input[type=number]')
+    input.value = '12'; input.dispatchEvent(new Event('change'))
+    const r = { own: S.doc.playerOverride?.set?.jump_impulse, said, lines: playerLines(S.module, Object.values(S.docs)), map: S.docName }
     delete S.doc.playerOverride
     S.playerScope = 'module'
     S.workshop.render()
     return r
   })
-  check(perMap.own?.mul === 1 && /jump_impulse/.test(perMap.mine ?? '') && !/jump_impulse/.test(perMap.other ?? ''),
-        `a movement override is this map's alone (${JSON.stringify(perMap.own)})`)
-  // MOVEMENT IS A MODIFIER, because the engine will not let a script write a
-  // player's body at all.
-  const moves = await page.evaluate(() => {
+  check(perMap.own === 12 && perMap.lines.includes(`player ${perMap.map} jump_impulse 12`) && !perMap.lines.some((l) => / second /.test(l)),
+        `a movement override is this map's alone, a line under its name (${JSON.stringify(perMap)})`)
+  // MOVEMENT IS A VALUE the module says, starting from the engine's.
+  const moves = await page.evaluate(async () => {
     const S = window.__studio
+    const { moduleTxt } = await import('/studio/src/module_emit.js')
     S.workshop.tab = 'moves'; S.workshop.render()
-    const card = [...document.querySelectorAll('.wk-details .st-card')].find((c) => c.textContent.includes('move_speed'))
-    card.querySelector('button').click()
+    const before = document.querySelector('.wk-details .st-card[data-param="move_speed"]').textContent
+    document.querySelector('.wk-details .st-card[data-param="move_speed"] button').click()
     S.workshop.render()
-    return { moves: S.module.player.moves, groups: [...document.querySelectorAll('.wk-details .st-section-head')].map((h) => h.textContent) }
+    const sw = document.querySelector('.wk-details .st-card[data-param="hover_enabled"] button')
+    sw.click(); S.workshop.render()
+    document.querySelectorAll('.wk-details .st-card[data-param="hover_enabled"] button')[1]?.click()
+    return { set: { ...S.module.player.set }, before, groups: [...document.querySelectorAll('.wk-details .st-section-head')].map((h) => h.textContent),
+             txt: moduleTxt(S.module, Object.values(S.docs)).split('\n').filter((l) => /^player /.test(l)) }
   })
-  check(moves.moves.move_speed?.mul === 1, `a parameter is turned on as a modifier (${JSON.stringify(moves.moves)})`)
-  check(moves.groups.length >= 4, `grouped as somebody thinks about them (${moves.groups.join(' | ')})`)
-  const written = await page.evaluate(async () => {
-    const S = window.__studio
-    S.module.player.moves.move_speed = { mul: 1.5 }
-    const { emitPlayerLua } = await import('/studio/src/player.js')
-    return emitPlayerLua(S.module)
-  })
-  check(/add_effect\("move_speed", "mul"/.test(written), 'and it is written through the effect stack, which is what a player allows')
+  check(/the engine's: 8 units\/s/.test(moves.before), `an unset parameter says the engine's value (${moves.before})`)
+  check(moves.set.move_speed === 8 && moves.set.hover_enabled === true, `set, it starts from that value; a switch is on or off (${JSON.stringify(moves.set)})`)
+  check(moves.groups.length >= 7, `grouped as PLAYER.md has them (${moves.groups.join(' | ')})`)
+  check(moves.txt.includes('player move_speed 8') && moves.txt.includes('player hover_enabled on'), `and written as module.txt player lines (${moves.txt.join(' | ')})`)
   await page.evaluate(async () => {
     const S = window.__studio
     S.module.player = null
