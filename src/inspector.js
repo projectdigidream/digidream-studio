@@ -11,6 +11,7 @@ import { el, row, slider, number, text, toggle, select, button, tiles, chips, ca
 import { EDGE_FLAGS, removeSector, newId, newEdge, newStyle } from './doc.js'
 import { findEdge } from './doc.js'
 import { twinEdge } from './presets.js'
+import { climbSides, climbSays } from './climb.js'
 
 const TEX_NONE = '(none)'
 
@@ -145,6 +146,19 @@ function sectorForm (s, doc, ctx) {
   return body
 }
 
+/** What a climbable side climbs, by the engine's rule; a flag on the wrong side of a step offered across. */
+function climbRows (doc, e, edge, twin, ctx) {
+  if (!edge.flags.climbable) return []
+  const c = climbSides(doc).find((x) => x.edge === edge && x.sector === e.sector.id) ?? climbSides(doc).find((x) => x.edge === edge)
+  if (!c) return []
+  const bad = c.kind === 'low' || c.kind === 'down' || c.kind === 'open'
+  const rows = [el('div', { class: bad ? 'st-danger' : 'st-muted', 'data-climb': c.kind, text: `🧗 ${climbSays(c)}` })]
+  if (c.kind === 'down' && twin) {
+    rows.push(button('move climbable to the lower side', () => { edge.flags.climbable = false; twin.flags.climbable = true; ctx.commit(); ctx.refreshSheet?.() }))
+  }
+  return rows
+}
+
 function edgeForm (sel, doc, ctx) {
   const e = findEdge(doc, sel.id)
   if (!e) return null
@@ -168,6 +182,7 @@ function edgeForm (sel, doc, ctx) {
     !twin && edge.force === 'open' ? muted('Open sides join a neighbouring map on the metamap where both are open along the same line, in the world. Elsewhere it is a drop off the edge.') : null,
     ...seamRows(ctx.seamFor?.(edge.id)),
     row('flags', flagChips()),
+    ...climbRows(doc, e, edge, twin, ctx),
     ...alphaRows(edge, ctx, 'the wall is'),
     number('x offset', edge.xoff, { min: -64, max: 64, step: 0.125 }, (v) => { edge.xoff = v; ctx.commit() }),
     number('y offset', edge.yoff, { min: -64, max: 64, step: 0.125 }, (v) => { edge.yoff = v; ctx.commit() }),

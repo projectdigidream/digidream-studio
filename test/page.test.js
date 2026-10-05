@@ -1322,7 +1322,9 @@ await page.keyboard.press('Escape')
     await S.go('screens')
     const w = S.window
     w.device = 'phone, landscape'; w.tab = 'hud'; w.render()
-    await new Promise((r) => setTimeout(r, 200))
+    // The HUD lays out after its fonts and the frame's size settle: waited
+    // for, not slept on (200 ms was sometimes short on a busy machine).
+    for (let i = 0; i < 30 && !document.querySelector('.sc .sc-hit-hud'); i++) await new Promise((r) => setTimeout(r, 100))
     return { hud: !!document.querySelector('.sc .sc-frame .dnp-hud'), hits: document.querySelectorAll('.sc .sc-hit-hud').length, moduleUi: !!S.module.ui,
              tabs: [...document.querySelectorAll('.sc .wk-top .sc-tabs button')].filter((b) => b.offsetParent).length }
   })

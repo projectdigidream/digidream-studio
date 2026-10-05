@@ -59,7 +59,8 @@ export const PLAYER_PARAMS = [
     P('max_jumps', 'count', 2, 'jumps', 'before landing again: 1 single, 2 double, 0 none')] },
   { group: 'climbing', params: [
     P('climb_enabled', 'switch', true, '', 'climbing walls marked climbable'),
-    P('climb_speed', 'number', 4, 'units/s', '')] },
+    P('climb_speed', 'number', 4, 'units/s', ''),
+    P('climb_auto', 'switch', false, '', 'how a wall is grabbed: off, by holding GRAB (G, or the touch button); on, by pushing into it')] },
   { group: 'dashing', params: [
     P('max_dashes', 'count', 1, 'dashes', 'before landing again; 0 is no dash'),
     P('dash_speed', 'number', 30, 'units/s', ''),

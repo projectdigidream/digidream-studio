@@ -36,6 +36,8 @@ export const COLORS = {
   path: 0x9a7bd6, pathHot: 0xd0a6ff, pathChord: 0x4a3f66,
   // A room the bake refused or a check complained about.
   problem: 0xff4d4d, problemWarn: 0xffa94d,
+  // A side that climbs (climb.js).
+  climb: 0x7ad48a,
   // The metamap: a map's cell, and how its boundary sides meet a neighbour's.
   cell: 0x8fa6c4, neighbourShade: 0x0b0d12, seam_joined: 0x66ff99, seam_oneway: 0xffa94d, seam_walls: 0x5f7fa8, seam_loose: 0xff6b6b
 }

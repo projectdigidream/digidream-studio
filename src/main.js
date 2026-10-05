@@ -40,6 +40,7 @@ import { parseProps } from '/src/render/props.js'
 import { parseAtlas } from '/src/render/atlas.js'
 import { loadMapcBinary, bake as bakeWith } from './bake.js'
 import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP } from './doc.js'
+import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
 import { Vocab } from './vocab.js'
@@ -143,7 +144,10 @@ S.preview.onResult = (r) => {
   // The rooms something is wrong with, marked on the map in red (amber for a
   // warning) and explained in each one's inspector.
   const before = JSON.stringify(S.problems ?? [])
-  S.problems = r.problems ?? []
+  // Climbable sides, worked out once a bake (derive is too dear for every
+  // redraw): what climbs is drawn green, what never grabs is a warning.
+  S.climbs = S.doc ? climbSides(S.doc).filter((c) => c.kind === 'wall' || c.kind === 'step') : []
+  S.problems = [...(r.problems ?? []), ...(S.doc ? climbProblems(S.doc).map((p) => ({ ...p, level: 'warn' })) : [])]
   const rooms = new Set(S.problems.filter((p) => p.level === 'error').map((p) => p.sector)).size
   const lead = rooms ? `${rooms === 1 ? 'one room is' : `${rooms} rooms are`} wrong (marked in red; tap one to see why)\n` : ''
   if (!r.ok) S.status(lead + r.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('\n'), 'error')
@@ -780,6 +784,11 @@ function redraw () {
       if (!e) continue
       lines.push({ points: insetEdge(e, 0.15, e.sector.floor + 0.12), color: COLORS[`seam_${sm.state.replace('-', '')}`] ?? COLORS.cell })
     }
+  }
+  // What climbs (climb.js): a green line just inside each climbable side.
+  for (const c of S.climbs ?? []) {
+    const e = findEdge(d, c.edge.id)
+    if (e) lines.push({ points: insetEdge(e, 0.1, e.sector.floor + 0.09), color: COLORS.climb })
   }
   // WHAT IS WRONG, on the map: each room a bake or a check complained about,
   // outlined in red (amber for a warning) with a badge, and the wall itself

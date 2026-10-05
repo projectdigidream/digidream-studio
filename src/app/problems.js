@@ -12,6 +12,7 @@ import { graphProblems, graphsOf, NAME_RE } from '../graphs_emit.js'
 import { metamapProblems } from '../metamap.js'
 import { skyProblems } from '../sky_emit.js'
 import { playerProblems } from '../player.js'
+import { climbProblems } from '../climb.js'
 
 /** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg] } */
 export function moduleProblems (S) {
@@ -20,6 +21,7 @@ export function moduleProblems (S) {
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
     for (const p of V.validateTriggers(d, S.module.panels ?? d.panels)) out.maps.push({ map: d.name, msg: p })
+    for (const p of climbProblems(d)) out.maps.push({ map: d.name, msg: `${p.sector}: ${p.msg}` })
     for (const [name, g] of graphsOf(d)) {
       if (!NAME_RE.test(name)) out.maps.push({ map: d.name, msg: `graph '${name}': a name is 1 to 32 of a-z, 0-9, _` })
       if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
