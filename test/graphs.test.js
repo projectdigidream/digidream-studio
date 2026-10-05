@@ -403,5 +403,29 @@ if (existsSync(SERVER)) {
   check(/there is no map 'yard'/.test(alone.log), `CONTROL: started on the tested map alone, the game graph is refused, as the play-test showed (${alone.log.split('\n').filter((l) => /no map/.test(l)).slice(0, 1).join('')})`)
 }
 
+// A SECTOR'S LOOKS (docs/GRAPHS.md "sectors"): its floor and ceiling
+// pictures, its light with a fade, and an effect, on a picked room. The server
+// loads it; CONTROL: an effect the engine lacks is named here and refused there.
+if (specs.has('set_sector_effect')) {
+  const looks = { vars: {}, nodes: [
+    { id: 'go', type: 'when_level_starts', pos: { x: 0, y: 0 } },
+    { id: 'lava', type: 'set_floor_texture', sector: { sector: lift.id }, texture: 'LAVA1', pos: { x: 260, y: 0 } },
+    { id: 'open', type: 'set_ceiling_texture', sector: { sector: lift.id }, texture: 'F_SKY1', pos: { x: 520, y: 0 } },
+    { id: 'dim', type: 'set_sector_light', sector: { sector: lift.id }, light: 60, seconds: 2, pos: { x: 780, y: 0 } },
+    { id: 'fog', type: 'set_sector_effect', sector: { sector: lift.id }, effect: 'fog', density: 0.5, color: '#203040', pos: { x: 1040, y: 0 } }
+  ], links: [['go.then', 'lava.in'], ['lava.then', 'open.in'], ['open.then', 'dim.in'], ['dim.then', 'fog.in']] }
+  check(graphProblems(looks, GV, TV).length === 0, `a sector's looks are clean (${graphProblems(looks, GV, TV).join(' | ')})`)
+  const smoke = structuredClone(looks); smoke.nodes[4].effect = 'smoke'
+  check(graphProblems(smoke, GV, TV).some((p) => /node 'fog': `effect` is one of rain/.test(p)), `CONTROL: an effect the engine lacks is named (${graphProblems(smoke, GV, TV).join(' | ')})`)
+  if (existsSync(SERVER)) {
+    const ok = await serveOne([{ ...structuredClone(plain), name: 'looks', graphs: { looks } }], 34709)
+    check(ok.ok && /\[graphs\] looks\.looks\.graph\.json: 5 nodes, 4 links/.test(ok.log) && !/refus/i.test(ok.log),
+          `the server loads a graph that changes a room's floor, ceiling, light and weather (${ok.log.split('\n').filter((l) => /looks/.test(l)).slice(0, 2).join(' | ')})`)
+    const bad = await serveOne([{ ...structuredClone(plain), name: 'looks', graphs: { looks: smoke } }], 34710)
+    check(bad.ok && !/\[graphs\] looks\.looks\.graph\.json: 5 nodes/.test(bad.log) && /looks\.graph\.json: node 'fog': 'effect' should be/.test(bad.log),
+          `CONTROL: and refuses smoke, as the studio says (${bad.log.split('\n').filter((l) => /node 'fog'/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
+  }
+}
+
 console.log(`graphs: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

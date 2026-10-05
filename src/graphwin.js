@@ -60,6 +60,14 @@ const MENU = [
   ['data', (s) => ['get_var', 'set_var', 'add_var', 'literal', 'compare', 'math', 'logic', 'random'].includes(s.name)]
 ]
 
+// The panel words, in the menu's own group (#palette): [kind, verb, label].
+const PANEL_ITEMS = [
+  ['event', 'on_ui_event', 'when a panel is used'],
+  ['condition', 'widget_is', 'if it was this widget …'],
+  ['action', 'ui_open', 'open a panel'],
+  ['action', 'ui_close', 'close a panel']
+]
+
 let win = null
 /**
  * @param arg  a graph's address (graphs_emit.js graphRoute): `game[:name]`
@@ -324,6 +332,11 @@ class GraphWindow {
       group(label, list.map((n) => [`node:${n.name}`, n.name.replace(/_/g, ' ')]))
     }
     group('other', specs.filter((n) => !taken.has(n.name)).map((n) => [`node:${n.name}`, n.name.replace(/_/g, ' ')]))
+    // THE PANELS, ready-made: the trigger words a panel is opened, closed and
+    // answered with, each dropped in as its node with the module's first panel
+    // filled in -- rather than "do … (an action)" and then finding ui_open.
+    const has = (kind, name) => kind === 'event' ? this.events.some((e) => e.name === name) : this.verbs(kind).some((v) => v.name === name)
+    group('🪟 panels', PANEL_ITEMS.filter(([kind, name]) => has(kind, name)).map(([kind, name, text]) => [`${kind === 'event' ? 'event' : kind === 'condition' ? 'cond' : 'act'}:${name}`, text]))
     // The trigger vocabulary's own words, for what the world's nodes do not say.
     group('trigger words', [...this.events.map((e) => [`event:${e.name}`, `when ${e.name}`]), ['cond:', 'if … (a condition)'], ['act:', 'do … (an action)']])
     sel.addEventListener('change', () => {
@@ -332,11 +345,11 @@ class GraphWindow {
       const [kind, name] = v.split(':')
       const g = this.ensure()
       const at = this.#freeSpot()
-      const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name.replace(/^when_/, '') : kind === 'cond' ? 'if' : 'do')
+      const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name.replace(/^when_/, '') : kind === 'cond' ? (name ? `if_${name}` : 'if') : (name || 'do'))
       const n = { id, pos: { x: at.x, y: at.y } }
       if (kind === 'event') Object.assign(n, { type: 'event', event: name })
-      else if (kind === 'cond') Object.assign(n, { type: 'condition', c: this.verbs('condition')[0]?.name })
-      else if (kind === 'act') Object.assign(n, { type: 'action', a: 'log', text: 'hello' })
+      else if (kind === 'cond') Object.assign(n, { type: 'condition', c: name || this.verbs('condition')[0]?.name })
+      else if (kind === 'act') Object.assign(n, name ? { type: 'action', a: name } : { type: 'action', a: 'log', text: 'hello' })
       else {
         n.type = name
         if (name === 'sequence') n.count = 2
@@ -351,6 +364,8 @@ class GraphWindow {
         if (name === 'on_call') n.name = this.S.callNames?.()[0] ?? 'hello'
         this.#defaults(n, nodeSpecs(this.gv).get(name))
       }
+      // A panel verb starts on the module's first panel.
+      if (kind === 'act' && (name === 'ui_open' || name === 'ui_close')) { const p = Object.keys(this.S.module.panels ?? {})[0]; if (p) n.panel = p }
       g.nodes.push(n)
       this.picked = { kind: 'node', id }
       this.changed()
@@ -371,6 +386,16 @@ class GraphWindow {
       else if (a.name === 'what') { const m = Object.keys(this.S.module.mobs?.mobs ?? {})[0]; if (m) n[a.name] = m }
     }
     if (n.type === 'move_floor' || n.type === 'move_ceiling') n.amount ??= 4
+  }
+
+  /** A node and every link to or from it. */
+  #deleteNode (n) {
+    const g = this.graph
+    if (!g) return
+    g.nodes.splice(g.nodes.indexOf(n), 1)
+    g.links = g.links.filter(([f, t]) => !f.startsWith(`${n.id}.`) && !t.startsWith(`${n.id}.`))
+    if (this.picked?.kind === 'node' && this.picked.id === n.id) this.picked = null
+    this.changed()
   }
 
   #newId (base) {
@@ -411,7 +436,9 @@ class GraphWindow {
     const p = pinsOf(n, spec, this.tv, this.gv)
     const bad = problems.some((m) => m.startsWith(`node '${n.id}'`))
     const on = this.picked?.kind === 'node' && this.picked.id === n.id
-    const head = el('div', { class: 'gw-head', text: `${n.type === 'event' ? '⚡ ' : ''}${n.id}` })
+    // A small ✕ to delete it where it is; undo brings it back.
+    const del = el('button', { class: 'gw-del', text: '✕', title: `delete ${n.id}`, 'data-del': n.id, onclick: (e) => { e.stopPropagation(); this.#deleteNode(n) } })
+    const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title', text: `${n.type === 'event' ? '⚡ ' : ''}${n.id}` }), del])
     const body = el('div', { class: 'gw-body' })
     const pin = this.pin = (name, dir, kind) => {
       const d = el('div', { class: `gw-pin gw-${dir} gw-${kind}`, 'data-pin': `${n.id}.${name}`, 'data-dir': dir, 'data-kind': kind },
@@ -623,6 +650,7 @@ class GraphWindow {
   /** Drag a node by its title; a tap selects it. */
   #nodeGesture (node, head, n) {
     head.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.gw-del')) { e.stopPropagation(); return }
       e.preventDefault(); e.stopPropagation()
       head.setPointerCapture?.(e.pointerId)
       const start = { x: e.clientX, y: e.clientY, nx: n.pos?.x ?? 0, ny: n.pos?.y ?? 0 }
@@ -805,11 +833,7 @@ class GraphWindow {
       rows.push(...argFields(own.filter((a) => a.type !== 'value' || a.name === 'level'), n, ctx, [], n.type))
       for (const a of own.filter((x) => x.type === 'value' && x.name !== 'level')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
     }
-    rows.push(button('delete node', () => {
-      g.nodes.splice(g.nodes.indexOf(n), 1)
-      g.links = g.links.filter(([f, t]) => !f.startsWith(`${n.id}.`) && !t.startsWith(`${n.id}.`))
-      this.picked = null; ch()
-    }, 'st-danger'))
+    rows.push(button('delete node', () => this.#deleteNode(n), 'st-danger'))
     return rows
   }
 
@@ -888,7 +912,10 @@ const STYLE = `
 .gw .gw-panes{display:none}
 .gw-node{position:absolute;width:${NODE_W}px;box-sizing:border-box;border:1px solid #3a4454;border-radius:10px;background:#12161e;font-size:11px;user-select:none}
 .gw-node.gw-on{box-shadow:0 0 0 2px #ffe066}
-.gw-head{padding:6px 10px;font-weight:700;font-size:12px;border-radius:9px 9px 0 0;cursor:grab;touch-action:none}
+.gw-head{padding:6px 10px;font-weight:700;font-size:12px;border-radius:9px 9px 0 0;cursor:grab;touch-action:none;display:flex;align-items:center;gap:6px}
+.gw-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gw-del{flex:0 0 auto;width:22px;height:22px;min-width:0;min-height:0;padding:0;border-radius:6px;font-size:11px;line-height:20px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.18);color:#e8e8ea;opacity:.7;cursor:pointer}
+.gw-del:hover,.gw-del:active{opacity:1;background:#5a2330;border-color:#ff6b6b}
 .gw-ev .gw-head{background:#5a2330}.gw-cond .gw-head{background:#5a4a1e}.gw-act .gw-head{background:#1f3a5c}
 .gw-flow .gw-head{background:#33384a}.gw-data .gw-head{background:#1f4a35}
 .gw-cine .gw-head{background:#4a2a5c}

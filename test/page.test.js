@@ -1399,6 +1399,44 @@ await page.keyboard.press('Escape')
     return { nodes: S.doc.graphs?.main?.nodes.map((n) => `${n.type}:${n.id}`), drawn: document.querySelectorAll('.gw .gw-node').length }
   })
   check(built.nodes?.join() === 'event:interact,action:do' && built.drawn === 2, `nodes are added from the vocabulary's menu and drawn (${JSON.stringify(built)})`)
+  // THE PANELS have a group of their own in the menu, each word dropped in
+  // ready (the module's first panel filled in); a node's ✕ deletes it, links
+  // and all, and undo brings it back.
+  const panelled = await page.evaluate(async () => {
+    const S = window.__studio
+    const hadPanels = S.module.panels
+    S.module.panels = { shop: { title: 'Shop', widgets: [] }, ...(hadPanels ?? {}) }
+    S.window.render()
+    const pal = () => document.querySelector('.gw .wk-top .gw-palette')
+    const group = [...pal().querySelectorAll('optgroup')].find((g) => /panels/.test(g.label))
+    const offered = group ? [...group.querySelectorAll('option')].map((o) => o.value) : []
+    const pick = (v) => { const s = pal(); s.value = v; s.dispatchEvent(new Event('change')) }
+    pick('act:ui_open'); pick('event:on_ui_event')
+    await new Promise((r) => setTimeout(r, 200))
+    const nodes = S.doc.graphs.main.nodes
+    const opened = nodes.find((n) => n.a === 'ui_open')
+    S.doc.graphs.main.links.push(['ui_event.then', `${opened.id}.in`])
+    S.commit(); S.window.render()
+    const before = nodes.length
+    document.querySelector(`.gw .gw-node[data-node="${opened.id}"] .gw-del`).click()
+    await new Promise((r) => setTimeout(r, 100))
+    const after = { nodes: S.doc.graphs.main.nodes.length, links: S.doc.graphs.main.links.filter(([f, t]) => t.startsWith(opened.id) || f.startsWith(opened.id)).length, drawn: !!document.querySelector(`.gw .gw-node[data-node="${opened.id}"]`) }
+    const undoBtn = document.querySelector('.sd-head [data-action="undo"]')
+    const undoable = !!undoBtn && !undoBtn.disabled
+    undoBtn?.click()
+    await new Promise((r) => setTimeout(r, 100))
+    const back = (S.doc.graphs.main.nodes ?? []).some((n) => n.id === opened.id)
+    // Leave the graph as the steps below expect it: the event and the action.
+    S.doc.graphs.main.nodes = S.doc.graphs.main.nodes.filter((n) => ['interact', 'do'].includes(n.id))
+    S.doc.graphs.main.links = []
+    if (hadPanels) S.module.panels = hadPanels; else delete S.module.panels
+    S.commit(); S.window.render()
+    return { offered, opened: { a: opened.a, panel: opened.panel, id: opened.id }, before, after, back, undoable }
+  })
+  check(['act:ui_open', 'act:ui_close', 'event:on_ui_event', 'cond:widget_is'].every((v) => panelled.offered.includes(v)) && panelled.opened.panel === 'shop',
+        `the menu has the panels in a group of their own, dropped in ready (${JSON.stringify(panelled.offered)} -> ${JSON.stringify(panelled.opened)})`)
+  check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
+        `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {
     const c = (sel) => { const r = document.querySelector(sel).querySelector('.gw-dot').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 } }
     return { from: c('.gw-pin[data-pin="interact.then"][data-dir="out"]'), to: c('.gw-pin[data-pin="do.in"][data-dir="in"]') }

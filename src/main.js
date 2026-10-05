@@ -185,7 +185,7 @@ function refreshBadges () {
   try { S.shell.badges = new Map(Object.entries(badgeCounts(moduleProblems(S)))) } catch (e) { console.warn('[studio] problems', e) }
 }
 const badgesSoon = debounce(() => { refreshBadges(); S.shell.drawRail() }, 400)
-S.shell = new Shell({ router: S.router, on: { play: () => play(), exportPack: () => exportPack(), undo: () => restoreModule(S.moduleHistory?.undo()), redo: () => restoreModule(S.moduleHistory?.redo()) } })
+S.shell = new Shell({ router: S.router, on: { play: () => play(), exportPack: () => exportPack(), undo: () => S.undoHere(), redo: () => S.redoHere() } })
 S.go = (id, arg = null) => S.router.go(id, arg)
 S.ui.pageSink = (title, rows, onClose) => S.shell.showRows(title, rows, onClose)
 S.route = () => S.router.current?.id ?? null
@@ -217,6 +217,7 @@ const windowSection = (id, label, icon, open, extra = {}) => S.router.register({
     body.appendChild(w.root)
     w.root.hidden = false
     S.window = w
+    S.syncHistory?.()
   },
   unmount: () => { S.window?.close(); S.window = null; S.ui.layer.dataset.workshop = '0' }
 })
@@ -470,6 +471,7 @@ S.commit = () => {
   // The module's history follows the maps without making a step of its own.
   S.moduleHistory?.replace({ module: S.module, docs: S.docs })
   S.ui.setHistory(S.history.canUndo, S.history.canRedo)
+  S.syncHistory?.()
   save()
   redraw()
   previewNow()
@@ -580,13 +582,24 @@ function restoreModule (snap) {
 }
 S.undoModule = () => restoreModule(S.moduleHistory?.undo())
 S.redoModule = () => restoreModule(S.moduleHistory?.redo())
+// IN A MAP'S GRAPH WINDOW an edit is the map's (S.commit), so the page's undo
+// is the map's there: the module's history holds no step for it. Everywhere
+// else on a page it is the module's.
+const mapGraphOpen = () => S.route() === 'graph' && S.window && S.window.game === false
+S.syncHistory = () => {
+  if (mapGraphOpen()) S.shell?.setHistory(S.history.canUndo, S.history.canRedo)
+  else S.shell?.setHistory(S.moduleHistory?.canUndo, S.moduleHistory?.canRedo)
+}
+const mapStep = (snap) => { restore(snap); S.window?.render?.(); S.syncHistory() }
+S.undoHere = () => (mapGraphOpen() ? mapStep(S.history.undo()) : S.undoModule())
+S.redoHere = () => (mapGraphOpen() ? mapStep(S.history.redo()) : S.redoModule())
 // ⌘Z on a page is the module's; in the map editor it is the map's (onKey).
 addEventListener('keydown', (e) => {
   if (S.route() === 'map' || !S.route()) return
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target?.tagName)) return
   const mod = e.ctrlKey || e.metaKey
-  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? S.redoModule() : S.undoModule() }
-  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); S.redoModule() }
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? S.redoHere() : S.undoHere() }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); S.redoHere() }
 })
 
 const ctx = {
@@ -902,7 +915,8 @@ S.suggest = (arg, owner) => {
   if (arg === 'what' && owner === 'spawn') return [...Object.keys(S.module.mobs?.mobs ?? {}), ...S.propNames()]
   if (arg === 'kind' && (owner === 'when_dies' || owner === 'when_hurt')) return Object.keys(S.module.mobs?.mobs ?? {})
   if (arg === 'prop') return S.propNames()
-  if (arg === 'texture') return S.textureNames
+  // Any texture: the module's own, then the app's (a floor, a ceiling, a wall).
+  if (arg === 'texture') return S.allTextureNames?.() ?? S.textureNames
   // A sky's picture (the set_sky node): any texture, the module's first.
   if (arg === 'image' && owner === 'set_sky') return S.allTextureNames?.() ?? S.textureNames
   if (arg === 'param' && owner === 'add_effect') return paramNames()

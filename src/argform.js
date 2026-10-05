@@ -186,6 +186,14 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
           rows.push(row(label, selectOf(cur ?? '', [['', a.optional ? '(any)' : '(choose)'], ...(cur && !names.includes(cur) ? [[cur, `${cur} -- not on that panel`]] : []), ...names.map((n) => [n, n])], (v) => set(v || undefined))))
           return
         }
+        // A COLOUR, as #rrggbb (set_sector_effect's color): picked; ✕ for the default.
+        if (a.type === 'string' && (a.name === 'color' || a.name === 'colour')) {
+          const ok = typeof cur === 'string' && /^#[0-9a-f]{6}$/i.test(cur)
+          const c = el('input', { type: 'color', value: ok ? cur : '#ffffff' })
+          c.addEventListener('change', () => set(c.value))
+          rows.push(row(label, c, el('span', { class: 'st-muted', text: cur === undefined ? '(default)' : String(cur) }), cur !== undefined ? button('✕', () => set(undefined)) : null))
+          return
+        }
         // A sound is picked from the module's packs and heard, not typed.
         if (ctx.soundField && (a.name === 'sound' || (a.name === 'name' && owner === 'sound'))) {
           rows.push(ctx.soundField(label, cur, (v) => set(v || undefined)))
