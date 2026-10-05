@@ -41,6 +41,9 @@ async function showHome () {
   const tile = (id, icon, label, note) => el('button', { class: 'sd-tile', 'data-section': id, onclick: () => S.go(id) },
     [el('span', { class: 'ico', text: icon }), el('span', { class: 'lbl', text: label }), el('span', { class: 'st-muted', text: note })])
   const list = await S.store.list()
+  // Left while the list was read (a quick tap, a slow phone's storage): drawn
+  // now it would open as a sheet over the section that was gone to.
+  if (!S.ui.pageTitles?.test('Home')) return
   S.ui.showSheet('Home', [
     el('div', { class: 'sd-hero' }, [
       el('div', { class: 'sd-hero-name', text: m.name || m.id }),

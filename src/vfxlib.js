@@ -13,7 +13,8 @@
 // pickers elsewhere only have to offer an id.
 //
 import { el, row, number, select, muted, button, text } from './ui.js'
-import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
+import * as THREE from 'three'
+import { emitBurst, stepParticles, VfxView } from '/src/render/vfx.js'
 
 // The fields the client's parser reads, with its own defaults. Written here
 // rather than generated, because a vfx record has no vocabulary of its own --
@@ -98,95 +99,202 @@ function colourRow (label, value, onChange) {
 }
 
 /**
- * A canvas that fires the kind over and over, integrated by the client's own
- * emitBurst and stepParticles -- so a burst that looks wrong here looks wrong
- * in the game, and one that looks right is right.
+ * A view that fires the kind over and over, drawn by the client's own VfxView
+ * (render/vfx.js) -- the same points, sizes, soft disc and blending the game
+ * draws, so a burst that looks wrong here looks wrong in the game, and one
+ * that looks right is right.
  *
- * Drawn side-on: x across, z up, which is the view a person judges a spray of
- * blood or a muzzle flash in. Gravity pulls down the screen because it pulls
- * down in the world.
+ * In the world, at the game's scale: a floor grid of one-unit squares and a
+ * player-sized figure (0.5 × 2) beside the event, which happens at chest
+ * height heading east (+x, the arrow). The camera frames what the kind
+ * reaches, worked out by running the burst once ahead of time; drag to look
+ * round it, pinch or wheel to come closer.
  */
 export class VfxPreview {
   constructor () {
-    this.canvas = el('canvas', { class: 'st-vfx-canvas', width: 320, height: 200 })
+    this.wrap = el('div', { class: 'st-vfx-wrap' })
+    this.renderer = null
     this.def = null
-    this.parts = []
-    this.radius = 0
-    this.last = 0
-    this.next = 0
+    this.view = null
+    this.yaw = -0.6
+    this.pitch = 0.32
+    this.zoom = 1
+    this.fit = 4
     this.raf = 0
+    this.label = el('div', { class: 'st-vfx-label' })
+    // Its own clock, so it can run slowly: half a second of sparks is over
+    // before an eye has judged it. The game's code is stepped at that clock.
+    this.rate = 1
+    this.clock = 0
+    this.real = null
+    const slow = el('button', { class: 'st-vfx-slow', text: '1×', title: 'slow motion', onclick: () => { this.rate = this.rate === 1 ? 0.25 : 1; slow.textContent = this.rate === 1 ? '1×' : '¼×'; slow.dataset.on = this.rate === 1 ? '0' : '1' } })
+    this.wrap.append(this.label, el('div', { class: 'st-vfx-tools' }, [slow, el('button', { text: '⟲', title: 'frame it again', onclick: () => { this.zoom = 1; this.yaw = -0.6; this.pitch = 0.32 } })]))
+  }
+
+  /** The element to put on the page (the canvas inside its frame). */
+  get canvas () { this.#ensure(); return this.wrap }
+
+  /** Every speck alive now, across bursts and an attached emitter. */
+  get parts () {
+    const v = this.view
+    if (!v) return []
+    return [...v.parts.flatMap((b) => b.parts), ...[...v.emitters.values()].flatMap((e) => e.parts)]
+  }
+
+  #ensure () {
+    if (this.renderer) return
+    const r = new THREE.WebGLRenderer({ antialias: true })
+    r.setPixelRatio(Math.min(2, devicePixelRatio))
+    r.setClearColor(0x0b0d12)
+    this.renderer = r
+    const c = r.domElement
+    c.classList.add('st-vfx-canvas')
+    c.style.touchAction = 'none'
+    this.wrap.prepend(c)
+    this.camera = new THREE.PerspectiveCamera(50, 16 / 10, 0.05, 200)
+    // Drag to look round; two fingers or the wheel to zoom.
+    const pts = new Map()
+    let pinch = 0
+    c.addEventListener('pointerdown', (e) => { pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); c.setPointerCapture?.(e.pointerId) })
+    c.addEventListener('pointermove', (e) => {
+      const last = pts.get(e.pointerId)
+      if (!last) return
+      if (pts.size === 1) {
+        this.yaw -= (e.clientX - last.x) * 0.008
+        this.pitch = Math.max(-0.2, Math.min(1.45, this.pitch + (e.clientY - last.y) * 0.008))
+      }
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()]
+        const d = Math.hypot(a.x - b.x, a.y - b.y)
+        if (pinch) this.zoom = Math.max(0.15, Math.min(6, this.zoom * pinch / d))
+        pinch = d
+      }
+    })
+    const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = 0 }
+    c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up)
+    c.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.max(0.15, Math.min(6, this.zoom * Math.exp(e.deltaY * 0.0015))) }, { passive: false })
+  }
+
+  /** The world the kind plays in: floor, figure, arrow, and a fresh VfxView. */
+  #scene () {
+    const old = this.scene
+    if (old) old.traverse((o) => { o.geometry?.dispose(); o.material?.dispose?.() })
+    const scene = new THREE.Scene()
+    const grid = new THREE.GridHelper(24, 24, 0x2a3446, 0x1b2230)
+    scene.add(grid)
+    // A player: 0.5 radius, 2 tall, a little behind and to the side of the event.
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x5b8fd6, wireframe: true, transparent: true, opacity: 0.35 }))
+    body.position.set(-1, 1, 0.9)
+    scene.add(body)
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), 0.8, 0x5f7fa8, 0.18, 0.1)
+    scene.add(arrow)
+    this.scene = scene
+    this.view = new VfxView({ THREE, scene, catalogue: { kinds: new Map([[this.def.id ?? 0, this.def]]) }, poolSize: 4 })
+  }
+
+  /**
+   * How far the BULK of the kind reaches, run once ahead of time: the camera
+   * frames that. Not the furthest speck ever -- a spark that falls for its
+   * whole life would pull the camera back until the burst is a few dots --
+   * but where most of them are over the first half of their lives.
+   */
+  #reach (def) {
+    if (def.type === 'tracer') return 2.6
+    const at = { x: 0, y: 1, z: 0 }
+    const parts = emitBurst({ ...def, count: Math.min(96, Math.max(32, def.count ?? 32)) }, at, 0, def.attach ? 0 : 0.4)
+    const dist = []
+    const dt = 1 / 30
+    const half = Math.max(0.1, ((def.life ?? 0.5) + (def.lifeVar ?? 0)) / 2)
+    for (let t = 0; t < half && parts.length; t += dt) {
+      stepParticles(parts, dt, def)
+      for (const p of parts) dist.push(Math.hypot(p.x - at.x, p.y - at.y, p.z - at.z))
+    }
+    dist.sort((x, y) => x - y)
+    const r = dist.length ? dist[Math.floor(dist.length * 0.8)] : 0.5
+    // An attached emitter's body goes round a circle as well.
+    return Math.max(0.6, def.attach ? r + 1.2 : r) + (def.sizeEnd ?? def.size ?? 0.1)
   }
 
   show (def, { radius = 0 } = {}) {
+    this.#ensure()
     this.def = def
     this.radius = radius
-    this.parts = []
+    this.#scene()
+    this.fit = this.#reach(def)
     this.next = 0
-    this.last = performance.now()
+    this.t0 = this.clock
     if (!this.raf) this.raf = requestAnimationFrame(() => this.#tick())
   }
 
   stop () { cancelAnimationFrame(this.raf); this.raf = 0 }
 
-  #tick () {
-    this.raf = this.canvas.isConnected ? requestAnimationFrame(() => this.#tick()) : 0
-    const now = performance.now()
-    const dt = Math.min(0.05, (now - this.last) / 1000)
-    this.last = now
-    const def = this.def
-    const c = this.canvas
-    const g = c.getContext('2d')
-    g.clearRect(0, 0, c.width, c.height)
-    g.fillStyle = '#0b0d12'
-    g.fillRect(0, 0, c.width, c.height)
-    if (!def || def.type === 'tracer') { this.#tracer(g, def); return }
+  /** Fire it again now (the page test; a fresh burst to judge). */
+  fire () { this.next = this.clock }
 
-    // An attached emitter runs continuously; a burst repeats so the shape can
-    // be judged more than once. Either way the specks are the game's own.
-    if (def.attach) {
-      this.carry = (this.carry ?? 0) + (def.rate ?? 40) * dt
-      const n = Math.floor(this.carry)
-      this.carry -= n
-      for (let i = 0; i < n; i++) this.parts.push(...emitBurst({ ...def, count: 1 }, { x: 0, y: 0, z: 0 }, 0, this.radius))
-    } else {
-      this.next -= dt
-      if (this.next <= 0) {
-        this.parts.push(...emitBurst(def, { x: 0, y: 0, z: 0 }, 0, this.radius))
-        this.next = Math.max(0.6, (def.life ?? 0.5) + (def.lifeVar ?? 0))
-      }
+  #size () {
+    const c = this.renderer.domElement
+    const w = Math.max(1, Math.round(c.clientWidth))
+    const h = Math.max(1, Math.round(c.clientHeight))
+    if (c.width !== Math.round(w * this.renderer.getPixelRatio()) || c.height !== Math.round(h * this.renderer.getPixelRatio())) {
+      this.renderer.setSize(w, h, false)
+      this.camera.aspect = w / h
+      this.camera.updateProjectionMatrix()
     }
-    stepParticles(this.parts, dt, def)
-
-    const scale = 14
-    const ox = c.width * 0.36
-    const oy = c.height * 0.62
-    g.strokeStyle = '#1b2230'
-    g.beginPath(); g.moveTo(0, oy + 0.5); g.lineTo(c.width, oy + 0.5); g.stroke()
-    for (const p of this.parts) {
-      const t = Math.min(1, p.age / p.life)
-      const size = Math.max(0.5, ((def.size ?? 0.1) + (((def.sizeEnd ?? 0) - (def.size ?? 0.1)) * t)) * scale)
-      const col = rampColour(def.colour ?? 0xffaa33, def.colourEnd ?? 0, t)
-      g.globalAlpha = def.blend === 'alpha' ? 1 - t : 1
-      g.globalCompositeOperation = def.blend === 'alpha' ? 'source-over' : 'lighter'
-      g.fillStyle = hex(col)
-      g.fillRect(ox + p.x * scale - size / 2, oy - p.y * scale - size / 2, size, size)
-    }
-    g.globalAlpha = 1
-    g.globalCompositeOperation = 'source-over'
-    g.fillStyle = '#5f7fa8'
-    g.font = '10px ui-monospace, Menlo, monospace'
-    g.fillText(`${this.parts.length} live`, 6, 14)
   }
 
-  #tracer (g, def) {
-    const c = this.canvas
-    if (!def) return
-    g.strokeStyle = hex(def.colour ?? 0xffdd55)
-    g.lineWidth = Math.max(1, (def.width ?? 0.04) * 60)
-    g.beginPath(); g.moveTo(30, c.height / 2); g.lineTo(c.width - 30, c.height / 2); g.stroke()
-    g.fillStyle = '#5f7fa8'
-    g.font = '10px ui-monospace, Menlo, monospace'
-    g.fillText(`${def.life ?? 0.12}s`, 6, 14)
+  /** One frame: fire what is due, step the client's view, draw. */
+  frame () {
+    const def = this.def
+    if (!def || !this.view) return
+    const real = performance.now() / 1000
+    this.clock += this.real === null ? 0 : Math.min(0.1, real - this.real) * this.rate
+    this.real = real
+    const now = this.clock
+    const from = new THREE.Vector3(0, 1, 0)
+    if (def.type === 'tracer') {
+      if (now >= (this.next ?? 0)) {
+        this.view.spawn(def.id ?? 0, { x: -0.6, y: 1.2, z: 0.9 }, { x: 4, y: 1.2, z: -0.6 }, now)
+        this.next = now + (def.life ?? 0.12) + 0.5
+      }
+    } else if (def.attach) {
+      // Round a circle, so it can be seen to follow the body it is on.
+      const a = (now - this.t0) * Math.PI * 0.5
+      const at = { x: Math.cos(a) * 1.2, y: 1, z: Math.sin(a) * 1.2 }
+      this.view.attach(def.id ?? 0, 1, -a / (Math.PI * 2) + 0.25, now)
+      this.view.update(now, () => at)
+    } else if (now >= (this.next ?? 0)) {
+      this.view.spawn(def.id ?? 0, from, { x: this.radius || 0, y: 1, z: 0 }, now)
+      this.next = now + Math.max(0.8, (def.life ?? 0.5) + (def.lifeVar ?? 0) + 0.3)
+    }
+    if (!def.attach) this.view.update(now)
+    this.#size()
+    // The reach fills most of the view's height.
+    const d = this.fit * this.zoom / Math.tan((this.camera.fov / 2) * Math.PI / 180) / 0.8
+    const cy = def.type === 'tracer' ? 1.2 : 1
+    this.camera.position.set(Math.cos(this.pitch) * Math.cos(this.yaw) * d, cy + Math.sin(this.pitch) * d, -Math.cos(this.pitch) * Math.sin(this.yaw) * d)
+    this.camera.lookAt(def.type === 'tracer' ? 1.7 : 0, cy, 0)
+    this.renderer.render(this.scene, this.camera)
+    this.label.textContent = def.type === 'tracer' ? `tracer · ${def.life ?? 0.12}s` : `${this.parts.length} live · drag to look round`
+  }
+
+  /** How many pixels of the last frame are lit (what the page test asks). */
+  litPixels () {
+    this.frame()
+    const gl = this.renderer.getContext()
+    const w = gl.drawingBufferWidth; const h = gl.drawingBufferHeight
+    const px = new Uint8Array(w * h * 4)
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    let lit = 0
+    for (let i = 0; i < px.length; i += 4) if (px[i] > 120 && px[i] > px[i + 2] + 40) lit++
+    return lit
+  }
+
+  #tick () {
+    const c = this.renderer?.domElement
+    this.raf = c?.isConnected ? requestAnimationFrame(() => this.#tick()) : 0
+    if (this.raf) this.frame()
   }
 }
 

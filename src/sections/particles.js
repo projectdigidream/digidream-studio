@@ -36,25 +36,53 @@ function showVfx (openId = null) {
     r.addEventListener('click', (e) => { if (e.target.tagName !== 'BUTTON') showVfx(v.id) })
     return r
   })
-  const body = [...rows]
-  if (!list.length) body.push(muted('No kinds of your own yet. The app serves some already -- blood, a muzzle flash, an explosion -- and anything that names a number can use those.'))
-  if (open) {
-    body.push(el('div', { class: 'st-section-head', text: `✦ kind ${open.id}` }))
-    body.push(vfxPreview.canvas)
-    body.push(...vfxRows(open, { changed: () => { S.moduleChanged(); vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 }); showVfx(open.id) } }))
-    vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 })
-  }
-  body.push(el('div', { class: 'st-row' }, [
+  const kinds = el('div', { class: 'sd-vfx-kinds' }, [...rows])
+  if (!list.length) kinds.append(muted('No kinds of your own yet. The app serves some already -- blood, a muzzle flash, an explosion -- and anything that names a number can use those.'))
+  kinds.append(el('div', { class: 'st-row' }, [
     button('+ particles', () => { const v = newVfx(S.module, 'particles', [...(S.servedVfx?.keys() ?? [])]); S.moduleChanged(); showVfx(v.id) }),
     button('+ tracer', () => { const v = newVfx(S.module, 'tracer', [...(S.servedVfx?.keys() ?? [])]); S.moduleChanged(); showVfx(v.id) })
   ]))
-  body.push(muted('A kind is a number anything can name: a swing\'s hit, a hitscan\'s, a blast, a monster\'s blood, a missile on impact. None of it crosses the wire -- the server says an effect happened and the client draws it.'))
+  // LANDSCAPE: the preview and the kinds on the left, held in place, the form
+  // on the right scrolling past them. PORTRAIT: one column -- the kinds, the
+  // preview held at the top while the form scrolls under it (the wrappers are
+  // display:contents there, so the preview sticks to the page itself).
+  const side = el('div', { class: 'sd-vfx-side' })
+  const form = el('div', { class: 'sd-vfx-form' })
+  if (open) {
+    side.append(el('div', { class: 'sd-vfx-view' }, [vfxPreview.canvas]))
+    form.append(el('div', { class: 'st-section-head', text: `✦ kind ${open.id} · ${open.type === 'tracer' ? 'tracer' : 'particles'}` }),
+      ...vfxRows(open, { changed: () => { S.moduleChanged(); vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 }); showVfx(open.id) } }))
+    vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 })
+  }
+  side.append(kinds)
+  form.append(muted('A kind is a number anything can name: a swing\'s hit, a hitscan\'s, a blast, a monster\'s blood, a missile on impact. None of it crosses the wire -- the server says an effect happened and the client draws it.'))
+  const body = [el('div', { class: 'sd-vfx', 'data-open': open ? '1' : '0' }, [side, form])]
   S.ui.showSheet('Particles', body.filter(Boolean), () => vfxPreview.stop())
 }
 
 /** Hand it the studio's state, and publish what others call. */
 export function install (s) {
+  document.head.appendChild(el('style', { text: STYLE }))
   S = s
   S.vfxPreview = vfxPreview
   S.showVfx = S.sectionAlias('particles', showVfx)
 }
+
+const STYLE = `
+.sd-vfx,.sd-vfx-side,.sd-vfx-form{display:contents}
+.sd-vfx-kinds{display:flex;flex-direction:column;gap:6px;order:-1}
+.sd-vfx-view{position:sticky;top:0;z-index:3;background:#0b0d12;padding-bottom:4px}
+.st-vfx-wrap{position:relative;width:100%}
+.sd-body.st-page .st-vfx-canvas,.st-vfx-canvas{display:block;width:100%;max-width:none;height:auto;aspect-ratio:16/10;max-height:38vh;cursor:grab;touch-action:none}
+.st-vfx-label{position:absolute;left:8px;bottom:6px;font:600 11px ui-monospace,Menlo,monospace;color:#9fb6d8;text-shadow:0 1px 2px #000;pointer-events:none}
+.st-vfx-tools{position:absolute;right:6px;top:6px;display:flex;gap:6px}
+.st-vfx-tools button{min-width:36px;height:32px;padding:0 6px}
+@media (orientation:landscape) and (min-width:640px){
+  .sd-vfx[data-open="1"]{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,1fr);gap:12px;align-items:start}
+  .sd-vfx[data-open="1"] .sd-vfx-side{display:flex;flex-direction:column;gap:8px;position:sticky;top:0;max-height:calc(100dvh - 72px);overflow:auto;-webkit-overflow-scrolling:touch}
+  .sd-vfx[data-open="1"] .sd-vfx-form{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .sd-vfx[data-open="1"] .sd-vfx-view{position:static;padding:0}
+  .sd-vfx[data-open="1"] .st-vfx-canvas{max-height:calc(100dvh - 150px)}
+  .sd-vfx[data-open="1"] .sd-vfx-kinds{order:0}
+}
+`

@@ -882,23 +882,35 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   await page.evaluate(() => [...document.querySelectorAll('.sd-page button')].find((b) => b.textContent === '+ particles').click())
   const made = await page.evaluate(() => ({ kinds: window.__studio.module.vfx.length, rows: document.querySelectorAll('.sd-page [data-vfx]').length, canvas: !!document.querySelector('.st-vfx-canvas') }))
   check(made.kinds === before + 1 && made.rows === made.kinds && made.canvas, `a new kind is made and opens with its preview (${JSON.stringify(made)})`)
-  // The preview runs the game's own burst code, so it paints without a bake.
-  await page.waitForFunction(() => {
+  // The preview is the client's own VfxView in a three.js view, so it paints
+  // without a bake -- specks big enough to see, at the game's own sizes.
+  const painted = await page.evaluate(async () => {
+    const S = window.__studio
+    const p = S.vfxPreview
+    const def = S.module.vfx[S.module.vfx.length - 1]
     const c = document.querySelector('.st-vfx-canvas')
-    if (!c) return false
-    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
-    let lit = 0
-    for (let i = 0; i < d.length; i += 4) if (d[i] > 40 || d[i + 1] > 40) lit++
-    return lit > 40
-  }, { timeout: 8000 }).catch(() => {})
-  const painted = await page.evaluate(() => {
-    const c = document.querySelector('.st-vfx-canvas')
-    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
-    let lit = 0
-    for (let i = 0; i < d.length; i += 4) if (d[i] > 40 || d[i + 1] > 40) lit++
-    return { lit, live: window.__studio.vfxPreview.parts.length }
+    // Lit pixels a little after a fresh burst, the best of a few tries.
+    const lit = async (size) => {
+      Object.assign(def, { size, sizeEnd: size }); p.show(def, { radius: 0.4 })
+      let best = 0
+      for (let i = 0; i < 8; i++) { p.fire(); await new Promise((r) => setTimeout(r, 60)); best = Math.max(best, p.litPixels()) }
+      return best
+    }
+    const big = await lit(0.3)
+    const live = p.parts.length
+    const small = await lit(0.05)
+    Object.assign(def, { size: 0.1, sizeEnd: 0 })
+    return { big, small, live, w: c?.clientWidth }
   })
-  check(painted.lit > 40 && painted.live > 0, `the preview integrates the burst the game would draw (${painted.lit} lit pixels, ${painted.live} specks)`)
+  check(painted.big > 120 && painted.live > 0, `the preview draws the burst with the game's own renderer (${painted.big} lit pixels at size 0.3, ${painted.live} specks, ${painted.w}px wide)`)
+  check(painted.small < painted.big / 2, `CONTROL: at size 0.05 far fewer (${painted.small}) -- the specks are the kind's size in the world`)
+  // Turned on its side, the preview and the form sit side by side.
+  const sideBySide = await page.evaluate(async () => {
+    const v = document.querySelector('.sd-vfx-view').getBoundingClientRect()
+    const f = document.querySelector('.sd-vfx-form > *:nth-child(2)').getBoundingClientRect()
+    return { landscape: innerWidth > innerHeight, beside: f.left >= v.right - 1, viewW: Math.round(v.width), formLeft: Math.round(f.left) }
+  })
+  check(!sideBySide.landscape || sideBySide.beside, `in landscape the form is beside the preview, not under it (${JSON.stringify(sideBySide)})`)
   // Anything that names a kind by number offers them.
   const offered = await page.evaluate(() => {
     const S = window.__studio
