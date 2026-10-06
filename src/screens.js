@@ -331,10 +331,13 @@ class Screens {
 
   #touchKey (scheme) { return scheme === 'fps' ? 'touch_fps' : 'touch' }
 
+  /** The module's own keys that have a touch label (Controls; docs/KEYS.md), as the client takes them. */
+  #keys () { return (this.S.module.keys ?? []).filter((k) => k.name && k.touch).map((k) => ({ name: k.name, label: k.touch })) }
+
   /** The buttons and the stick's zone, placed by the client's arithmetic. */
   #drawTouch (frame, hits, scheme, dev, editable) {
     const L = this.layout
-    const t = touchLayout(parseLayout(L).layout, scheme)
+    const t = touchLayout(parseLayout(L).layout, scheme, new Set(), this.#keys())
     const s = uiScale(L, dev.width, dev.height)
     const z = place(t.zone, L, dev.width, dev.height, dev.insets)
     const zone = el('div', { class: 'sc-zone' })
@@ -366,15 +369,19 @@ class Screens {
     const key = this.#touchKey(scheme)
     const resolved = parseLayout(L).layout[key]
     const rows = [muted(`This module plays ${scheme === 'fps' ? 'first person' : 'as a platformer'} (Module settings), so these are its ${scheme === 'fps' ? 'first-person' : 'platformer'} controls. The buttons are the engine's: each one is an input, so they can be moved, resized, relabelled and hidden, not invented.`)]
+    // Every button the client would draw, the module's keys included, where it would draw them.
+    const full = touchLayout(parseLayout(L).layout, scheme, new Set(TOUCH_IDS), this.#keys()).buttons
     const own = (id) => {
       L[key] ??= { buttons: [] }
       L[key].buttons ??= []
       let b = L[key].buttons.find((x) => x.id === id)
-      if (!b) { b = { ...resolved.buttons.find((x) => x.id === id) }; L[key].buttons.push(b) }
+      if (!b) { b = { ...(resolved.buttons.find((x) => x.id === id) ?? full.find((x) => x.id === id) ?? { id }) }; L[key].buttons.push(b) }
       return b
     }
-    for (const id of TOUCH_IDS) {
-      const b = resolved.buttons.find((x) => x.id === id) ?? { id }
+    const ids = [...TOUCH_IDS, ...this.#keys().map((k) => `key:${k.name}`)]
+    if (this.#keys().length) rows.push(muted('The module\'s own keys with a touch label (Controls) are here too, as key:<name>: unplaced, they stack in a column above the engine\'s buttons.'))
+    for (const id of ids) {
+      const b = resolved.buttons.find((x) => x.id === id) ?? full.find((x) => x.id === id) ?? { id }
       const on = id === this.picked
       rows.push(el('div', { class: 'st-card', 'data-btn': id }, [
         el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: id }), button(on ? '▾' : '▸', () => { this.picked = on ? null : id; this.render() })]),

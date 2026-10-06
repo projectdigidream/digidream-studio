@@ -34,6 +34,7 @@ import { emitGraph, graphFile, gameGraphFile, hasGraph, liveGraphs } from './gra
 import { triggerPanels, graphPanels } from './panels_emit.js'
 import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
+import { keyLines } from './keys_emit.js'
 import { animationsTxt } from './texsheet.js'
 import { playerLines, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
 import { emitProps } from './props_emit.js'
@@ -257,6 +258,8 @@ export function moduleTxt (module, docs = []) {
   // Platformer is the engine's default, so it goes unsaid; a module that says
   // it would override an fps flavour stacked on top of it.
   if (module.controls === 'fps') L.push('controls fps')
+  // The module's own keys (docs/KEYS.md), in order: key i is bit i.
+  L.push(...keyLines(module))
   for (const p of PERSIST) if (module.persist?.includes(p)) L.push(`persist ${p}`)
   for (const f of gameScripts(module)) L.push(`game ${f}`)
   // The skies (docs/SKY.md): the module's, then each map's own, by name.

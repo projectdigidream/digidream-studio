@@ -24,6 +24,7 @@
 // A condition's or action's argument of a pinnable type has a data pin in its
 // row on the node: linked, it takes the value at run time and its field says so.
 //
+import { buttonNames, ENGINE_BUTTON_NAMES, keyLabel } from './keys_emit.js'
 import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog, addHelp } from './ui.js'
 import { argFields } from './argform.js'
 import { playScene } from './scene.js'
@@ -263,6 +264,9 @@ class GraphWindow {
         }
       }),
       ...(S.panelCtx?.() ?? {}),
+      // A button node's button: the engine's, then the module's keys (Controls).
+      buttons: () => ({ engine: ENGINE_BUTTON_NAMES.map((n) => [n, n]), keys: (S.module.keys ?? []).filter((k) => k.name).map((k) => [k.name, `${k.name} (${keyLabel(k.code)})`]) }),
+      editKeys: () => S.go('controls'),
       // The module's maps, and the spawn points of one (or of this map).
       maps: () => Object.keys(S.docs).sort(),
       spawnsOf: (map) => [...new Set(((map ? S.docs[map] : S.doc)?.spawns ?? []).map((p) => p.tag).filter(Boolean))].sort()
@@ -276,7 +280,7 @@ class GraphWindow {
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
-    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
       el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
@@ -612,7 +616,7 @@ class GraphWindow {
   #drawSide () {
     const side = this.root.querySelector('.wk-details')
     if (!side) return
-    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
     side.replaceChildren(...this.#sideRows(problems))
   }
 

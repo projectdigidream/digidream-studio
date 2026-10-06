@@ -8,6 +8,7 @@
 // the other side (docs/GRAPHS.md, Calls). So the list says, for each graph,
 // what it calls and what it answers, and a call that nothing answers is said.
 //
+import { buttonNames } from '../keys_emit.js'
 import { el, button, muted, ask } from '../ui.js'
 import { graphProblems, everyGraph, graphRoute, newGraph, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME } from '../graphs_emit.js'
 
@@ -76,7 +77,7 @@ function showGraphs () {
   const all = allGraphs()
   const row = (g) => {
     const nodes = g.graph?.nodes?.length ?? 0
-    const problems = graphProblems(g.graph, V.graph, V.trigger, { game: g.game, maps: Object.keys(S.docs), paths: g.game ? null : new Set((S.docs[g.map]?.paths ?? []).map((x) => x.tag)) })
+    const problems = graphProblems(g.graph, V.graph, V.trigger, { buttons: buttonNames(S.module), game: g.game, maps: Object.keys(S.docs), paths: g.game ? null : new Set((S.docs[g.map]?.paths ?? []).map((x) => x.tag)) })
     const calls = [...namesOf('call', [g])]
     const answers = [...namesOf('on_call', [g])]
     const lines = [nodes ? `${nodes} node${nodes > 1 ? 's' : ''}` : 'empty -- not written until it has a node']

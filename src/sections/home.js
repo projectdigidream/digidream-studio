@@ -92,6 +92,7 @@ function problemRows () {
     ...(p.sky ?? []).map((m) => ({ go: ['sky'], text: `🌌 ${m}` })),
     ...(p.player ?? []).map((m) => ({ go: ['player'], text: `🧍 ${m}` })),
     ...(p.textures ?? []).map((m) => ({ go: ['textures'], text: `🧱 ${m}` })),
+    ...(p.controls ?? []).map((m) => ({ go: ['controls'], text: `🎮 ${m}` })),
     ...p.monsters.map((m) => ({ go: ['monsters'], text: `☠ ${m}` })),
     ...p.weapons.map((m) => ({ go: ['weapons'], text: `🔫 ${m}` })),
     ...p.sounds.map((m) => ({ go: ['sounds'], text: `🔊 ${m}` }))

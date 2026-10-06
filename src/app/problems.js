@@ -7,6 +7,7 @@
 // editor's to show; a map nobody has opened since a change is checked by its
 // document only.
 //
+import { buttonNames, keyProblems } from '../keys_emit.js'
 import { validate } from '../doc.js'
 import { graphProblems, graphsOf, NAME_RE } from '../graphs_emit.js'
 import { metamapProblems } from '../metamap.js'
@@ -15,9 +16,9 @@ import { playerProblems } from '../player.js'
 import { climbProblems } from '../climb.js'
 import { sheetProblems } from '../texsheet.js'
 
-/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg], textures: [msg] } */
+/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg], textures: [msg], controls: [msg] } */
 export function moduleProblems (S) {
-  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [], textures: [] }
+  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [], textures: [], controls: [] }
   const V = S.vocab
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
@@ -25,18 +26,20 @@ export function moduleProblems (S) {
     for (const p of climbProblems(d)) out.maps.push({ map: d.name, msg: `${p.sector}: ${p.msg}` })
     for (const [name, g] of graphsOf(d)) {
       if (!NAME_RE.test(name)) out.maps.push({ map: d.name, msg: `graph '${name}': a name is 1 to 32 of a-z, 0-9, _` })
-      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
+      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { buttons: buttonNames(S.module), maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
     if (!NAME_RE.test(name)) out.graphs.push(`the game's graph '${name}': a name is 1 to 32 of a-z, 0-9, _`)
-    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { game: true, maps: Object.keys(S.docs) })) out.graphs.push(`the game's graph ${name}: ${p}`)
+    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { buttons: buttonNames(S.module), game: true, maps: Object.keys(S.docs) })) out.graphs.push(`the game's graph ${name}: ${p}`)
   }
   for (const u of S.unansweredCalls?.() ?? []) out.graphs.push(`${u.graph} calls '${u.name}' (to ${u.to}), and nothing answers it`)
   // The skies: pictures missing or too few (docs/SKY.md).
   const tex = S.allTextureNames?.() ?? null
   out.sky.push(...skyProblems(S.module.sky, tex, 'the module\'s sky'))
   for (const d of Object.values(S.docs)) out.sky.push(...skyProblems(d.sky, tex, `${d.name}'s sky`))
+  // The module's keys: what the server refuses, and a key that does two things.
+  out.controls.push(...keyProblems(S.module).map((p) => p.msg))
   // Animated textures: a sheet the client would refuse or show with pixels left over.
   for (const [n, t] of Object.entries(S.module.textures ?? {})) out.textures.push(...sheetProblems(n, t.sheet, t.w, t.h))
   // The player's lines: a value of the wrong kind (docs/PLAYER.md).

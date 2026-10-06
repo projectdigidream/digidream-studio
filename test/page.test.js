@@ -2749,6 +2749,56 @@ const exported = await page.evaluate(async () => {
   return { ok: r.ok, n: r.files.length, paths: r.files.map((f) => f.path), hasTriggers: /triggers\.load/.test(lua), hasDnpm: r.files.some((f) => f.path === 'maps/first.dnpm') }
 })
 check(exported.ok && exported.hasDnpm && exported.hasTriggers, `the module emits with a baked map and its triggers (${JSON.stringify(exported).slice(0, 300)})`)
+// CONTROLS: the control mapper. + key waits for a key press; the key pressed
+// is the key's; a touch label gives it a button, placed in Screens; renaming
+// it follows into a graph that answers it; module.txt carries its line; a
+// button node offers it beside the engine's.
+{
+  await page.evaluate(async () => {
+    const S = window.__studio
+    S.module.keys = []
+    S.doc.graphs = { main: { vars: {}, nodes: [{ id: 'press', type: 'when_button_pressed', button: 'action', pos: { x: 0, y: 0 } }], links: [] } }
+    S.commit()
+    await S.go('controls')
+    ;[...document.querySelectorAll('.sd-page button')].find((b) => b.textContent === '+ key').click()
+  })
+  await new Promise((r) => setTimeout(r, 200))
+  const waiting = await page.evaluate(() => document.querySelector('.sd-key-wait')?.textContent ?? '')
+  await page.keyboard.press('KeyT')
+  await new Promise((r) => setTimeout(r, 200))
+  const keyed = await page.evaluate(async () => {
+    const S = window.__studio
+    const k = S.module.keys[0]
+    const r = { name: k?.name, code: k?.code, shown: document.querySelector('[data-key-press]')?.textContent }
+    // A touch button, and a name.
+    const touch = document.querySelector('.sd-key-card [data-key-touch]')
+    touch.value = 'reload'; touch.dispatchEvent(new Event('change'))
+    await new Promise((res) => setTimeout(res, 100))
+    const name = document.querySelector('.sd-key-card [data-key-name]')
+    name.value = 'Reload'; name.dispatchEvent(new Event('change'))
+    await new Promise((res) => setTimeout(res, 100))
+    const { moduleTxt } = await import('/studio/src/module_emit.js')
+    r.after = { ...S.module.keys[0] }
+    r.graph = S.doc.graphs.main.nodes[0].button
+    r.line = moduleTxt(S.module).split('\n').find((l) => l.startsWith('key ')) ?? ''
+    await S.showScreensTouch()
+    await new Promise((res) => setTimeout(res, 300))
+    r.screens = !!document.querySelector('.sc [data-btn="key:reload"]')
+    await S.go('graph')
+    S.window.picked = { kind: 'node', id: 'press' }; S.window.render()
+    const sel = document.querySelector('.gw [data-node="press"] [data-arg="button"] select')
+    r.groups = sel ? [...sel.querySelectorAll('optgroup')].map((g) => `${g.label}:${g.children.length}`) : []
+    r.chosen = sel?.value
+    delete S.module.keys; delete S.doc.graphs; S.commit(); S.moduleChanged(); await S.go('map')
+    return r
+  })
+  check(/press a key/.test(waiting) && keyed.code === 'KeyT' && /T/.test(keyed.shown ?? ''), `+ key waits for a key, and the key pressed is the key's (${JSON.stringify({ waiting, code: keyed.code, shown: keyed.shown })})`)
+  check(keyed.after.name === 'reload' && keyed.after.touch === 'RELOAD' && keyed.graph === 'reload', `a typed name made one the server takes, and the graph answering it follows the rename (${JSON.stringify(keyed.after)}, graph: ${keyed.graph})`)
+  check(keyed.line === `key reload KeyT touch ${keyed.after.touch}`, `module.txt carries its line (${keyed.line})`)
+  check(keyed.screens, 'its touch button is placed in Screens beside the engine\'s')
+  check(keyed.groups.length === 2 && /this module's keys:1/.test(keyed.groups.join()) && keyed.chosen === 'reload', `a button node offers the engine's buttons and the module's keys (${keyed.groups.join(', ')})`)
+}
+
 // SNAPSHOTS: the module as it was. One is taken by hand; the module is
 // changed and a map deleted; the deleted map is restored alone, then the
 // whole module -- through the page's own buttons and confirmations, each

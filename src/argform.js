@@ -196,6 +196,20 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
           rows.push(row(label, c, el('span', { class: 'st-muted', text: cur === undefined ? '(default)' : String(cur) }), cur !== undefined ? button('✕', () => set(undefined)) : null))
           return
         }
+        // A BUTTON (when_button_pressed ...): the engine's, then the module's own keys.
+        if (a.type === 'string' && a.name === 'button' && ctx.buttons) {
+          const { engine, keys } = ctx.buttons()
+          const sel = el('select', {})
+          sel.append(el('option', { value: '', text: '(choose)' }))
+          const group = (label, list) => { if (list.length) sel.append(el('optgroup', { label }, list.map(([v, t]) => el('option', { value: v, text: t })))) }
+          group('the engine\'s buttons', engine)
+          group('this module\'s keys', keys)
+          if (cur && ![...engine, ...keys].some(([v]) => v === cur)) sel.prepend(el('option', { value: cur, text: `${cur} -- no such button or key` }))
+          sel.value = cur ?? ''
+          sel.addEventListener('change', () => set(sel.value || undefined))
+          rows.push(row(label, sel, ctx.editKeys ? button('⌨', () => ctx.editKeys()) : null))
+          return
+        }
         // A sound is picked from the module's packs and heard, not typed.
         if (ctx.soundField && (a.name === 'sound' || (a.name === 'name' && owner === 'sound'))) {
           rows.push(ctx.soundField(label, cur, (v) => set(v || undefined)))

@@ -8,6 +8,7 @@
 // object they share, and routes events between them. If it is doing
 // arithmetic, something is in the wrong file.
 //
+import { buttonNames } from './keys_emit.js'
 import { Router, parseHash } from './app/router.js'
 import { Shell } from './app/shell.js'
 import { moduleProblems, badgeCounts } from './app/problems.js'
@@ -20,6 +21,7 @@ import { install as installSounds } from './sections/sounds.js'
 import { install as installTextures } from './sections/textures.js'
 import { install as installSettings } from './sections/settings.js'
 import { install as installSnapshots } from './sections/snapshots.js'
+import { install as installControls } from './sections/controls.js'
 import { install as installScripts } from './sections/scripts.js'
 import { install as installGraphs } from './sections/graphs.js'
 import { install as installStyle } from './sections/style.js'
@@ -260,7 +262,7 @@ S.save = () => save()
 // Now, not in a moment: before a snapshot or a restore reads the store.
 S.save.flush = () => save.flush()
 Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starterDoc, showInspector, emitAll })
-for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installSnapshots, installScripts, installGraphs, installStyle, installSkySection, installCamera, installNeighbours]) install(S)
+for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installSnapshots, installControls, installScripts, installGraphs, installStyle, installSkySection, installCamera, installNeighbours]) install(S)
 await S.loadPacks()
 S.router.register({
   id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
@@ -280,6 +282,9 @@ S.router.register({
 })
 windowSection('monsters', 'Monsters', '☠', (name) => openWorkshop(S, name))
 windowSection('player', 'Player', '🧍', () => openPlayer(S))
+pageSection('controls', 'Controls', '🎮', /^Controls$/, () => S.showControls())
+// Screens on its touch tab: where the module's keys' buttons are placed.
+S.showScreensTouch = async () => { await S.go('screens'); if (S.window) { S.window.tab = 'touch'; S.window.picked = null; S.window.render() } }
 windowSection('weapons', 'Weapons', '🔫', (name) => openArsenal(S, name))
 pageSection('props', 'Props', '📦', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
 pageSection('particles', 'Particles', '✨', /^Particles/, (id) => S.showVfx(id ?? undefined))
@@ -967,6 +972,9 @@ S.suggest = (arg, owner) => {
   // A sky's picture (the set_sky node): any texture, the module's first.
   if (arg === 'image' && owner === 'set_sky') return S.allTextureNames?.() ?? S.textureNames
   if (arg === 'param' && owner === 'add_effect') return paramNames()
+  // The weapon nodes: the arsenal's weapons and ammunition pools.
+  if (arg === 'weapon') return Object.keys(S.module.weapons?.weapons ?? {})
+  if (arg === 'ammo') return Object.keys(S.module.weapons?.ammo ?? {})
   return null
 }
 /**
@@ -1017,12 +1025,12 @@ async function emitAll () {
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
     for (const [name, g] of graphsOf(d)) {
-      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
+      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
       if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
-    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { game: true, maps: Object.keys(S.docs) }) : []
+    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), game: true, maps: Object.keys(S.docs) }) : []
     if (mg.length) { S.status(`the game's graph ${name}: ${mg.join('; ')}`, 'error'); return null }
   }
   const sizes = { ...S.textureSizes }

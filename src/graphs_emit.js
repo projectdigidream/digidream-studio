@@ -228,7 +228,7 @@ export function varProblem (n, graph, props) {
   return null
 }
 
-export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null } = {}) {
+export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null, buttons = null } = {}) {
   const problems = []
   if (!graph) return problems
   // A GAME graph (a module's, in the game VM) may use only what the game
@@ -274,6 +274,10 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
     // map given by its number is the server's to judge.)
     if (maps && n.type === 'change_map' && typeof n.level === 'string' && n.level !== '' && !/^\d+$/.test(n.level) && !maps.includes(n.level.toLowerCase().replace(/\.(map|dnpm)$/, ''))) {
       problems.push(`${where}: no map called ${n.level} in the module, and the server refuses a graph that goes to one it does not have`)
+    }
+    // A button nobody has: neither the engine's nor one of the module's keys -- refused at load.
+    if (buttons && spec.category === 'input' && typeof n.button === 'string' && n.button !== '' && !buttons.includes(n.button)) {
+      problems.push(`${where}: no button or key called ${n.button} -- the engine's are ${buttons.slice(0, 10).join(', ')}, and the module's keys are in Controls`)
     }
     // A camera path the map lacks: the engine refuses the graph at load.
     if (paths && n.path !== undefined && (n.type === 'camera_flythrough' || n.type === 'camera_track') && !paths.has(n.path)) {
