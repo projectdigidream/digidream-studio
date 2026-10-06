@@ -1355,6 +1355,8 @@ const STYLE = `
 .gw-bend{fill:#121620;stroke:#e8f0ff;stroke-width:2;cursor:grab;touch-action:none;pointer-events:all}
 .gw-bend-on{stroke:#ffe066}
 .gw-pin-idle{opacity:.35}
+/* A button alone in the side panel's column keeps a finger's height. */
+.gw .wk-details > button{flex:0 0 auto;min-height:36px}
 .gw-side-tabs{margin-bottom:6px}
 .gw-var-find{width:100%;height:36px;font-size:14px;box-sizing:border-box}
 .gw-var-row{min-height:34px;gap:6px}
