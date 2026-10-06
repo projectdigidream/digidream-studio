@@ -252,12 +252,23 @@ export function emitGameLua (module) {
 export const CONTROLS = ['platformer', 'fps']
 export const PERSIST = ['levels', 'saves', 'server']
 
-export function moduleTxt (module, docs = []) {
+/**
+ * @param debug  the debug overlay for this emit: true / false to say it
+ *               whatever the module does (a play-test's own choice), or
+ *               undefined to say what the module does (its `debug` setting).
+ */
+export function moduleTxt (module, docs = [], { debug } = {}) {
   const L = [`name    ${module.name}`, `id      ${module.id}`]
   for (const line of (module.about ?? '').split('\n')) if (line.trim()) L.push(`about   ${line}`)
   // Platformer is the engine's default, so it goes unsaid; a module that says
   // it would override an fps flavour stacked on top of it.
   if (module.controls === 'fps') L.push('controls fps')
+  // The engine's debug overlay (numbers, controls legend, swing drawings):
+  // on unless the module turns it off -- or a play-test says either way.
+  // `on` is said only for a play-test, where a module beneath may say off.
+  const shown = debug ?? (module.debug !== false)
+  if (!shown) L.push('debug off')
+  else if (debug === true) L.push('debug on')
   // The module's own keys (docs/KEYS.md), in order: key i is bit i.
   L.push(...keyLines(module))
   for (const p of PERSIST) if (module.persist?.includes(p)) L.push(`persist ${p}`)
@@ -403,11 +414,11 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [], graph
  * @param textureSizes  (name) => { w, h } | null, for index.json
  * @returns { ok, files, problems: [{ map, errors, warnings }] }
  */
-export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null, graphVocab = null }) {
+export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null, graphVocab = null, debug } = {}) {
   const files = []
   const problems = []
   const used = new Set()
-  files.push({ path: 'module.txt', bytes: moduleTxt(module, docs) })
+  files.push({ path: 'module.txt', bytes: moduleTxt(module, docs, { debug }) })
   files.push({ path: 'module.studio.json', bytes: JSON.stringify(module, null, 2) })
   const props = emitProps(module)
   files.push({ path: 'assets/props.txt', bytes: props })

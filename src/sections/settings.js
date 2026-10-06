@@ -20,6 +20,11 @@ function showSettings () {
     select('controls', S.module.controls ?? 'platformer', [['platformer', 'platformer — third person'], ['fps', 'first person (fps)']],
            (v) => { S.module.controls = v; S.save() }),
     muted('First person puts the camera at the eyes and aims where the player looks; a touch drag looks around. The module decides, not the player.'),
+    // The engine's debug overlay: the module's (what ships), and this device's Play.
+    toggle('show the debug overlay in the game', S.module.debug !== false, (v) => { if (v) delete S.module.debug; else S.module.debug = false; S.moduleChanged(); showSettings() }),
+    select('when I press Play', S.playDebug(), [['module', `as the module says (${S.module.debug === false ? 'hidden' : 'shown'})`], ['on', 'always show it'], ['off', 'never show it']],
+           (v) => { S.setPlayDebug(v); showSettings() }),
+    muted('The overlay is the engine\'s numbers in the top-left corner (tick, fps, position, prediction), the controls legend, and the swing and facing drawings. Off, a game launches clean -- module.txt `debug off`. The Play choice is this device\'s, for your play-tests only; an exported pack says what the module says.'),
     ...PERSIST.map((k) => toggle({ levels: 'levels keep their state', saves: 'save and load games', server: 'survive a server restart' }[k],
       (S.module.persist ?? []).includes(k), (v) => {
         const set = new Set(S.module.persist ?? [])

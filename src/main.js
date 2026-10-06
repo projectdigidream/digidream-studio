@@ -1018,7 +1018,14 @@ S.vfxChoices = () => vfxChoices(S.module ?? {}, S.servedVfx ?? new Map())
 
 
 // --- play, export, import -----------------------------------------------------------------------
-async function emitAll () {
+// THE DEBUG OVERLAY IN A PLAY-TEST, this device's choice: 'module' (as the
+// module says), 'on' or 'off'. Written into the module.txt Play hands the
+// game -- the last module to say wins -- and never into an Export.
+const PLAY_DEBUG_KEY = 'dnp.studio.playDebug'
+S.playDebug = () => { try { return localStorage.getItem(PLAY_DEBUG_KEY) ?? 'module' } catch { return 'module' } }
+S.setPlayDebug = (v) => { try { localStorage.setItem(PLAY_DEBUG_KEY, v) } catch {} }
+
+async function emitAll ({ forPlay = false } = {}) {
   const problems = validate(S.doc)
   if (problems.length) { S.status(problems.map((p) => (p.sector ? `${p.sector}: ` : '') + p.msg).join('\n'), 'error'); return null }
   // A graph the runtime would refuse does not load at all, so it is said here
@@ -1039,7 +1046,8 @@ async function emitAll () {
   const r = await emitModule(S.module, Object.values(S.docs), {
     // The hook names the server harvests, from the vocabulary that lists them.
     bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name), assets, graphVocab: S.vocab.graph,
-    textureSizes: (n) => (sizes[n] ? { w: sizes[n][0], h: sizes[n][1], cutout: !!texIndex.cutout?.[n] } : null)
+    textureSizes: (n) => (sizes[n] ? { w: sizes[n][0], h: sizes[n][1], cutout: !!texIndex.cutout?.[n] } : null),
+    debug: forPlay && S.playDebug() !== 'module' ? S.playDebug() === 'on' : undefined
   })
   if (!r.ok) {
     S.status(r.problems.map((p) => `${p.map}: ` + p.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('; ')).join('\n'), 'error')
@@ -1052,7 +1060,7 @@ async function play () {
   if (!hasShell()) { S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn'); return }
   S.status('baking…', 'ok')
   const map = `${S.docName}.dnpm`
-  const r = await emitAll()
+  const r = await emitAll({ forPlay: true })
   if (!r) {
     // Refused before anything ran: what the status strip said is the log.
     S.playLogLines = [`[studio] play-test of ${S.module.id}/maps/${map}, ${new Date().toISOString()}`]
