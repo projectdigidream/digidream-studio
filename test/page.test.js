@@ -1570,14 +1570,14 @@ await page.keyboard.press('Escape')
   }
   // A NUMBER FROM A VARIABLE: 𝑥 beside a damage amount takes it from the
   // graph's variable instead; ✕ makes it a typed number again; a delay's
-  // ticks, which the engine gives no input, has no 𝑥.
+  // count, which stays literal (it decides the exits), has no 𝑥.
   const bound = await page.evaluate(async () => {
     const S = window.__studio
     const w = S.window
     const g = S.doc.graphs.main
     g.vars = { ...(g.vars ?? {}), dmg: 5 }
     const hurt = w.addFrom('node:damage')
-    const wait = w.addFrom('node:delay')
+    const wait = w.addFrom('node:sequence')
     g.nodes.find((n) => n.id === hurt).amount = 10
     S.commit(); w.side = 'details'; w.render()
     await new Promise((r) => setTimeout(r, 100))
@@ -1596,7 +1596,7 @@ await page.keyboard.press('Escape')
     return { offered, onDelay, held, choices: choices.slice(0, 3), hasHp: choices.includes('hp'), back: back === undefined ? 'unset' : back }
   })
   check(bound.offered && !bound.onDelay && bound.held === '{"var":"dmg"}' && bound.choices[0] === 'dmg' && bound.hasHp && bound.back === 'unset',
-        `𝑥 takes a number from a variable (the graph's, or a numeric property), ✕ makes it typed again; a delay's ticks has none (${JSON.stringify(bound)})`)
+        `𝑥 takes a number from a variable (the graph's, or a numeric property), ✕ makes it typed again; a sequence's count has none (${JSON.stringify(bound)})`)
   check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
         `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {
@@ -1661,7 +1661,7 @@ await page.keyboard.press('Escape')
     await new Promise((r) => setTimeout(r, 300))
     const node = (id) => document.querySelector(`.gw [data-node="${id}"]`)
     // A field on the board: the delay's ticks, changed where it is drawn.
-    const ticks = [...node('wait').querySelectorAll('.st-row')].find((r) => r.firstChild?.textContent === 'ticks')?.querySelector('input')
+    const ticks = node('wait').querySelector('[data-arg="ticks"] input')
     if (ticks) { ticks.value = '90'; ticks.dispatchEvent(new Event('change')) }
     await new Promise((r) => setTimeout(r, 100))
     // Links are drawn on the next frame, once the pins have places.
