@@ -530,6 +530,14 @@ class GraphWindow {
   }
 
   /** A node and every link to or from it. */
+  /** A node's description: its verb's for an event, condition or action, else its type's. */
+  #nodeDoc (n, spec) {
+    if (n.type === 'event') return this.#verbDoc('event', n.event) || spec?.doc || ''
+    if (n.type === 'condition') return this.#verbDoc('condition', n.c) || spec?.doc || ''
+    if (n.type === 'action') return this.#verbDoc('action', n.a) || spec?.doc || ''
+    return spec?.doc ?? ''
+  }
+
   #deleteNode (n) {
     const g = this.graph
     if (!g) return
@@ -579,7 +587,19 @@ class GraphWindow {
     const on = this.picked?.kind === 'node' && this.picked.id === n.id
     // A small ✕ to delete it where it is; undo brings it back.
     const del = el('button', { class: 'gw-del', text: '✕', title: `delete ${n.id}`, 'data-del': n.id, onclick: (e) => { e.stopPropagation(); this.#deleteNode(n) } })
-    const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title', text: `${n.type === 'event' ? '⚡ ' : ''}${n.id}` }), del])
+    // What it does, a tap away: the vocabulary's own description, under the title.
+    const docText = this.#nodeDoc(n, spec)
+    this.docOpen ??= new Set()
+    const docEl = docText ? el('div', { class: 'gw-doc', text: docText }) : null
+    if (docEl) docEl.hidden = !this.docOpen.has(n.id)
+    const info = docText ? el('button', { class: 'gw-info', text: 'ⓘ', title: docText, 'data-info': n.id, 'data-on': docEl.hidden ? '0' : '1', onclick: (e) => {
+      e.stopPropagation()
+      docEl.hidden = !docEl.hidden
+      info.dataset.on = docEl.hidden ? '0' : '1'
+      if (docEl.hidden) this.docOpen.delete(n.id); else this.docOpen.add(n.id)
+      this.#drawLinks()
+    } }) : null
+    const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title', text: `${n.type === 'event' ? '⚡ ' : ''}${n.id}` }), info, del].filter(Boolean))
     const body = el('div', { class: 'gw-body' })
     const pin = this.pin = (name, dir, kind) => {
       const d = el('div', { class: `gw-pin gw-${dir} gw-${kind}`, 'data-pin': `${n.id}.${name}`, 'data-dir': dir, 'data-kind': kind },
@@ -593,7 +613,7 @@ class GraphWindow {
     body.append(el('div', { class: 'gw-col' }, ins), el('div', { class: 'gw-col gw-right' }, outs))
     const fields = this.#boardFields(n, spec, p.argPins)
     const node = el('div', { class: `gw-node gw-${categoryOf(n, spec)}${on ? ' gw-on' : ''}${bad ? ' wk-node-bad' : ''}`, 'data-node': n.id },
-      [head, fields.length ? el('div', { class: 'gw-fields' }, fields) : el('div', { class: 'gw-sum', text: this.#summary(n) }), body])
+      [head, docEl, fields.length ? el('div', { class: 'gw-fields' }, fields) : el('div', { class: 'gw-sum', text: this.#summary(n) }), body].filter(Boolean))
     node.style.left = `${n.pos?.x ?? 0}px`
     node.style.top = `${n.pos?.y ?? 0}px`
     this.#nodeGesture(node, head, n)
@@ -768,10 +788,12 @@ class GraphWindow {
   fitAll (board) {
     const nodes = this.graph?.nodes ?? []
     if (!nodes.length) return
-    const els = nodes.map((n) => this.nodeEls.get(n.id)).filter(Boolean)
-    const x0 = Math.min(...nodes.map((n) => n.pos?.x ?? 0)); const y0 = Math.min(...nodes.map((n) => n.pos?.y ?? 0))
-    const x1 = Math.max(...nodes.map((n, i) => (n.pos?.x ?? 0) + (els[i]?.offsetWidth ?? NODE_W)))
-    const y1 = Math.max(...nodes.map((n, i) => (n.pos?.y ?? 0) + (els[i]?.offsetHeight ?? 120)))
+    const els = nodes.map((n) => this.nodeEls.get(n.id))
+    // The notes too: a note's title is what says what the part is.
+    const notes = this.graph?.notes ?? []
+    const x0 = Math.min(...nodes.map((n) => n.pos?.x ?? 0), ...notes.map((t) => t.x)); const y0 = Math.min(...nodes.map((n) => n.pos?.y ?? 0), ...notes.map((t) => t.y))
+    const x1 = Math.max(...nodes.map((n, i) => (n.pos?.x ?? 0) + (els[i]?.offsetWidth ?? NODE_W)), ...notes.map((t) => t.x + t.w))
+    const y1 = Math.max(...nodes.map((n, i) => (n.pos?.y ?? 0) + (els[i]?.offsetHeight ?? 120)), ...notes.map((t) => t.y + t.h))
     const r = board.getBoundingClientRect()
     const z = Math.min(2, Math.max(0.3, Math.min((r.width - 40) / (x1 - x0), (r.height - 80) / (y1 - y0))))
     this.view = { z, x: (r.width - (x1 - x0) * z) / 2 - x0 * z, y: 20 - y0 * z }
@@ -791,7 +813,7 @@ class GraphWindow {
   /** Drag a node by its title; a tap selects it. */
   #nodeGesture (node, head, n) {
     head.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.gw-del')) { e.stopPropagation(); return }
+      if (e.target.closest('.gw-del, .gw-info')) { e.stopPropagation(); return }
       e.preventDefault(); e.stopPropagation()
       head.setPointerCapture?.(e.pointerId)
       const start = { x: e.clientX, y: e.clientY, nx: n.pos?.x ?? 0, ny: n.pos?.y ?? 0 }
@@ -1123,6 +1145,7 @@ class GraphWindow {
       rows.push(select('variable', n.var ?? '', Object.keys(g.vars ?? {}).map((v) => [v, v]), (v) => { n.var = v; ch() }))
       if (n.type !== 'get_var') rows.push(text('value (unless linked)', n.value ?? '', (v) => { n.value = literal(v); ch() }))
     } else if (spec) {
+      if (spec.doc) rows.push(muted(spec.doc))
       const linked = this.#linkedArgs(n)
       const own = (spec.args ?? []).filter((a) => !linked.has(a.name))
       for (const a of (spec.args ?? []).filter((x) => linked.has(x.name))) rows.push(row(a.name, el('span', { class: 'gw-from', text: `← linked from ${linked.get(a.name)}` })))
@@ -1245,6 +1268,9 @@ const STYLE = `
 .gw-menu-doc{flex:1 1 100%;font-size:11px;color:#8a93a6;white-space:normal}
 .gw-del{flex:0 0 auto;width:22px;height:22px;min-width:0;min-height:0;padding:0;border-radius:6px;font-size:11px;line-height:20px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.18);color:#e8e8ea;opacity:.7;cursor:pointer}
 .gw-del:hover,.gw-del:active{opacity:1;background:#5a2330;border-color:#ff6b6b}
+.gw-info{flex:0 0 auto;width:22px;height:22px;min-width:0;min-height:0;padding:0;border-radius:50%;font-size:12px;line-height:20px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.18);color:#e8e8ea;opacity:.7;cursor:pointer}
+.gw-info:hover,.gw-info:active,.gw-info[data-on="1"]{opacity:1;background:rgba(91,143,214,.35);border-color:#5b8fd6}
+.gw-doc{padding:6px 10px;font:11px/1.45 ui-monospace,Menlo,monospace;color:#cfe3ff;background:rgba(0,0,0,.25);white-space:pre-wrap;border-bottom:1px solid rgba(207,227,255,.12)}
 .gw-ev .gw-head{background:#5a2330}.gw-cond .gw-head{background:#5a4a1e}.gw-act .gw-head{background:#1f3a5c}
 .gw-flow .gw-head{background:#33384a}.gw-data .gw-head{background:#1f4a35}
 .gw-cine .gw-head{background:#4a2a5c}

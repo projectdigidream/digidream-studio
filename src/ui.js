@@ -70,6 +70,11 @@ const STYLE = `
 .st-sheet-body{padding:10px 14px;padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow:auto;
   display:flex;flex-direction:column;gap:10px}
 .st-row{display:flex;align-items:center;gap:8px;min-height:44px}
+.st-has-help{flex-wrap:wrap}
+.st-row.st-has-help > input:not([type=checkbox]),.st-row.st-has-help > select:not([multiple]){min-width:0;flex:1 1 0}
+.st-help{flex:0 0 auto;width:26px;height:26px;min-width:0;min-height:0;padding:0;border-radius:50%;font-size:13px;line-height:24px;opacity:.7;background:transparent;border:1px solid rgba(207,227,255,.25);color:#cfe3ff}
+.st-help[data-on="1"]{opacity:1;border-color:#5b8fd6;background:rgba(91,143,214,.2)}
+.st-help-text{flex:1 1 100%;font:12px/1.45 ui-monospace,Menlo,monospace;color:#9fb0c8;white-space:pre-wrap;padding:2px 2px 6px}
 .st-row label{flex:0 0 7em;opacity:.8;font-size:12px}
 .st-row input[type=range]{flex:1 1 auto;min-width:60px;height:44px}
 .st-row input[type=number],.st-row input[type=text],.st-row select,.st-row textarea{
@@ -351,6 +356,31 @@ export class Ui {
 }
 
 // --- controls -------------------------------------------------------------------
+
+// Which descriptions are open, by their text: a form drawn again after an
+// edit keeps the one being read open.
+const helpOpen = new Set()
+
+/**
+ * An ⓘ on a row: tapped, the field's own description -- the vocabulary's
+ * `doc` -- shows under it, and stays open while the form is redrawn.
+ */
+export function addHelp (rowEl, doc) {
+  if (!doc || !rowEl?.appendChild || rowEl.querySelector(':scope > .st-help')) return rowEl
+  const text = el('div', { class: 'st-help-text', text: doc })
+  text.hidden = !helpOpen.has(doc)
+  const b = el('button', { class: 'st-help', type: 'button', text: 'ⓘ', title: doc, 'aria-label': 'what is this?', 'data-on': text.hidden ? '0' : '1' })
+  b.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation()
+    text.hidden = !text.hidden
+    b.dataset.on = text.hidden ? '0' : '1'
+    if (text.hidden) helpOpen.delete(doc); else helpOpen.add(doc)
+  })
+  b.addEventListener('pointerdown', (e) => e.stopPropagation())
+  rowEl.classList.add('st-has-help')
+  rowEl.append(b, text)
+  return rowEl
+}
 
 export function row (label, ...controls) {
   return el('div', { class: 'st-row' }, [el('label', { text: label }), ...controls])

@@ -13,7 +13,7 @@
 // without reading. Edits commit (undo step, save, bake) and the view is drawn
 // again from the document, scroll position kept.
 //
-import { el, row, text, toggle, select, button, chips, muted, ask } from './ui.js'
+import { el, row, text, toggle, select, button, chips, muted, ask, addHelp } from './ui.js'
 import { addTrigger, findEdge } from './doc.js'
 import * as presets from './presets.js'
 import { argFields, refLabel } from './argform.js'
@@ -216,8 +216,8 @@ function triggerView (S, t) {
 
   // WHEN
   body.push(section(icon(t.event), 'WHEN', 'when', [
-    select('event', t.event ?? '', [['', '↪ only when another trigger runs it'], ...vocab.trigger.events.map((e) => [e.name, `${icon(e.name)} ${e.name} (${(e.params ?? []).join(', ')})`])],
-           (v) => { t.event = v || null; done() }),
+    addHelp(select('event', t.event ?? '', [['', '↪ only when another trigger runs it'], ...vocab.trigger.events.map((e) => [e.name, `${icon(e.name)} ${e.name} (${(e.params ?? []).join(', ')})`])],
+           (v) => { t.event = v || null; done() }), vocab.trigger.events.find((e) => e.name === t.event)?.doc),
     el('div', { class: 'st-row' }, [
       toggle('', !!t.once, (v) => { t.once = v; done() }).lastChild, muted('once: spent after it first does something'),
       toggle('', t.enabled !== false, (v) => { t.enabled = v; done() }).lastChild, muted('armed from the start')
@@ -228,11 +228,11 @@ function triggerView (S, t) {
   const ifRows = []
   ;(t.conditions ?? []).forEach((c, i) => {
     const spec = vocab.conditions.get(c.c)
-    const rows = [el('div', { class: 'st-row' }, [
+    const rows = [addHelp(el('div', { class: 'st-row' }, [
       el('span', { class: 'st-entry', text: c.c }),
       toggle('', !!c.negate, (v) => { c.negate = v || undefined; done() }).lastChild, muted('not'),
       button('✕', () => { t.conditions.splice(i, 1); done() })
-    ])]
+    ]), spec?.doc)]
     if (c.c === 'side_is') rows.push(sideField(c, S, done))
     if (spec) rows.push(...argFields(spec.args ?? [], c, ctx, ['side', 'expect_neighbour', 'expect_tag'], c.c))
     ifRows.push(el('div', { class: 'st-card' }, rows))
@@ -247,11 +247,11 @@ function triggerView (S, t) {
   const thenRows = []
   ;(t.actions ?? []).forEach((a, i) => {
     const spec = vocab.actions.get(a.a)
-    const rows = [el('div', { class: 'st-row' }, [
+    const rows = [addHelp(el('div', { class: 'st-row' }, [
       el('span', { class: 'st-entry', text: `${i + 1}. ${a.a}` }),
       i > 0 ? button('↑', () => { [t.actions[i - 1], t.actions[i]] = [t.actions[i], t.actions[i - 1]]; done() }) : null,
       button('✕', () => { t.actions.splice(i, 1); done() })
-    ])]
+    ]), spec?.doc)]
     if (spec) rows.push(...argFields(spec.args ?? [], a, ctx, ['expect_tag', 'fn'], a.a))
     thenRows.push(el('div', { class: 'st-card' }, rows))
   })

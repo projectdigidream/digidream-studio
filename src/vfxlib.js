@@ -12,7 +12,7 @@
 // vocabulary. That is why one editor here serves all of them and why the
 // pickers elsewhere only have to offer an id.
 //
-import { el, row, number, select, muted, button, text } from './ui.js'
+import { el, row, number, select, muted, button, text, addHelp } from './ui.js'
 import * as THREE from 'three'
 import { emitBurst, stepParticles, VfxView } from '/src/render/vfx.js'
 
@@ -78,7 +78,7 @@ export function vfxRows (v, ctx) {
   for (const f of PARTICLE_FIELDS) {
     if (f.attachedOnly && !attached) continue
     if (f.name === 'count' && attached) continue
-    rows.push(number(f.label ?? f.name, v[f.name] ?? 0, { min: f.min, max: f.max, step: f.step }, (n) => { v[f.name] = n; ctx.changed() }))
+    rows.push(addHelp(number(f.label ?? f.name, v[f.name] ?? 0, { min: f.min, max: f.max, step: f.step }, (n) => { v[f.name] = n; ctx.changed() }), f.doc))
   }
   rows.push(colourRow('colour', v.colour ?? 0xffaa33, (n) => { v.colour = n; ctx.changed() }))
   rows.push(colourRow('colour_end', v.colourEnd ?? 0x662200, (n) => { v.colourEnd = n; ctx.changed() }))

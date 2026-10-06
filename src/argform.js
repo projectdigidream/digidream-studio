@@ -7,7 +7,7 @@
 // is a new form with no studio change. The only knowledge here is what each
 // TYPE looks like on screen; nothing here knows what a door is.
 //
-import { el, row, toggle, select, button, muted } from './ui.js'
+import { el, row, toggle, select, button, muted, addHelp } from './ui.js'
 
 /** "0.25" -> "0.25", "-4/48" -> [-4, 48], "2" -> 2. Null when unreadable. */
 export function parseFx (s) {
@@ -82,6 +82,8 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
     // (the graph board puts the argument's data pin there).
     const own = rows[rows.length - 1]
     if (own && own.dataset && !own.dataset.arg) own.dataset.arg = a.name
+    // Its description, a tap away (the vocabulary's own words).
+    if (own && a.doc && own.dataset?.arg === a.name) addHelp(own, a.doc)
   }
   return rows
 

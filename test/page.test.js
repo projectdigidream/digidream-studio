@@ -1512,6 +1512,32 @@ await page.keyboard.press('Escape')
   check(noted.drawn && noted.wraps, `a note goes round the picked node (${JSON.stringify(noted)})`)
   check(bent.moved.note - noted.before.ox > 40 && bent.moved.node - noted.before.nx > 40, `dragging its title moves the note and the node inside it (${JSON.stringify(bent.moved)} from ${JSON.stringify(noted.before)})`)
   check(bent.dot && bent.through === 2 && bent.pruned, `a bend is a dot the link is drawn through, and goes with its link (${JSON.stringify(bent)})`)
+  // HELP: a node's ⓘ opens its description under its title, and stays open
+  // when the board is drawn again; a field's ⓘ in the side panel opens the
+  // field's own (the vocabularies' doc strings).
+  const helped = await page.evaluate(async () => {
+    const S = window.__studio
+    const w = S.window
+    const id = w.addFrom('node:set_sector_light')
+    await new Promise((r) => setTimeout(r, 100))
+    const spec = S.vocab.graph.nodes.find((n) => n.name === 'set_sector_light')
+    const info = document.querySelector(`.gw-node[data-node="${id}"] [data-info]`)
+    info?.click()
+    const shown = document.querySelector(`.gw-node[data-node="${id}"] .gw-doc`)
+    const open1 = shown && !shown.hidden && shown.textContent === spec.doc
+    w.render()
+    const kept = !document.querySelector(`.gw-node[data-node="${id}"] .gw-doc`)?.hidden
+    // The side panel's fields: the light's own description.
+    w.picked = { kind: 'node', id }; w.render()
+    const lightRow = document.querySelector('.gw .wk-details [data-arg="light"]')
+    lightRow?.querySelector('.st-help')?.click()
+    const fieldDoc = lightRow?.querySelector('.st-help-text')
+    const field = fieldDoc && !fieldDoc.hidden && fieldDoc.textContent === spec.args.find((a) => a.name === 'light').doc
+    S.doc.graphs.main.nodes = S.doc.graphs.main.nodes.filter((n) => n.id !== id); S.commit(); w.picked = null; w.render()
+    return { info: !!info, open1, kept, field, helps: document.querySelectorAll('.gw .st-help').length }
+  })
+  check(helped.info && helped.open1 && helped.kept, `a node's ⓘ opens its description, and it stays open when the board is drawn again (${JSON.stringify(helped)})`)
+  check(helped.field, 'a field\'s ⓘ opens the field\'s own description')
   check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
         `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {
