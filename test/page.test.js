@@ -13,6 +13,7 @@
 // checks is what a finger would get.
 //
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { createRequire } from 'node:module'
 
 const name = 'page'
@@ -2173,7 +2174,12 @@ await page.keyboard.press('Escape')
     page.evaluate(async () => { await window.__studio.go('textures'); window.__texDone = window.__studio.importTexture() })
   ])
   await chooser.accept([new URL('../../modules/starter/assets/textures/ROCKWALL1.png', import.meta.url).pathname])
+  // A square picture: the sheet dialog opens on "a still picture", and import takes it.
+  await page.waitForSelector('dialog[data-sheet-dialog] [data-sheet-ok]', { timeout: 5000 })
+  const stillCut = await page.evaluate(() => document.querySelector('dialog[data-sheet-dialog] [data-sheet-cut]').value)
+  await page.evaluate(() => document.querySelector('dialog[data-sheet-dialog] [data-sheet-ok]').click())
   await page.evaluate(() => window.__texDone)
+  check(stillCut === 'still', `a square picture is imported as a still one unless told otherwise (${stillCut})`)
   const tex = await page.evaluate(async () => {
     const S = window.__studio
     const sid = S.doc.order[0]
@@ -2205,6 +2211,62 @@ await page.keyboard.press('Escape')
   check(undone.own.includes('ROCKWALL1') && !undone.own.includes('CAVEWALL') && undone.floor === 'ROCKWALL1',
         `undo on a page undoes the module's last change, the maps it reached into included (${JSON.stringify(undone)})`)
   await page.evaluate(() => { const S = window.__studio; S.doc.sectors[S.doc.order[0]].floorTex = null; delete S.module.textures.ROCKWALL1; delete S.module.textures.CAVEWALL; S.commit(); S.moduleChanged() })
+
+  // AN ANIMATED TEXTURE: a picture four squares tall (as qPainter saves an
+  // animation) is offered as four frames stacked; the speed is set by hand;
+  // its tile plays; animations.txt carries its line; the map view plays it
+  // with the client's own animator, frame after frame.
+  {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const sheetPath = join(mkdtempSync(join(tmpdir(), 'dnp-sheet-')), 'flicker.png')
+    writeFileSync(sheetPath, Buffer.from(await page.evaluate(async () => {
+      const c = document.createElement('canvas'); c.width = 16; c.height = 64
+      const g = c.getContext('2d')
+      ;['#ff0000', '#00ff00', '#0000ff', '#ffff00'].forEach((col, i) => { g.fillStyle = col; g.fillRect(0, i * 16, 16, 16) })
+      const b = await new Promise((r) => c.toBlob(r, 'image/png'))
+      return [...new Uint8Array(await b.arrayBuffer())]
+    })))
+    const [ch] = await Promise.all([
+      page.waitForFileChooser({ timeout: 10000 }),
+      page.evaluate(async () => { await window.__studio.go('textures'); window.__texDone = window.__studio.importTexture() })
+    ])
+    await ch.accept([sheetPath])
+    await page.waitForSelector('dialog[data-sheet-dialog] [data-sheet-ok]', { timeout: 5000 })
+    const offered = await page.evaluate(() => {
+      const d = document.querySelector('dialog[data-sheet-dialog]')
+      const out = { cut: d.querySelector('[data-sheet-cut]').value, frames: d.querySelector('[data-sheet-frames]').value, info: d.querySelector('[data-sheet-info]').textContent }
+      const fps = d.querySelector('[data-sheet-fps]'); fps.value = '12'; fps.dispatchEvent(new Event('change'))
+      d.querySelector('[data-sheet-ok]').click()
+      return out
+    })
+    await page.evaluate(() => window.__texDone)
+    const sheet = await page.evaluate(async () => {
+      const S = window.__studio
+      await S.showTextures('FLICKER')
+      const tile = document.querySelector('.sd-page [data-texture="FLICKER"]')
+      const { animationsTxt } = await import('/studio/src/texsheet.js')
+      const sid = S.doc.order[0]
+      S.doc.sectors[sid].floorTex = 'FLICKER'
+      S.commit()
+      await new Promise((r) => { const t = setInterval(() => { if (!S.preview.busy && S.preview.view) { clearInterval(t); r() } }, 50) })
+      await new Promise((r) => setTimeout(r, 300))
+      const a = S.viewport.texAnimator
+      const slot = S.preview.view.map.textures.indexOf('FLICKER')
+      const mat = S.preview.view.materials[slot]
+      const seen = new Set()
+      for (let i = 0; i < 8; i++) { a?.update(i / 12); seen.add(mat?.uniforms.map.value?.name) }
+      const r = { spec: S.module.textures.FLICKER?.sheet, tileClass: tile?.className ?? '', txt: animationsTxt(S.module), animated: a?.count ?? 0, frames: [...seen].sort(), repeat: mat?.uniforms.repeat.value.y }
+      S.doc.sectors[sid].floorTex = null; delete S.module.textures.FLICKER; S.commit(); S.moduleChanged()
+      return r
+    })
+    check(offered.cut === 'vertical' && offered.frames === '4' && /4 frames of 16×16/.test(offered.info), `a picture four squares tall is offered as four frames stacked, as qPainter saves them (${JSON.stringify(offered)})`)
+    check(sheet.spec?.layout === 'vertical' && sheet.spec.frames === 4 && sheet.spec.fps === 12 && /st-sheet-v/.test(sheet.tileClass),
+          `the cut and the speed set by hand are kept, and its tile plays (${JSON.stringify(sheet.spec)}, ${sheet.tileClass})`)
+    check(/^sheet FLICKER vertical 4 fps 12$/m.test(sheet.txt ?? ''), `animations.txt carries its line (${(sheet.txt ?? '').split('\n').filter((l) => l.startsWith('sheet')).join('')})`)
+    check(sheet.animated >= 1 && sheet.frames.join() === 'FLICKER,FLICKER#1,FLICKER#2,FLICKER#3',
+          `the map view plays it with the client's animator, every frame in turn (${sheet.frames.join(', ')})`)
+  }
 
   const scripts = await page.evaluate(async () => {
     const S = window.__studio

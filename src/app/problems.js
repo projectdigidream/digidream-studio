@@ -13,10 +13,11 @@ import { metamapProblems } from '../metamap.js'
 import { skyProblems } from '../sky_emit.js'
 import { playerProblems } from '../player.js'
 import { climbProblems } from '../climb.js'
+import { sheetProblems } from '../texsheet.js'
 
-/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg] } */
+/** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg], textures: [msg] } */
 export function moduleProblems (S) {
-  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [] }
+  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [], textures: [] }
   const V = S.vocab
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
@@ -36,6 +37,8 @@ export function moduleProblems (S) {
   const tex = S.allTextureNames?.() ?? null
   out.sky.push(...skyProblems(S.module.sky, tex, 'the module\'s sky'))
   for (const d of Object.values(S.docs)) out.sky.push(...skyProblems(d.sky, tex, `${d.name}'s sky`))
+  // Animated textures: a sheet the client would refuse or show with pixels left over.
+  for (const [n, t] of Object.entries(S.module.textures ?? {})) out.textures.push(...sheetProblems(n, t.sheet, t.w, t.h))
   // The player's lines: a value of the wrong kind (docs/PLAYER.md).
   out.player.push(...playerProblems(S.module, Object.values(S.docs)))
   if (S.module.mobs) out.monsters.push(...V.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }))

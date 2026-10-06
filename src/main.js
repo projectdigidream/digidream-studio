@@ -54,6 +54,8 @@ import { History } from './history.js'
 import { Store, debounce } from './store.js'
 import { Snapshots, EVERY_MS, ON_OPEN_MS } from './snapshots.js'
 import { STUDIO_VERSION } from './version.js'
+import { parseAnimations } from '/src/render/animtex.js'
+import { animationsTxt } from './texsheet.js'
 import { shell, hasShell } from './bridge.js'
 import { Ui, el, button, row, text, muted, card, select, number, ask } from './ui.js'
 import { moduleProps } from './props.js'
@@ -153,7 +155,15 @@ S.viewport = new Viewport(document.body)
 installSky(S)
 // The module's own pictures come from the record's blobs; everything else the
 // shell serves. Decoded once each, whatever the number of bakes.
-S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {} })
+// Animated textures: the app's (its frame lists and sheets, /animations.txt)
+// and the module's own sheets over them, read by the client's own parser.
+S.servedAnim = await fetch('/animations.txt').then((r) => (r.ok ? r.text() : '')).then(parseAnimations).catch(() => parseAnimations(''))
+S.sheetOf = (n) => S.module?.textures?.[n]?.sheet ?? (S.module?.textures?.[n] ? null : S.servedAnim.sheets.get(n) ?? null)
+S.animGroups = () => {
+  const own = new Set(Object.keys(S.module?.textures ?? {}))
+  return [...S.servedAnim.groups.filter((g) => !own.has(g.frames[0])), ...parseAnimations(animationsTxt(S.module) ?? '').groups]
+}
+S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {}, sheetOf: (n) => S.sheetOf(n), groups: () => S.animGroups() })
 S.preview = new Preview({ core: S.core, bake: S.bake, runtime: S.runtime, viewport: S.viewport, textures: S.textures,
                           hooks: S.vocab.trigger.events.map((e) => e.name) })
 // Placed things are drawn as their own pictures, once those have loaded.
@@ -528,7 +538,7 @@ S.refreshSheet = () => { if (S.ui.sheetOpen && S.selection) showInspector() }
 S.pickTexture = (current, onPick) => {
   const names = [...Object.keys(S.module.textures ?? {}), ...S.textureNames]
   S.ui.showSheet('Texture', texturePicker(names, current, (name) => { onPick(name); showInspector() },
-    { imageFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png` }))
+    { imageFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, sheetOf: (n) => S.sheetOf(n) }))
 }
 S.openPalette = () => S.ui.showSheet('Place', placePalette({
   mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: [...moduleProps(S.module).map((p) => p.name), ...S.catalogue], armed: S.place

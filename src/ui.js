@@ -71,6 +71,10 @@ const STYLE = `
   display:flex;flex-direction:column;gap:10px}
 .st-row{display:flex;align-items:center;gap:8px;min-height:44px}
 .st-has-help{flex-wrap:wrap}
+.st-sheet-v{background-size:100% calc(var(--frames) * 100%) !important;background-repeat:no-repeat;animation:st-sheet-v var(--sheet-s) steps(var(--frames), jump-none) infinite}
+.st-sheet-h{background-size:calc(var(--frames) * 100%) 100% !important;background-repeat:no-repeat;animation:st-sheet-h var(--sheet-s) steps(var(--frames), jump-none) infinite}
+@keyframes st-sheet-v{from{background-position:0 0%}to{background-position:0 100%}}
+@keyframes st-sheet-h{from{background-position:0% 0}to{background-position:100% 0}}
 .st-row.st-has-help > input:not([type=checkbox]),.st-row.st-has-help > select:not([multiple]){min-width:0;flex:1 1 0}
 .st-help{flex:0 0 auto;width:26px;height:26px;min-width:0;min-height:0;padding:0;border-radius:50%;font-size:13px;line-height:24px;opacity:.7;background:transparent;border:1px solid rgba(207,227,255,.25);color:#cfe3ff}
 .st-help[data-on="1"]{opacity:1;border-color:#5b8fd6;background:rgba(91,143,214,.2)}
@@ -437,11 +441,26 @@ export function chips (items, onPick) {
   }))
 }
 
-/** A grid of picture tiles; `items`: [{ id, label, image?, on? }]. */
+/**
+ * A tile's picture: the image, or -- for a sprite sheet ({ layout, frames, fps },
+ * texsheet.js) -- one frame at a time, played by CSS alone (the background
+ * stepped across the sheet), so a grid of them costs no script.
+ */
+export function pictureBackground (t, image, sheet = null) {
+  t.style.backgroundImage = `url("${image}")`
+  if (!sheet || !(sheet.frames >= 2)) return t
+  t.classList.add(sheet.layout === 'horizontal' ? 'st-sheet-h' : 'st-sheet-v')
+  t.style.setProperty('--frames', sheet.frames)
+  t.style.setProperty('--sheet-s', `${sheet.frames / (sheet.fps || 8)}s`)
+  t.dataset.sheet = String(sheet.frames)
+  return t
+}
+
+/** A grid of picture tiles; `items`: [{ id, label, image?, sheet?, on? }]. */
 export function tiles (items, onPick) {
   return el('div', { class: 'st-grid' }, items.map((it) => {
     const t = el('div', { class: 'st-tile', 'data-on': it.on ? '1' : '0' }, [el('span', { text: it.label })])
-    if (it.image) t.style.backgroundImage = `url("${it.image}")`
+    if (it.image) pictureBackground(t, it.image, it.sheet)
     t.addEventListener('click', () => onPick(it))
     return t
   }))

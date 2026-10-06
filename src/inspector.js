@@ -267,13 +267,13 @@ function lightForm (l, doc, ctx) {
 // --- pickers -----------------------------------------------------------------------
 
 /** A grid of every texture the app can serve, plus the module's own. */
-export function texturePicker (names, current, onPick, { imageFor }) {
+export function texturePicker (names, current, onPick, { imageFor, sheetOf = () => null }) {
   const search = el('input', { type: 'text', placeholder: 'filter' })
   const grid = el('div')
   const draw = () => {
     const q = search.value.trim().toUpperCase()
     const items = [{ id: null, label: TEX_NONE, on: !current }]
-    for (const n of names) if (!q || n.includes(q)) items.push({ id: n, label: n, image: imageFor(n), on: n === current })
+    for (const n of names) if (!q || n.includes(q)) items.push({ id: n, label: n, image: imageFor(n), sheet: sheetOf(n), on: n === current })
     grid.replaceChildren(tiles(items.slice(0, 400), (it) => onPick(it.id)))
   }
   search.addEventListener('input', draw)

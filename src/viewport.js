@@ -166,6 +166,8 @@ export class Viewport {
   }
 
   render () {
+    // Animated textures (a sprite sheet, a frame list): the client's animator, on one clock.
+    this.texAnimator?.update(performance.now() / 1000)
     this.#place()
     if (this.sky) {
       const show = this.mode !== 'plan' && this.sky.sky.kind !== 0
@@ -268,7 +270,7 @@ export class Viewport {
   }
 
   /** Something on screen moves by itself (rain, fog), so every frame is drawn. */
-  get animating () { return !!this.fx }
+  get animating () { return !!this.fx || !!this.texAnimator }
 
   /** The world distance one screen pixel covers on the plane at height z. */
   worldPerPixel (z = 0) {

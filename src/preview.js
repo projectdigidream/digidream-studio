@@ -99,7 +99,7 @@ export class Preview {
     const data = readMap(loaded.map)
     const view = new MapView(data)
     view.setDynamicSectors([])
-    await this.textures.apply(view, doc.texscale)
+    const animator = await this.textures.apply(view, doc.texscale)
     if (this.map) this.map.destroy()
     this.map = loaded.map
     this.data = data
@@ -107,6 +107,7 @@ export class Preview {
     this.emitted = r.emitted
     this.dragSector = -1
     this.viewport.setView(view)
+    this.viewport.texAnimator = animator
     this.last = { ok: true, errors: [], warnings: r.warnings, hash: r.hash, problems }
   }
 

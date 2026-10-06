@@ -34,6 +34,7 @@ import { emitGraph, graphFile, gameGraphFile, hasGraph, liveGraphs } from './gra
 import { triggerPanels, graphPanels } from './panels_emit.js'
 import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
+import { animationsTxt } from './texsheet.js'
 import { playerLines, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
 import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
@@ -476,6 +477,9 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
     if (size.cutout) index.cutout[name] = true
   }
   files.push({ path: 'assets/textures/index.json', bytes: JSON.stringify(index, null, 1) })
+  // Its textures that are sprite sheets (texsheet.js; docs/TEXTURE_SHEETS.md).
+  const anims = animationsTxt(module)
+  if (anims !== null) files.push({ path: 'assets/animations.txt', bytes: anims })
   // The soundtrack's table, keyed by the bakes just made. Only when a map has
   // music: an empty table would shadow another module's in a shell that
   // serves the first file it finds.
