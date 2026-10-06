@@ -465,7 +465,7 @@ class PanelWindow {
   #palette () {
     const s = el('select', { class: 'pw-palette' }, [el('option', { value: '', text: '+ add…' }),
       el('optgroup', { label: 'widgets' }, KINDS.map((k) => el('option', { value: `w:${k}`, text: `${ICON[k]} ${k}` }))),
-      el('optgroup', { label: 'decor, behind the widgets' }, [el('option', { value: 'd:text', text: 'T text (may show {hud.name})' }), el('option', { value: 'd:image', text: '▣ picture' })])])
+      el('optgroup', { label: 'decor, behind the widgets' }, [el('option', { value: 'd:text', text: 'T text (may show {hud.name})' }), el('option', { value: 'd:bar', text: '▬ bar (a value, as health is drawn)' }), el('option', { value: 'd:image', text: '▣ picture' })])])
     s.addEventListener('change', () => {
       const [what, kind] = s.value.split(':')
       if (!what) return
@@ -479,7 +479,12 @@ class PanelWindow {
         const ids = new Set(p.decor.map((d) => d.id))
         const e = kind === 'text'
           ? { id: freeName('text', ids), type: 'text', anchor: 'tr', x: -12, y: 8, text: 'Gold {hud.gold}', style: { size: 12 } }
-          : { id: freeName('picture', ids), type: 'image', anchor: 'tl', x: 8, y: 8, w: 48, h: 48, frame: '' }
+          : kind === 'bar'
+            // A BAR, drawn by the HUD's own code as health is: a value (a HUD
+            // value a graph's set_hud writes, or hp) over a maximum.
+            ? { id: freeName('bar', ids), type: 'bar', anchor: 'tl', x: 12, y: 8, w: 160, h: 10, bind: 'hud.mana', max: 100, fill: '#5b8fd6' }
+            : { id: freeName('picture', ids), type: 'image', anchor: 'tl', x: 8, y: 8, w: 48, h: 48, frame: '' }
+        if (e.type === 'bar') this.sample[e.bind] ??= 60
         p.decor.push(e)
         this.sel = { kind: 'decor', i: p.decor.length - 1 }
       }
@@ -640,6 +645,20 @@ class PanelWindow {
         rows.push(text(`sample ${m[1]}`, String(this.sample[m[1]] ?? ''), (v) => { this.sample[m[1]] = /^-?\d+$/.test(v) ? Number(v) : v; this.render() }))
       }
       rows.push(muted('{hud.name} shows a HUD value -- what a graph\'s set_hud writes (or the weapons runtime: {hud.ammo}, {hud.weapon}). That is how a panel shows something that changes: the gold you have, a timer.'))
+    } else if (e.type === 'bar') {
+      const bindRe = /^(hp|hud\.[a-z0-9_]+)$/
+      const low = [].concat(e.low ?? [])[0]
+      rows.push(
+        text('value', e.bind ?? '', (v) => { const b = String(v).trim(); if (bindRe.test(b)) { e.bind = b; this.sample[b] ??= 60; ch() } else this.S.status('a bar shows hp, or hud.<name> -- a HUD value a graph sets with set_hud', 'warn') }, { placeholder: 'hud.mana' }),
+        text('out of', String(e.max ?? ''), (v) => { const t = String(v).trim(); if (/^\d+(\.\d+)?$/.test(t)) e.max = Number(t); else if (bindRe.test(t) || /^hud\.[a-z0-9_]+$/.test(t)) e.max = t; else delete e.max; ch() }, { placeholder: '100, or hud.mana_max' }),
+        row('colour', el('input', { type: 'color', value: e.fill ?? '#5fbf6a', onchange: (ev) => { e.fill = ev.target.value; ch() } })),
+        toggle('another colour when low', !!low, (v) => { if (v) e.low = [{ below: 0.25, fill: '#d65b5b' }]; else delete e.low; ch() }),
+        ...(low ? [number('low below, % full', Math.round((low.below ?? 0.25) * 100), { min: 1, max: 99, step: 1 }, (v) => { low.below = Math.max(0.01, Math.min(0.99, v / 100)); ch() }),
+          row('low colour', el('input', { type: 'color', value: low.fill ?? '#d65b5b', onchange: (ev) => { low.fill = ev.target.value; ch() } }))] : []),
+        number('w', typeof e.w === 'number' ? e.w : 160, { min: 8, max: 2000, step: 1 }, set('w')),
+        number('h', e.h ?? 10, { min: 2, max: 200, step: 1 }, set('h')),
+        text(`sample ${e.bind}`, String(this.sample[e.bind] ?? ''), (v) => { this.sample[e.bind] = Number(v); this.render() }),
+        muted('A bar shows a value over its most, filled as health is: hp, or hud.<name> -- what a graph\'s set_hud writes (set_hud mana 40). "Out of" is a number, or another HUD value (hud.mana_max). The sample is only for this preview.'))
     } else {
       rows.push(text('picture', e.frame ?? '', set('frame'), { placeholder: 'a sprite frame or texture name' }),
         number('w', e.w ?? 48, { min: 4, max: 2000, step: 1 }, set('w')), number('h', e.h ?? 48, { min: 4, max: 2000, step: 1 }, set('h')))
@@ -659,8 +678,8 @@ class PanelWindow {
     })
     for (const [i, d] of (p.decor ?? []).entries()) {
       rows.push(el('div', { class: 'st-trow', 'data-drow': String(i), 'data-on': this.sel.kind === 'decor' && this.sel.i === i ? '1' : '0', onclick: () => this.#pick({ kind: 'decor', i }) }, [
-        el('span', { class: 'st-mark', text: d.type === 'text' ? '“' : '▣' }),
-        el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: d.id }), el('div', { class: 'st-muted', text: `decor · ${d.type === 'text' ? d.text : d.frame}` })])
+        el('span', { class: 'st-mark', text: d.type === 'text' ? '“' : d.type === 'bar' ? '▬' : '▣' }),
+        el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: d.id }), el('div', { class: 'st-muted', text: `decor · ${d.type === 'text' ? d.text : d.type === 'bar' ? `bar of ${d.bind} out of ${d.max ?? '?'}` : d.frame}` })])
       ]))
     }
     return rows

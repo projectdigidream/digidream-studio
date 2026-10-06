@@ -2806,6 +2806,27 @@ check(exported.ok && exported.hasDnpm && exported.hasTriggers, `the module emits
   check(keyed.groups.length === 2 && /this module's keys:1/.test(keyed.groups.join()) && keyed.chosen === 'reload', `a button node offers the engine's buttons and the module's keys (${keyed.groups.join(', ')})`)
 }
 
+// A BAR IN A PANEL: + add → bar puts in a decor bar, drawn by the HUD's own
+// code as health is; the preview fills it from its sample value.
+{
+  const barred = await page.evaluate(async () => {
+    const S = window.__studio
+    const { newPanel } = await import('/studio/src/panels_emit.js')
+    S.module.panels = { mana: newPanel('Mana') }; S.moduleChanged()
+    await S.go('panels', 'mana')
+    await new Promise((r) => setTimeout(r, 400))
+    const pal = document.querySelector('.pw .pw-palette'); pal.value = 'd:bar'; pal.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 300))
+    const e = S.module.panels.mana.decor?.[0]
+    const node = (S.window.view.panels.get(1)?.decor?.nodes ?? []).find((n) => n.el.type === 'bar')
+    const r = { decor: e && { type: e.type, bind: e.bind, max: e.max }, fill: node?.fill?.style.width, rows: [...document.querySelectorAll('.pw .wk-details .st-row label')].map((l) => l.textContent).filter((t) => /value|out of|colour/.test(t)) }
+    delete S.module.panels; S.moduleChanged(); await S.go('map')
+    return r
+  })
+  check(barred.decor?.type === 'bar' && barred.decor.bind === 'hud.mana' && barred.decor.max === 100 && parseFloat(barred.fill) === 60 && barred.rows.includes('out of'),
+        `+ add → bar puts a bar in the panel, filled in the preview from its sample, with its value, its most and its colour to set (${JSON.stringify(barred)})`)
+}
+
 // SNAPSHOTS: the module as it was. One is taken by hand; the module is
 // changed and a map deleted; the deleted map is restored alone, then the
 // whole module -- through the page's own buttons and confirmations, each

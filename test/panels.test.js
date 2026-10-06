@@ -67,6 +67,15 @@ check(t.slots.length === shop.widgets.length && t.slots[1].widget === buy.id && 
       'the template places every widget by its id, with its look, and the decor')
 const parsed = parseLayout(withTemplates(DEFAULT_LAYOUT, { shop }))
 check(parsed.ok && !parsed.errors.length && !parsed.warnings.length && parsed.layout.panels.shop, `the client's parser takes it without a word (${[...parsed.errors, ...parsed.warnings].join(' | ')})`)
+// A BAR in the decor, as the panel editor adds it, as health is drawn: the
+// client's parser takes it, bind, max, colours and all.
+{
+  const mana = { ...newPanel('Mana'), decor: [{ id: 'bar', type: 'bar', anchor: 'tl', x: 12, y: 8, w: 160, h: 10, bind: 'hud.mana', max: 'hud.mana_max', fill: '#5b8fd6', low: [{ below: 0.25, fill: '#d65b5b' }] }] }
+  const pm = parseLayout(withTemplates(DEFAULT_LAYOUT, { mana }))
+  const bar = pm.layout.panels?.mana?.decor?.[0]
+  check(pm.ok && !pm.warnings.length && bar?.type === 'bar' && bar.bind === 'hud.mana' && bar.max === 'hud.mana_max' && bar.low?.[0]?.below === 0.25,
+        `a bar in a panel's decor is taken by the client's parser as written (${JSON.stringify(pm.errors.concat(pm.warnings))})`)
+}
 const bad = parseLayout(withTemplates(DEFAULT_LAYOUT, { 'Shop!': shop }))
 check(!bad.layout.panels?.['Shop!'], 'CONTROL: and drops a template under a name it refuses, so the check above means something')
 
