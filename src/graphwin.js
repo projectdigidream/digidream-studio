@@ -422,8 +422,13 @@ class GraphWindow {
     let shown = []
     const draw = () => {
       const q = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
-      // Every word must appear in the label, the group, the name or the doc.
-      shown = items.filter((it) => { const hay = `${it.label} ${it.group} ${it.value} ${it.doc}`.toLowerCase(); return q.every((w) => hay.includes(w)) })
+      // Every word must appear in the label, the group or the name -- or start
+      // a word of the description ("light" is not found in "flight").
+      const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      shown = items.filter((it) => {
+        const hay = `${it.label} ${it.group} ${it.value}`.toLowerCase()
+        return q.every((w) => hay.includes(w) || new RegExp(`(^|[^a-z0-9_])${esc(w)}`, 'i').test(it.doc))
+      })
       // A label match first: "open" finds "open door" before a doc that says open.
       if (q.length) shown.sort((x, y) => (q.every((w) => y.label.toLowerCase().includes(w)) ? 1 : 0) - (q.every((w) => x.label.toLowerCase().includes(w)) ? 1 : 0))
       const rows = []
