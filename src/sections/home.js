@@ -9,6 +9,7 @@ import { el, button, row, text, muted, chips, ask } from '../ui.js'
 import { moduleProblems } from '../app/problems.js'
 import { lastPlay } from '../playlog.js'
 import { thumbCanvas } from '../thumbs.js'
+import { STUDIO_VERSION } from '../version.js'
 
 let S = null
 
@@ -48,6 +49,7 @@ async function showHome () {
     el('div', { class: 'sd-hero' }, [
       el('div', { class: 'sd-hero-name', text: m.name || m.id }),
       el('div', { class: 'st-muted', text: m.about || 'A module: maps, and everything they share.' }),
+      el('div', { class: 'st-muted sd-version', 'data-version': STUDIO_VERSION, text: `studio ${STUDIO_VERSION}` }),
       el('div', { class: 'st-row' }, [button('▶ play', () => S.play()), button('⇪ export', () => S.exportPack()), button('⇩ import pack', () => S.importPack()),
         button('+ new module', () => newModuleFlow()),
         // What the last play-test left to read, when there was one.

@@ -19,6 +19,7 @@
 //
 import { shell, hasShell } from './bridge.js'
 import { el, button, muted } from './ui.js'
+import { STUDIO_VERSION } from './version.js'
 
 export const LOG_DIR = 'logs'
 export const FILES = [
@@ -53,7 +54,7 @@ export const isBad = (line) => {
 export async function writeStudioLog (S, r, { map }) {
   const L = []
   const now = new Date()
-  L.push(`[studio] play-test of ${S.module.id}/maps/${map}, ${now.toISOString()}`)
+  L.push(`[studio] play-test of ${S.module.id}/maps/${map}, ${now.toISOString()}, studio ${STUDIO_VERSION}`)
   const txt = r.files.find((f) => f.path === 'module.txt')
   if (txt) for (const line of String(txt.bytes).trim().split('\n')) L.push(`[studio] module.txt: ${line}`)
   const mapFile = r.files.find((f) => f.path === `maps/${map.replace(/\.dnpm$/, '.map')}`)
