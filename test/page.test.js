@@ -2603,6 +2603,61 @@ const exported = await page.evaluate(async () => {
   return { ok: r.ok, n: r.files.length, paths: r.files.map((f) => f.path), hasTriggers: /triggers\.load/.test(lua), hasDnpm: r.files.some((f) => f.path === 'maps/first.dnpm') }
 })
 check(exported.ok && exported.hasDnpm && exported.hasTriggers, `the module emits with a baked map and its triggers (${JSON.stringify(exported).slice(0, 300)})`)
+// SNAPSHOTS: the module as it was. One is taken by hand; the module is
+// changed and a map deleted; the deleted map is restored alone, then the
+// whole module -- through the page's own buttons and confirmations, each
+// restore snapshotting the module as it was first.
+{
+  const ok = async () => { await page.waitForSelector('dialog[open]', { timeout: 3000 }); await page.evaluate(() => document.querySelector('dialog[open] button[type=submit]').click()); await new Promise((r) => setTimeout(r, 400)) }
+  const setup = await page.evaluate(async () => {
+    const S = window.__studio
+    const { starterDoc } = S
+    S.docs.spare = S.starterDoc ? S.starterDoc('spare') : structuredClone(S.doc)
+    S.docs.spare.name = 'spare'
+    S.moduleChanged(); S.save.flush()
+    await S.go('snapshots')
+    const snap = await S.snapshot('test mark', { force: true })
+    const aboutWas = S.module.about
+    S.module.about = 'changed after the snapshot'
+    delete S.docs.spare
+    S.moduleChanged(); S.save.flush()
+    await S.showSnapshots()
+    await new Promise((r) => setTimeout(r, 300))
+    return { key: snap?.key, aboutWas, listed: [...document.querySelectorAll('[data-snap]')].map((c) => c.dataset.snap) }
+  })
+  check(!!setup.key && setup.listed.includes(setup.key), `a snapshot taken is listed (${setup.key}; ${setup.listed.join(", ")})`)
+  // Its maps: the deleted one is offered back alone.
+  await page.evaluate((key) => [...document.querySelector(`[data-snap="${key}"]`).querySelectorAll('button')].find((b) => /maps/.test(b.textContent)).click(), setup.key)
+  await new Promise((r) => setTimeout(r, 400))
+  const offered = await page.evaluate((key) => {
+    const row = document.querySelector(`[data-snap="${key}"] [data-snap-map="spare"]`)
+    const b = row && [...row.querySelectorAll('button')].find((x) => /restore spare/.test(x.textContent))
+    b?.click()
+    return { state: row?.dataset.state, button: !!b }
+  }, setup.key)
+  await ok()
+  await new Promise((r) => setTimeout(r, 800))
+  const oneMap = await page.evaluate(() => ({ spare: !!window.__studio.docs.spare, about: window.__studio.module.about }))
+  check(offered.state === 'gone' && offered.button && oneMap.spare && oneMap.about === 'changed after the snapshot',
+        `a deleted map is restored alone, the rest left as it is (${JSON.stringify({ ...offered, ...oneMap })})`)
+  // The whole module.
+  await page.evaluate(async (key) => {
+    await window.__studio.showSnapshots(); await new Promise((r) => setTimeout(r, 300))
+    ;[...document.querySelector(`[data-snap="${key}"]`).querySelectorAll('button')].find((b) => b.textContent === 'restore').click()
+  }, setup.key)
+  await ok()
+  await new Promise((r) => setTimeout(r, 1000))
+  const whole = await page.evaluate(async (was) => {
+    const S = window.__studio
+    const list = await S.snaps.list(S.rec.id)
+    const r = { about: S.module.about, back: S.module.about === was, before: list.filter((x) => /^before restoring/.test(x.reason)).length, stored: (await S.store.load(S.rec.id)).module.about === was }
+    delete S.docs.spare; S.moduleChanged(); S.save.flush(); await S.go('map')
+    return r
+  }, setup.aboutWas)
+  check(whole.back && whole.stored, `the whole module is restored, and saved so (${JSON.stringify(whole)})`)
+  check(whole.before >= 2, `each restore snapshotted the module as it was first (${whole.before})`)
+}
+
 check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' | ')})`)
 
 await browser.close()

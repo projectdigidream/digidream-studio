@@ -28,7 +28,8 @@ function showMaps () {
       button('✕', async (e) => {
         e.stopPropagation()
         if (Object.keys(S.docs).length < 2) { S.status('a module keeps at least one map', 'warn'); return }
-        if (!await confirmDialog(`delete map ${n}? Undo on this page brings it back.`)) return
+        if (!await confirmDialog(`delete map ${n}? Undo on this page brings it back, and a snapshot keeps it.`)) return
+        await S.snapshot?.(`before deleting map ${n}`, { force: true })
         delete S.docs[n]
         if (S.module.metamap?.cells) delete S.module.metamap.cells[n]
         S.moduleChanged()

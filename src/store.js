@@ -10,15 +10,25 @@
 //
 const DB = 'dnp-studio'
 const STORE = 'modules'
+// Version 2 added the snapshots (snapshots.js) beside the modules. One opener
+// for both: two at different versions would block each other.
+export const SNAPSHOTS = 'snapshots'
 
-function open () {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1)
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' })
+let opening = null
+export function openDb () {
+  opening ??= new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB, 2)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' })
+      if (!db.objectStoreNames.contains(SNAPSHOTS)) db.createObjectStore(SNAPSHOTS, { keyPath: 'key' }).createIndex('module', 'module')
+    }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
+  return opening
 }
+const open = openDb
 
 function tx (db, mode, fn) {
   return new Promise((resolve, reject) => {

@@ -19,6 +19,7 @@ import { install as installMusic } from './sections/music.js'
 import { install as installSounds } from './sections/sounds.js'
 import { install as installTextures } from './sections/textures.js'
 import { install as installSettings } from './sections/settings.js'
+import { install as installSnapshots } from './sections/snapshots.js'
 import { install as installScripts } from './sections/scripts.js'
 import { install as installGraphs } from './sections/graphs.js'
 import { install as installStyle } from './sections/style.js'
@@ -51,6 +52,8 @@ import { SpriteLibrary } from './sprites.js'
 import { Gestures } from './gestures.js'
 import { History } from './history.js'
 import { Store, debounce } from './store.js'
+import { Snapshots, EVERY_MS, ON_OPEN_MS } from './snapshots.js'
+import { STUDIO_VERSION } from './version.js'
 import { shell, hasShell } from './bridge.js'
 import { Ui, el, button, row, text, muted, card, select, number, ask } from './ui.js'
 import { moduleProps } from './props.js'
@@ -126,6 +129,21 @@ S.servedSounds = await fetch('/sounds/bank.sfxproj').then((r) => (r.ok ? r.json(
 S.servedSprites = await fetch('/sprites/index.json').then((r) => (r.ok ? r.json() : {})).then((j) => Object.keys(j.sizes ?? {})).catch(() => [])
 stage('opening your work', 0.65)
 S.store = await Store.open()
+// Copies of a module to go back to (snapshots.js). Without them the studio
+// still works: a failure here is said, not fatal.
+S.snaps = await Snapshots.open().catch((e) => { console.warn('[studio] no snapshots:', e); return null })
+/**
+ * Take a snapshot of the module being edited (or of `rec`), quietly: a
+ * failure is a warning, never a lost edit. `reason` is said in the list.
+ */
+S.snapshot = async (reason, { rec = S.rec, force = false } = {}) => {
+  if (!S.snaps || !rec) return null
+  try {
+    const snap = await S.snaps.take(rec, reason, { force })
+    if (rec === S.rec) S.lastSnapAt = snap?.at ?? S.lastSnapAt ?? Date.now()
+    return snap
+  } catch (e) { console.warn('[studio] snapshot failed:', e); return null }
+}
 await seedFromShell()
 await openModule((await S.store.list())[0]?.id ?? null)
 
@@ -229,8 +247,10 @@ S.sectionAlias = sectionAlias
 // The verbs the sections share, published before they are installed.
 // `save` is a const further down; reached through a wrapper so this runs first.
 S.save = () => save()
+// Now, not in a moment: before a snapshot or a restore reads the store.
+S.save.flush = () => save.flush()
 Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starterDoc, showInspector, emitAll })
-for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installScripts, installGraphs, installStyle, installSkySection, installCamera, installNeighbours]) install(S)
+for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installSnapshots, installScripts, installGraphs, installStyle, installSkySection, installCamera, installNeighbours]) install(S)
 await S.loadPacks()
 S.router.register({
   id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
@@ -264,6 +284,7 @@ pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
 pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
 windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
 pageSection('settings', 'Settings', '⚙', /^Module settings$/, () => S.showSettings())
+pageSection('snapshots', 'Snapshots', '🕘', /^Snapshots$/, () => S.showSnapshots(), { rail: false })
 pageSection('playlog', 'Play log', '📋', /^Play log$/, () => showPlayLog(S), { rail: false })
 new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
@@ -382,9 +403,18 @@ async function openModule (id, { show = true } = {}) {
   // Maps written when the player's size was each map's own: the module takes
   // the common size, a map that differs keeps its own as an override.
   // Documents from earlier studios, brought up to date (migrate.js).
+  // What a studio update is about to change, kept first.
+  const before = JSON.parse(JSON.stringify({ id: rec.id, module: rec.module, docs: rec.docs, assets: rec.assets }))
   const did = migrateModule(rec)
-  if (migratePlayer(S.module, S.docs) || did.length) await S.store.save(rec)
+  const moved = migratePlayer(S.module, S.docs)
+  if (moved || did.length) {
+    await S.snapshot(`before studio ${STUDIO_VERSION} updated it`, { rec: before, force: true })
+    await S.store.save(rec)
+  }
   if (did.length) console.log('[studio] updated:', did.join('; '))
+  // A snapshot on opening, unless one is recent: the state a session began from.
+  S.lastSnapAt = (await S.snaps?.latestAt(rec.id).catch(() => 0)) ?? 0
+  if (Date.now() - S.lastSnapAt > ON_OPEN_MS) await S.snapshot('opened')
   S.moduleHistory = new History({ module: S.module, docs: S.docs })
   S.shell?.setHistory(false, false)
   if (S.shell) { S.shell.moduleName = S.module.name || S.module.id; S.shell.drawRail() }
@@ -450,7 +480,14 @@ function starterDoc (name) {
   return doc
 }
 
-const save = debounce(async () => { try { await S.store.save(S.rec) } catch (e) { S.status(`could not save: ${e.message}`, 'error') } }, 600)
+const save = debounce(async () => {
+  try { await S.store.save(S.rec) } catch (e) { S.status(`could not save: ${e.message}`, 'error'); return }
+  // Every few minutes of editing, a snapshot (one the same as the last is not taken).
+  if (Date.now() - (S.lastSnapAt ?? 0) > EVERY_MS) await S.snapshot('editing')
+}, 600)
+// Leaving the page (a browser tab closed): what is waiting to be saved, saved.
+addEventListener('pagehide', () => save.flush())
+addEventListener('beforeunload', () => save.flush())
 
 function frameToDoc () {
   const pts = []
@@ -1068,6 +1105,9 @@ async function importPack () {
   const prefix = modEntry.path.slice(0, -'module.studio.json'.length)
   const rec = recordFromEntries(entries.filter((e) => e.path.startsWith(prefix)).map((e) => ({ path: e.path.slice(prefix.length), bytes: e.bytes })))
   if (!rec) { S.status('the pack has no maps', 'error'); return }
+  // A pack with the id of a module already here replaces it: that one kept first.
+  const old = await S.store.load(rec.id)
+  if (old) await S.snapshot('before a pack was imported over it', { rec: old, force: true })
   await S.store.save(rec)
   await openModule(rec.id)
   S.status(`opened ${rec.id}`, 'ok')
