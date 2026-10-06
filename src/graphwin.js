@@ -1367,7 +1367,9 @@ function withCurrent (opts, cur) {
 
 /** "3" -> 3, "true" -> true, "abc" -> "abc": a literal as the person meant it. */
 function literal (s) {
-  const t = String(s).trim()
+  // A decimal comma ("0,5", as many keyboards write it) is a decimal point:
+  // kept as text, the runtime would read it as no number at all.
+  const t = String(s).trim().replace(/^(-?\d+),(\d+)$/, '$1.$2')
   if (t === '') return undefined
   if (t === 'true') return true
   if (t === 'false') return false

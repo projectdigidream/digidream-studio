@@ -520,5 +520,38 @@ if ((GV.properties ?? []).length) {
   }
 }
 
+// THE USER'S GRAPH (2026-10-06): every 0,05 s add "0,5" to Camangle, and
+// "do camera" with distance from Camangle. Nothing moved, for two reasons the
+// studio now says: the value typed with a decimal comma was text, which the
+// runtime adds as nothing; and the camera action acts on the run's player,
+// which a timer's run has none of. The same intent with the camera_follow
+// node, which reaches every player then, is clean and loads.
+{
+  const theirs = { vars: { Camangle: 0 }, nodes: [
+    { id: 'every', type: 'every', seconds: 0.05, pos: { x: 0, y: 200 } },
+    { id: 'add_Camangle', type: 'add_var', var: 'Camangle', value: '0,5', pos: { x: 260, y: 200 } },
+    { id: 'camera', type: 'action', a: 'camera', field: 'distance', value: { var: 'Camangle' }, pos: { x: 520, y: 200 } }
+  ], links: [['every.then', 'add_Camangle.in'], ['add_Camangle.then', 'camera.in']] }
+  const said = graphProblems(theirs, GV, TV)
+  check(said.some((p) => /node 'camera': camera acts on the run's player, and a run from 'every' \(every\) has none -- it does nothing\. Use the camera nodes/.test(p)),
+        `the camera action in a timer's run is said to reach nobody, with what to use instead (${said.join(' | ')})`)
+  const written = emitGraph(theirs, 'menu', (a) => a, (a) => a).json.nodes.find((n) => n.id === 'add_Camangle')
+  check(written.value === '0.5', `a value typed "0,5" is written as the number 0.5 (${JSON.stringify(written.value)})`)
+  check(graphProblems({ ...structuredClone(theirs), nodes: theirs.nodes.map((n) => (n.id === 'add_Camangle' ? { ...n, value: 'lots' } : n)) }, GV, TV).some((p) => /adds "lots", which is not a number/.test(p)),
+        'adding text that is no number is said')
+  const fixed = { vars: { Camangle: 0 }, nodes: [
+    { id: 'every', type: 'every', seconds: 0.05, pos: { x: 0, y: 0 } },
+    { id: 'add_Camangle', type: 'add_var', var: 'Camangle', value: 0.5, pos: { x: 260, y: 0 } },
+    { id: 'turn', type: 'camera_follow', angle: { var: 'Camangle' }, pos: { x: 520, y: 0 } }
+  ], links: [['every.then', 'add_Camangle.in'], ['add_Camangle.then', 'turn.in']] }
+  check(graphProblems(fixed, GV, TV).length === 0, `with camera_follow turning by Camangle, it is clean (${graphProblems(fixed, GV, TV).join(' | ')})`)
+  const fromPlayer = structuredClone(theirs); fromPlayer.nodes[0] = { id: 'every', type: 'when_player_arrives', pos: { x: 0, y: 0 } }
+  check(!graphProblems(fromPlayer, GV, TV).some((p) => /acts on the run's player/.test(p)), 'CONTROL: the same action in a run from a player arriving is not said')
+  if (existsSync(SERVER)) {
+    const ok = await serveOne([{ ...structuredClone(plain), name: 'menu', graphs: { menu: fixed } }], 34719)
+    check(ok.ok && /\[graphs\] menu\.menu\.graph\.json: 4 nodes, 3 links/.test(ok.log), `and the server loads it (${ok.log.split('\n').filter((l) => /menu\.graph/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
+  }
+}
+
 console.log(`graphs: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

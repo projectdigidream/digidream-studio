@@ -164,6 +164,19 @@ const split = (s) => { const i = String(s).lastIndexOf('.'); return i < 0 ? [s, 
 // position ...) and its movement rules, each `read` or `read_write`.
 
 export const VAR_NODES = ['get_var', 'set_var', 'add_var']
+const DECIMAL_COMMA = /^-?\d+,\d+$/
+
+// THE RUN'S PLAYER. A trigger action acts on the event's entity -- the player
+// who arrived, pressed, touched. A run from a timer or the level's start has
+// none, and such an action then does nothing, silently. These are the
+// actions that act on it (trigger_vocab: "the event's entity"/player), and
+// what to use instead where there is one.
+export const ACTS_ON_EVENT_ENTITY = new Map([
+  ['camera', 'the camera nodes (camera follow, track, shake) -- they reach every player when the run has none'],
+  ['screen', 'the fade or start cinematic node -- they reach every player when the run has none'],
+  ['music', null], ['ui_open', null], ['ui_close', null], ['teleport', null], ['set_hp', null], ['set_solid', null],
+  ['set_animation', null], ['despawn', null], ['add_effect', null], ['change_map', null]
+])
 const NUMERIC = new Set(['int', 'number'])
 /** The properties a graph can reach, by name (empty for an engine without them). */
 export const propertiesOf = (gv) => new Map((gv?.properties ?? []).map((p) => [p.name, p]))
@@ -310,6 +323,50 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
       }
     }
   }
+  // A number added that is not one: the runtime adds nothing (tonumber gives nil).
+  for (const n of graph.nodes ?? []) {
+    if (n.type !== 'add_var' || n.value === undefined || isVarRef(n.value) || linkedInto.has(`${n.id}.value`)) continue
+    const v = typeof n.value === 'string' ? n.value.replace(DECIMAL_COMMA, (m) => m.replace(',', '.')) : n.value
+    if (!(typeof v === 'number' || (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v)))) problems.push(`node '${n.id}': adds ${JSON.stringify(n.value)}, which is not a number -- it adds nothing`)
+  }
+  // Actions on the event's player, in a run that has no player.
+  {
+    const nodeById = new Map((graph.nodes ?? []).map((n) => [n.id, n]))
+    const next = new Map()
+    for (const [f, t] of graph.links ?? []) {
+      const [fid] = split(f); const [tid, tpin] = split(t)
+      if (!nodeById.has(fid) || !nodeById.has(tid)) continue
+      const tp = pinsOf(nodeById.get(tid), specs.get(nodeById.get(tid).type), tv, gv)
+      if (!tp.execIn.includes(tpin)) continue
+      if (!next.has(fid)) next.set(fid, [])
+      next.get(fid).push(tid)
+    }
+    const evParams = new Map((tv?.events ?? []).map((e) => [e.name, e.params ?? []]))
+    const hasPlayer = (n) => {
+      const spec = specs.get(n.type)
+      if (n.type === 'event') return (evParams.get(n.event) ?? []).includes('entity') || ['on_interact', 'on_cross', 'on_touch', 'on_prop_use', 'on_attack', 'on_ui_event', 'on_player_enter', 'on_player_leave'].includes(n.event)
+      if (n.type === 'on_call') return true
+      return (spec?.data_out ?? []).includes('entity')
+    }
+    const said = new Set()
+    for (const s of graph.nodes ?? []) {
+      const spec = specs.get(s.type)
+      const start = s.type === 'event' || spec?.starts
+      if (!start || hasPlayer(s)) continue
+      const seen = new Set([s.id]); const todo = [s.id]
+      while (todo.length) {
+        for (const nid of next.get(todo.pop()) ?? []) {
+          if (seen.has(nid)) continue
+          seen.add(nid); todo.push(nid)
+          const n = nodeById.get(nid)
+          if (n?.type !== 'action' || !ACTS_ON_EVENT_ENTITY.has(n.a) || said.has(nid)) continue
+          said.add(nid)
+          const instead = ACTS_ON_EVENT_ENTITY.get(n.a)
+          problems.push(`node '${nid}': ${n.a} acts on the run's player, and a run from '${s.id}' (${s.type === 'event' ? s.event : s.type}) has none -- it does nothing${instead ? `. Use ${instead}` : ''}`)
+        }
+      }
+    }
+  }
   const execOutUsed = new Set()
   const dataInUsed = new Set()
   const dataEdges = new Map()
@@ -360,6 +417,8 @@ export function emitGraph (graph, name, resolve, plain = null, { panels = null }
     const rest = {}
     for (const [k, v] of Object.entries(withRefs)) {
       if (isVarRef(v)) bound.push({ node: n.id, arg: k, var: v.var, pos })
+      // A number typed with a decimal comma before the studio read it as one.
+      else if (k === 'value' && (VAR_NODES.includes(n.type) || n.type === 'literal') && typeof v === 'string' && DECIMAL_COMMA.test(v)) rest[k] = v.replace(',', '.')
       else rest[k] = v
     }
     let out = rest
