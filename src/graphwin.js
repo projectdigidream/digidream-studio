@@ -303,6 +303,10 @@ class GraphWindow {
     this.svg = svg
     this.nodeEls = new Map()
     const specs = nodeSpecs(this.gv)
+    // NOTES behind everything, links included: a labelled box round a part of
+    // the board (graph.notes, written to the file's meta, never run).
+    for (const note of this.graph?.notes ?? []) world.insertBefore(this.#noteEl(note), svg)
+    this.#pruneBends()
     for (const n of this.graph?.nodes ?? []) world.appendChild(this.#nodeEl(n, specs.get(n.type), problems))
     this.#applyView()
     this.#boardGestures(board)
@@ -350,8 +354,25 @@ class GraphWindow {
     // moment graph_vocab has them; then the trigger words, ready-made.
     for (const n of panelNodes) push(PANELS_GROUP, `node:${n.name}`, words(n), n.doc)
     const has = (kind, name) => kind === 'event' ? this.events.some((e) => e.name === name) : this.verbs(kind).some((v) => v.name === name)
-    for (const [kind, name, text] of PANEL_ITEMS) if (has(kind, name)) push(PANELS_GROUP, `${kind === 'event' ? 'event' : kind === 'condition' ? 'cond' : 'act'}:${name}`, text, this.#verbDoc(kind, name))
     const panels = this.S.module.panels ?? {}
+    const node = (name) => panelNodes.find((x) => x.name === name)
+    if (node('open_panel')) {
+      // THE ENGINE'S PANEL NODES, one entry per panel and per widget, filled in.
+      for (const [p, q] of Object.entries(panels)) {
+        push(PANELS_GROUP, `node:open_panel:${p}`, `open ${p}`, node('open_panel').doc)
+        if (node('close_panel')) push(PANELS_GROUP, `node:close_panel:${p}`, `close ${p}`, node('close_panel').doc)
+        if (node('when_panel_closed')) push(PANELS_GROUP, `node:when_panel_closed:${p}`, `when ${p} is closed`, node('when_panel_closed').doc)
+        if (node('panel_is_open')) push(PANELS_GROUP, `node:panel_is_open:${p}`, `is ${p} open?`, node('panel_is_open').doc)
+        for (const w of q.widgets ?? []) {
+          if (w.kind === 'label') continue
+          const wn = w.name ?? w.label
+          if (node('when_panel_used')) push(PANELS_GROUP, `node:when_panel_used:${p}:${wn}`, `when ${p} › ${wn} is ${USED[w.kind] ?? 'used'}`, node('when_panel_used').doc)
+          if (node('set_widget') && w.kind !== 'button') push(PANELS_GROUP, `node:set_widget:${p}:${wn}`, `set ${p} › ${wn}`, node('set_widget').doc)
+        }
+      }
+      return this.#menuRest(out, push, specs, taken)
+    }
+    for (const [kind, name, text] of PANEL_ITEMS) if (has(kind, name)) push(PANELS_GROUP, `${kind === 'event' ? 'event' : kind === 'condition' ? 'cond' : 'act'}:${name}`, text, this.#verbDoc(kind, name))
     // A widget's id is its panel's, so two panels can share one: said, as
     // widget_is cannot tell them apart (the engine's when_panel_used will).
     const idCount = new Map()
@@ -367,7 +388,13 @@ class GraphWindow {
           `A panel event, then "if it was widget ${w.id}" -- the ${w.kind} ${w.name ?? w.label} on ${p}.${shared ? ` Another panel has a widget ${w.id} too, and widget_is cannot tell them apart.` : ''}`)
       }
     }
-    for (const n of specs.filter((x) => !taken.has(x.name))) push('other', `node:${n.name}`, words(n), n.doc)
+    return this.#menuRest(out, push, specs, taken)
+  }
+
+  /** The menu after the panels: the rest of the nodes, a note, and the trigger words. */
+  #menuRest (out, push, specs, taken) {
+    for (const n of specs.filter((x) => !taken.has(x.name))) push('other', `node:${n.name}`, n.name.replace(/_/g, ' '), n.doc)
+    push('📝 board', 'note:', 'a note', 'A labelled box on the board, round the picked node if there is one: what this part of the graph is for. Drag its title and the nodes inside go with it. Never run.')
     // The trigger vocabulary's own words, each by name, for what the world's nodes do not say.
     for (const e of this.events) push('trigger words', `event:${e.name}`, `when ${e.name.replace(/^on_/, '').replace(/_/g, ' ')}`, this.#verbDoc('event', e.name))
     for (const c of this.verbs('condition')) push('trigger words', `cond:${c.name}`, `if ${c.name.replace(/_/g, ' ')}`, c.doc)
@@ -438,8 +465,9 @@ class GraphWindow {
    * `ui:<panel>:<widget id>` (a panel event and its widget_is, linked).
    */
   addFrom (value) {
-    const [kind, name, arg] = String(value).split(':')
+    const [kind, name, arg, arg2] = String(value).split(':')
     const g = this.ensure()
+    if (kind === 'note') return this.addNote()
     const at = this.#freeSpot()
     if (kind === 'ui') {
       const ev = { id: this.#newId(`${name}_used`), type: 'event', event: 'on_ui_event', pos: { x: at.x, y: at.y } }
@@ -451,7 +479,9 @@ class GraphWindow {
       this.changed()
       return cond.id
     }
-    const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name.replace(/^when_/, '') : kind === 'cond' ? (name ? `if_${name}` : 'if') : (arg ? `${name.replace(/^ui_/, '')}_${arg}` : name || 'do'))
+    const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '')
+      : kind === 'node' ? (arg ? [name.replace(/^when_panel_/, '').replace(/_panel$/, ''), arg, arg2].filter(Boolean).join('_') : name.replace(/^when_/, ''))
+        : kind === 'cond' ? (name ? `if_${name}` : 'if') : (arg ? `${name.replace(/^ui_/, '')}_${arg}` : name || 'do'))
     const n = { id, pos: { x: at.x, y: at.y } }
     if (kind === 'event') Object.assign(n, { type: 'event', event: name })
     else if (kind === 'cond') Object.assign(n, { type: 'condition', c: name || this.verbs('condition')[0]?.name })
@@ -476,6 +506,7 @@ class GraphWindow {
     if ((kind === 'act' && (name === 'ui_open' || name === 'ui_close')) || (kind === 'node' && nodeSpecs(this.gv).get(name)?.args?.some((x) => x.name === 'panel'))) {
       const p = arg ?? Object.keys(this.S.module.panels ?? {})[0]
       if (p) n.panel = p
+      if (arg2) n.widget = arg2
     }
     g.nodes.push(n)
     this.picked = { kind: 'node', id }
@@ -846,7 +877,8 @@ class GraphWindow {
       const a = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(f)}"][data-dir="out"]`)
       const b = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(t)}"][data-dir="in"]`)
       if (!a || !b) return
-      const d = curve(this.#pinPoint(a), this.#pinPoint(b))
+      const bends = this.graph.bends?.[`${f}>${t}`] ?? []
+      const d = curveThrough([this.#pinPoint(a), ...bends, this.#pinPoint(b)])
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
       g.setAttribute('class', 'gw-link-g')
       const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path')
@@ -858,8 +890,154 @@ class GraphWindow {
       vis.setAttribute('d', d); vis.setAttribute('class', `wk-edge gw-${a.dataset.kind}-link${on ? ' gw-link-on' : ''}`)
       vis.setAttribute('marker-end', `url(#gw-arrow-${on ? 'on' : a.dataset.kind})`)
       g.append(vis, hit)
+      // Each bend a dot to drag.
+      bends.forEach((pt, k) => g.appendChild(this.#bendDot(pt, i, k, on)))
       this.svg.appendChild(g)
     })
+  }
+
+  // --- notes and bends: the board's own, never run --------------------------------
+
+  /** A note round the picked node (or at a free spot), picked for its text. */
+  addNote () {
+    const g = this.ensure()
+    g.notes ??= []
+    const sel = this.picked?.kind === 'node' ? g.nodes.find((n) => n.id === this.picked.id) : null
+    const box = sel ? this.nodeEls.get(sel.id) : null
+    const at = sel ? { x: (sel.pos?.x ?? 0) - 24, y: (sel.pos?.y ?? 0) - 52 } : this.#freeSpot()
+    const ids = new Set(g.notes.map((x) => x.id))
+    let k = 1
+    while (ids.has(`note${k}`)) k++
+    const note = { id: `note${k}`, x: Math.round(at.x), y: Math.round(at.y), w: Math.round((box?.offsetWidth ?? NODE_W) + 48), h: Math.round((box?.offsetHeight ?? 140) + 76), text: 'What this part does', color: 'slate' }
+    g.notes.push(note)
+    this.picked = { kind: 'note', id: note.id }
+    this.changed()
+    return note.id
+  }
+
+  /** A bend in the middle of link `index`: between its ends, or its last bend and the end. */
+  addBend (index) {
+    const g = this.graph
+    const [f, t] = g.links[index]
+    const a = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(f)}"][data-dir="out"]`)
+    const b = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(t)}"][data-dir="in"]`)
+    if (!a || !b) return
+    g.bends ??= {}
+    const list = (g.bends[`${f}>${t}`] ??= [])
+    const p = list.at(-1) ?? this.#pinPoint(a)
+    const q = this.#pinPoint(b)
+    list.push({ x: Math.round((p.x + q.x) / 2), y: Math.round((p.y + q.y) / 2) })
+    this.changed()
+  }
+
+  /** Bends of links that are gone go with them. */
+  #pruneBends () {
+    const g = this.graph
+    if (!g?.bends) return
+    const live = new Set(g.links.map(([f, t]) => `${f}>${t}`))
+    for (const k of Object.keys(g.bends)) if (!live.has(k) || !g.bends[k]?.length) delete g.bends[k]
+    if (!Object.keys(g.bends).length) delete g.bends
+  }
+
+  #bendDot (pt, index, k, on) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.setAttribute('r', on ? 9 : 6)
+    c.setAttribute('class', `gw-bend${on ? ' gw-bend-on' : ''}`)
+    c.dataset.bend = `${index}.${k}`
+    c.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation()
+      c.setPointerCapture?.(e.pointerId)
+      const start = { x: e.clientX, y: e.clientY, px: pt.x, py: pt.y }
+      let moved = false
+      const move = (ev) => {
+        const dx = (ev.clientX - start.x) / this.view.z; const dy = (ev.clientY - start.y) / this.view.z
+        if (Math.abs(dx) + Math.abs(dy) > 3) moved = true
+        pt.x = Math.round(start.px + dx); pt.y = Math.round(start.py + dy)
+        this.#drawLinks()
+      }
+      const up = () => {
+        c.removeEventListener('pointermove', move); c.removeEventListener('pointerup', up); c.removeEventListener('pointercancel', up)
+        this.picked = { kind: 'link', index }
+        if (moved) this.changed(); else this.render()
+      }
+      c.addEventListener('pointermove', move); c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up)
+    })
+    return c
+  }
+
+  #noteEl (note) {
+    const on = this.picked?.kind === 'note' && this.picked.id === note.id
+    const head = el('div', { class: 'gw-note-head' }, [
+      el('span', { class: 'gw-note-text', text: note.text || 'note' }),
+      el('button', { class: 'gw-del', text: '✕', title: 'delete the note (the nodes stay)', onclick: (e) => { e.stopPropagation(); this.#deleteNote(note) } })])
+    const size = el('div', { class: 'gw-note-size', title: 'drag to resize' })
+    const box = el('div', { class: `gw-note gw-note-${NOTE_COLORS.includes(note.color) ? note.color : 'slate'}${on ? ' gw-note-on' : ''}`, 'data-note': note.id }, [head, size])
+    const place = () => { box.style.left = `${note.x}px`; box.style.top = `${note.y}px`; box.style.width = `${note.w}px`; box.style.height = `${note.h}px` }
+    place()
+    // Drag the title: the note, and every node (and bend) inside it at the start, go together.
+    const drag = (handle, onMove) => handle.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.gw-del')) return
+      e.preventDefault(); e.stopPropagation()
+      handle.setPointerCapture?.(e.pointerId)
+      const start = { x: e.clientX, y: e.clientY }
+      const begin = onMove.begin()
+      let moved = false
+      const move = (ev) => {
+        const dx = (ev.clientX - start.x) / this.view.z; const dy = (ev.clientY - start.y) / this.view.z
+        if (Math.abs(dx) + Math.abs(dy) > 3) moved = true
+        onMove.move(begin, dx, dy)
+        place()
+        this.#drawLinks()
+      }
+      const up = () => {
+        handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up)
+        this.picked = { kind: 'note', id: note.id }
+        if (moved) this.changed(); else this.render()
+      }
+      handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up)
+    })
+    const inside = (x, y) => x >= note.x && y >= note.y && x <= note.x + note.w && y <= note.y + note.h
+    drag(head, {
+      begin: () => ({
+        x: note.x, y: note.y,
+        nodes: (this.graph.nodes ?? []).filter((n) => inside(n.pos?.x ?? 0, n.pos?.y ?? 0)).map((n) => ({ n, x: n.pos?.x ?? 0, y: n.pos?.y ?? 0 })),
+        bends: Object.values(this.graph.bends ?? {}).flat().filter((p) => inside(p.x, p.y)).map((p) => ({ p, x: p.x, y: p.y }))
+      }),
+      move: (b, dx, dy) => {
+        note.x = Math.round(b.x + dx); note.y = Math.round(b.y + dy)
+        for (const it of b.nodes) {
+          it.n.pos = { x: Math.round(it.x + dx), y: Math.round(it.y + dy) }
+          const elN = this.nodeEls.get(it.n.id)
+          if (elN) { elN.style.left = `${it.n.pos.x}px`; elN.style.top = `${it.n.pos.y}px` }
+        }
+        for (const it of b.bends) { it.p.x = Math.round(it.x + dx); it.p.y = Math.round(it.y + dy) }
+      }
+    })
+    drag(size, {
+      begin: () => ({ w: note.w, h: note.h, nodes: [], bends: [] }),
+      move: (b, dx, dy) => { note.w = Math.max(160, Math.round(b.w + dx)); note.h = Math.max(80, Math.round(b.h + dy)) }
+    })
+    return box
+  }
+
+  #deleteNote (note) {
+    const g = this.graph
+    g.notes = (g.notes ?? []).filter((x) => x !== note)
+    if (!g.notes.length) delete g.notes
+    if (this.picked?.kind === 'note' && this.picked.id === note.id) this.picked = null
+    this.changed()
+  }
+
+  #noteForm (note) {
+    const ch = () => this.changed()
+    return [
+      el('div', { class: 'st-section-head', text: '📝 note' }),
+      text('text', note.text ?? '', (v) => { note.text = v; ch() }, { multiline: true, placeholder: 'What this part of the graph does' }),
+      row('colour', el('div', { class: 'st-row gw-note-colours' }, NOTE_COLORS.map((c) =>
+        el('button', { class: `gw-swatch gw-note-${c}`, title: c, 'data-on': note.color === c ? '1' : '0', onclick: () => { note.color = c; ch() } })))),
+      muted('Drag its title to move it with every node inside; drag the corner to resize. Notes are the board\'s: written to the graph file\'s meta, never run.'),
+      button('delete note (the nodes stay)', () => this.#deleteNote(note), 'st-danger')
+    ]
   }
 
   // --- the side panel ---------------------------------------------------------------
@@ -874,12 +1052,20 @@ class GraphWindow {
     for (const m of [...problems, ...baked]) rows.push(el('div', { class: 'st-danger', text: m, style: 'white-space:pre-wrap;font-size:12px' }))
     if (this.picked?.kind === 'link' && g?.links[this.picked.index]) {
       const [f, t] = g.links[this.picked.index]
+      const key = `${f}>${t}`
+      const bends = g.bends?.[key] ?? []
       rows.push(el('div', { class: 'st-section-head', text: 'link' }), muted(`${f} → ${t}`),
+        el('div', { class: 'st-row' }, [
+          button('＋ bend', () => this.addBend(this.picked.index)),
+          bends.length ? button(`remove ${bends.length > 1 ? 'the bends' : 'the bend'}`, () => { delete g.bends[key]; this.changed() }) : null].filter(Boolean)),
+        muted('A bend is a point the link is drawn through, to route it round other nodes: drag it where it should go. Only the drawing changes.'),
         button('delete link', () => { g.links.splice(this.picked.index, 1); this.picked = null; this.changed() }, 'st-danger'))
     }
+    const note = this.picked?.kind === 'note' ? (g?.notes ?? []).find((x) => x.id === this.picked.id) : null
+    if (note) rows.push(...this.#noteForm(note))
     const n = this.picked?.kind === 'node' ? g?.nodes.find((x) => x.id === this.picked.id) : null
     if (n) rows.push(...this.#nodeForm(n))
-    if (!n && this.picked?.kind !== 'link') {
+    if (!n && this.picked?.kind !== 'link' && this.picked?.kind !== 'note') {
       rows.push(muted(g?.nodes?.length
         ? 'Tap a node to edit it, a link to delete it. Drag from a pin on the right of a node to one on the left of another to link them.'
         : this.game
@@ -1010,6 +1196,15 @@ function literal (s) {
 }
 
 /** A link's curve: out of the right of one node, into the left of another. */
+/** A link through its bends: one curve per stretch, each leaving and arriving level. */
+function curveThrough (pts) {
+  let d = `M${pts[0].x},${pts[0].y}`
+  for (let i = 1; i < pts.length; i++) d += ' ' + curve(pts[i - 1], pts[i]).replace(/^M[^C]*/, '')
+  return d
+}
+
+const NOTE_COLORS = ['slate', 'blue', 'green', 'amber', 'red', 'violet']
+
 function curve (a, b) {
   const dx = Math.max(40, Math.abs(b.x - a.x) / 2)
   return `M${a.x},${a.y} C${a.x + dx},${a.y} ${b.x - dx},${b.y} ${b.x},${b.y}`
@@ -1024,6 +1219,20 @@ const STYLE = `
 .gw-node.gw-on{box-shadow:0 0 0 2px #ffe066}
 .gw-head{padding:6px 10px;font-weight:700;font-size:12px;border-radius:9px 9px 0 0;cursor:grab;touch-action:none;display:flex;align-items:center;gap:6px}
 .gw-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gw-note{position:absolute;border:1px solid rgba(207,227,255,.25);border-radius:12px;background:rgba(95,127,168,.10);pointer-events:none;box-sizing:border-box}
+.gw-note-on{border-color:#ffe066;box-shadow:0 0 0 1px #ffe066}
+.gw-note-head{pointer-events:auto;display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-radius:11px 11px 0 0;background:rgba(95,127,168,.28);cursor:grab;touch-action:none;font:700 13px ui-monospace,Menlo,monospace;color:#e8f0ff}
+.gw-note-text{flex:1 1 auto;min-width:0;white-space:pre-wrap;word-break:break-word}
+.gw-note-size{pointer-events:auto;position:absolute;right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,rgba(207,227,255,.35) 50%);border-radius:0 0 11px 0}
+.gw-note-blue{background:rgba(91,143,214,.12)}.gw-note-blue .gw-note-head{background:rgba(91,143,214,.38)}
+.gw-note-green{background:rgba(122,212,138,.10)}.gw-note-green .gw-note-head{background:rgba(122,212,138,.32)}
+.gw-note-amber{background:rgba(255,169,77,.10)}.gw-note-amber .gw-note-head{background:rgba(255,169,77,.34)}
+.gw-note-red{background:rgba(255,107,107,.10)}.gw-note-red .gw-note-head{background:rgba(255,107,107,.34)}
+.gw-note-violet{background:rgba(154,123,214,.12)}.gw-note-violet .gw-note-head{background:rgba(154,123,214,.38)}
+.gw-swatch{width:30px;height:30px;min-width:0;padding:0;border-radius:8px}
+.gw-swatch[data-on="1"]{outline:2px solid #ffe066}
+.gw-bend{fill:#121620;stroke:#e8f0ff;stroke-width:2;cursor:grab;touch-action:none;pointer-events:all}
+.gw-bend-on{stroke:#ffe066}
 .gw-menu{position:absolute;z-index:40;top:52px;left:8px;width:min(420px,calc(100% - 16px));max-height:calc(100% - 64px);display:flex;flex-direction:column;background:#121620;border:1px solid #2a3446;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden}
 .gw-menu-top{display:flex;gap:6px;padding:8px;border-bottom:1px solid #2a3446}
 .gw-menu-find{flex:1 1 auto;min-width:0;height:36px;font-size:14px}

@@ -1430,7 +1430,7 @@ await page.keyboard.press('Escape')
     S.commit(); S.window.render()
     return { offered, opened: { a: opened.a, panel: opened.panel, id: opened.id }, before, after, back, undoable }
   })
-  check(['act:ui_open', 'act:ui_close', 'event:on_ui_event', 'cond:widget_is'].every((v) => panelled.offered.includes(v)) && panelled.opened.panel === 'shop',
+  check((panelled.offered.includes('node:open_panel:shop') || ['act:ui_open', 'act:ui_close', 'event:on_ui_event', 'cond:widget_is'].every((v) => panelled.offered.includes(v))) && panelled.opened.panel === 'shop',
         `the menu has the panels in a group of their own, dropped in ready (${JSON.stringify(panelled.offered)} -> ${JSON.stringify(panelled.opened)})`)
   // THE MENU IS SEARCHED: + node… opens it, a word narrows it, Enter adds
   // the first. Every trigger verb is there by name; a panel's widgets are
@@ -1450,17 +1450,68 @@ await page.keyboard.press('Escape')
     const had = S.doc.graphs.main.nodes.length
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
     await new Promise((r) => setTimeout(r, 100))
-    const added = S.doc.graphs.main.nodes.slice(had).map((n) => `${n.type}:${n.event ?? n.c ?? ''}:${n.widget ?? ''}`)
+    const nodes = S.vocab.graph.nodes.some((n) => n.name === 'when_panel_used')
+    const added = S.doc.graphs.main.nodes.slice(had).map((n) => nodes ? `${n.type}:${n.panel}:${n.widget}` : `${n.type}:${n.event ?? n.c ?? ''}:${n.widget ?? ''}`)
     const linked = S.doc.graphs.main.links.some(([f, t]) => f.startsWith('shop_used') && t.startsWith('if_shop_1'))
     const closed = !document.querySelector('.gw-menu')
     S.doc.graphs.main.nodes = S.doc.graphs.main.nodes.slice(0, had); S.doc.graphs.main.links = S.doc.graphs.main.links.filter(([f]) => !f.startsWith('shop_used'))
     delete S.module.panels; S.commit(); S.window.render()
-    return { all, fog, buy, added, linked, closed, verbs: S.window.menuItems().filter((i) => i.value.startsWith('cond:') || i.value.startsWith('act:')).length }
+    return { nodes, all, fog, buy, added, linked, closed, verbs: S.window.menuItems().filter((i) => i.value.startsWith('cond:') || i.value.startsWith('act:')).length }
   })
   check(found.all > 60 && found.fog[0] === 'node:set_sector_effect', `+ node… opens a menu of everything, and "fog" finds the sector effect first (${found.all} entries; ${found.fog.slice(0, 3).join(', ')})`)
-  check(found.buy[0] === 'ui:shop:1' && found.added.join() === 'event:on_ui_event:,condition:widget_is:1' && found.linked && found.closed,
-        `"shop buy" finds the button's own entry, and Enter drops in the panel event and its widget, linked (${JSON.stringify(found)})`)
+  if (found.nodes) {
+    check(found.buy[0] === 'node:when_panel_used:shop:buy' && found.added.join() === 'when_panel_used:shop:buy' && found.closed,
+          `"shop buy" finds the button's own entry, and Enter drops in the engine's when_panel_used for it (${JSON.stringify(found)})`)
+  } else {
+    check(found.buy[0] === 'ui:shop:1' && found.added.join() === 'event:on_ui_event:,condition:widget_is:1' && found.linked && found.closed,
+          `"shop buy" finds the button's own entry, and Enter drops in the panel event and its widget, linked (${JSON.stringify(found)})`)
+  }
   check(found.verbs > 30, `every trigger condition and action is in the menu by name (${found.verbs})`)
+  // NOTES AND BENDS: a note round the picked node, its title dragged with
+  // the node inside; a bend in a link, drawn through; the link gone, its bend too.
+  const noted = await page.evaluate(async () => {
+    const S = window.__studio
+    const w = S.window
+    w.picked = { kind: 'node', id: 'do' }
+    w.addFrom('note:')
+    const g = S.doc.graphs.main
+    const note = g.notes?.[0]
+    const node = g.nodes.find((n) => n.id === 'do')
+    const wraps = note && node.pos.x > note.x && node.pos.y > note.y && node.pos.x < note.x + note.w
+    const before = { nx: node.pos.x, ox: note.x }
+    const head = document.querySelector(`.gw-note[data-note="${note.id}"] .gw-note-head`)
+    const r = head.getBoundingClientRect()
+    return { wraps, before, head: { x: r.x + 30, y: r.y + r.height / 2 }, id: note.id, drawn: !!document.querySelector('.gw-note') }
+  })
+  await page.mouse.move(noted.head.x, noted.head.y)
+  await page.mouse.down()
+  await page.mouse.move(noted.head.x + 40, noted.head.y + 30, { steps: 4 })
+  await page.mouse.move(noted.head.x + 80, noted.head.y + 60, { steps: 4 })
+  await page.mouse.up()
+  await new Promise((r) => setTimeout(r, 200))
+  const bent = await page.evaluate(async (id) => {
+    const S = window.__studio
+    const w = S.window
+    const g = S.doc.graphs.main
+    const note = g.notes.find((n) => n.id === id)
+    const node = g.nodes.find((n) => n.id === 'do')
+    const moved = { note: note.x, node: node.pos.x }
+    g.links = [['interact.then', 'do.in']]
+    S.commit(); w.render()
+    await new Promise((r) => setTimeout(r, 300))
+    w.addBend(0)
+    await new Promise((r) => setTimeout(r, 300))
+    const dot = !!document.querySelector('.gw-bend')
+    const path = document.querySelector('.gw-link')?.getAttribute('d') ?? ''
+    const through = (path.match(/C/g) ?? []).length
+    g.links = []; S.commit(); w.render()
+    const pruned = !g.bends
+    delete g.notes; S.commit(); w.render()
+    return { moved, dot, through, pruned }
+  }, noted.id)
+  check(noted.drawn && noted.wraps, `a note goes round the picked node (${JSON.stringify(noted)})`)
+  check(bent.moved.note - noted.before.ox > 40 && bent.moved.node - noted.before.nx > 40, `dragging its title moves the note and the node inside it (${JSON.stringify(bent.moved)} from ${JSON.stringify(noted.before)})`)
+  check(bent.dot && bent.through === 2 && bent.pruned, `a bend is a dot the link is drawn through, and goes with its link (${JSON.stringify(bent)})`)
   check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
         `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {
@@ -1667,7 +1718,8 @@ await page.keyboard.press('Escape')
     const lua = r ? String(r.files.find((f) => f.path === `maps/${map}.lua`).bytes) : ''
     const hud = r ? JSON.parse(String(r.files.find((f) => f.path === 'assets/ui/hud.json')?.bytes ?? '{}')) : {}
     const out = { map, first, nodes: g.nodes.map((n) => n.type + (n.c ? `:${n.c}:${n.widget}` : '')), links: g.links, problems: graphProblems(g, S.vocab.graph, S.vocab.trigger), uses,
-                  ok: !!r, luaPanels: /panels = \{/.test(lua) && /template = "shop"/.test(lua), template: !!hud.panels?.shop, ready: !!S.vocab.graph.nodes.some((n) => n.name === 'open_panel') }
+                  ok: !!r, luaPanels: /panels = \{/.test(lua) && /template = "shop"/.test(lua), template: !!hud.panels?.shop, ready: !!S.vocab.graph.nodes.some((n) => n.name === 'open_panel'),
+                  graphPanels: r ? !!JSON.parse(String(r.files.find((f) => f.path === `maps/${map}.main.graph.json`)?.bytes ?? '{}')).panels?.shop : false }
     delete S.docs[map].graphs; delete S.module.panels; S.moduleChanged()
     return out
   })
@@ -1678,7 +1730,10 @@ await page.keyboard.press('Escape')
         `"answer" adds what hears that button (${viaNodes ? 'the panel node' : 'on_ui_event + widget_is, the trigger words'}: ${wired.nodes.join(', ')})`)
   // With the trigger words, widget_is does not name its panel, so only the opening is listed.
   check(wired.problems.length === 0 && wired.uses.length === (viaNodes ? 2 : 1), `the graph is clean, and the panel lists where it is used (${wired.problems.join(' | ')} / ${wired.uses.join(', ')})`)
-  check(wired.ok && wired.luaPanels && wired.template, `and the module is written: the map's trigger table carries the panel, the layout its template (${wired.ok})`)
+  // With the engine's panel nodes the graph's own file carries the panel
+  // (graph field `panels`); with the trigger words, the map's trigger table.
+  check(wired.ok && (wired.ready ? wired.graphPanels : wired.luaPanels) && wired.template,
+        `and the module is written: ${wired.ready ? 'the graph\'s file' : 'the map\'s trigger table'} carries the panel, the layout its template (${JSON.stringify({ ok: wired.ok, graph: wired.graphPanels, lua: wired.luaPanels, template: wired.template })})`)
   await page.evaluate(async () => { await window.__studio.go('home') })
 }
 
@@ -1863,13 +1918,22 @@ await page.keyboard.press('Escape')
     const r = await S.emitAll()
     const txt = r ? String(r.files.find((f) => f.path === 'module.txt').bytes) : ''
     const table = r ? String(r.files.find((f) => f.path === 'maps/module_panels.lua')?.bytes ?? '') : ''
+    const gameFile = r ? JSON.parse(String(r.files.find((f) => f.path === 'maps/module.game.graph.json')?.bytes ?? '{}')) : {}
+    const ready = !!S.vocab.graph.nodes.some((n) => n.name === 'open_panel')
     delete S.module.graphs; delete S.module.panels; delete S.docs.yard; S.moduleChanged(); await S.go('map')
-    return { offered, route: S.route(), node, txt, table: /triggers\.load/.test(table) && /template = "shop"/.test(table) }
+    return { offered, route: S.route(), node, txt, table: /triggers\.load/.test(table) && /template = "shop"/.test(table), ready, graphPanels: !!gameFile.panels?.shop, tableFile: !!table }
   })
-  check(gamePanel.offered.includes('game:game') && gamePanel.node?.a === 'ui_open' && gamePanel.node?.panel === 'shop',
-        `the panel editor opens a panel from the game's graph too (${JSON.stringify(gamePanel.node)})`)
-  check(/game triggers\.lua shared\n(?:.*\n)*game module_panels\.lua\ngame module\.game\.graph\.json/.test(gamePanel.txt) && gamePanel.table,
-        `and the module gives the game its own table of the panels its graphs open, before the graphs (${gamePanel.txt.split('\n').filter((l) => /^game/.test(l)).join(', ')})`)
+  check(gamePanel.offered.includes('game:game') && (gamePanel.ready ? gamePanel.node?.type === 'open_panel' : gamePanel.node?.a === 'ui_open') && gamePanel.node?.panel === 'shop',
+        `the panel editor opens a panel from the game's graph too, ${gamePanel.ready ? 'with the engine\'s open_panel' : 'with ui_open'} (${JSON.stringify(gamePanel.node)})`)
+  if (gamePanel.ready) {
+    // The engine's panel nodes: the game graph's own file carries the panel,
+    // and no trigger table is needed in the game VM.
+    check(gamePanel.graphPanels && !gamePanel.tableFile && !/module_panels\.lua/.test(gamePanel.txt),
+          `and the game graph's file carries the panel it opens, with no trigger table for it (${gamePanel.txt.split('\n').filter((l) => /^game/.test(l)).join(', ')})`)
+  } else {
+    check(/game triggers\.lua shared\n(?:.*\n)*game module_panels\.lua\ngame module\.game\.graph\.json/.test(gamePanel.txt) && gamePanel.table,
+          `and the module gives the game its own table of the panels its graphs open, before the graphs (${gamePanel.txt.split('\n').filter((l) => /^game/.test(l)).join(', ')})`)
+  }
 }
 
 // THE WORLD'S NODES: the menu grouped the designer's way, a door added with

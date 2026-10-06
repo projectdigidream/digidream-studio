@@ -414,13 +414,19 @@ if (specs.has('set_sector_effect')) {
     { id: 'dim', type: 'set_sector_light', sector: { sector: lift.id }, light: 60, seconds: 2, pos: { x: 780, y: 0 } },
     { id: 'fog', type: 'set_sector_effect', sector: { sector: lift.id }, effect: 'fog', density: 0.5, color: '#203040', pos: { x: 1040, y: 0 } }
   ], links: [['go.then', 'lava.in'], ['lava.then', 'open.in'], ['open.then', 'dim.in'], ['dim.then', 'fog.in']] }
+  // The board's own: a note round it and a bend in a link, written to meta.
+  looks.notes = [{ id: 'note1', x: -20, y: -50, w: 1300, h: 220, text: 'the lift room turns to lava', color: 'red' }]
+  looks.bends = { 'dim.then>fog.in': [{ x: 900, y: 160 }] }
   check(graphProblems(looks, GV, TV).length === 0, `a sector's looks are clean (${graphProblems(looks, GV, TV).join(' | ')})`)
+  const lj = emitGraph(looks, 'looks', null, (a) => a).json
+  check(lj.meta.notes?.[0]?.text === 'the lift room turns to lava' && lj.meta.bends?.['dim.then>fog.in']?.[0]?.x === 900 && !('notes' in lj) && !('bends' in lj),
+        'notes and bends go into the file\'s meta, nowhere the runtime reads')
   const smoke = structuredClone(looks); smoke.nodes[4].effect = 'smoke'
   check(graphProblems(smoke, GV, TV).some((p) => /node 'fog': `effect` is one of rain/.test(p)), `CONTROL: an effect the engine lacks is named (${graphProblems(smoke, GV, TV).join(' | ')})`)
   if (existsSync(SERVER)) {
     const ok = await serveOne([{ ...structuredClone(plain), name: 'looks', graphs: { looks } }], 34709)
     check(ok.ok && /\[graphs\] looks\.looks\.graph\.json: 5 nodes, 4 links/.test(ok.log) && !/refus/i.test(ok.log),
-          `the server loads a graph that changes a room's floor, ceiling, light and weather (${ok.log.split('\n').filter((l) => /looks/.test(l)).slice(0, 2).join(' | ')})`)
+          `the server loads a graph that changes a room's floor, ceiling, light and weather, its note and bend in meta (${ok.log.split('\n').filter((l) => /looks/.test(l)).slice(0, 2).join(' | ')})`)
     const bad = await serveOne([{ ...structuredClone(plain), name: 'looks', graphs: { looks: smoke } }], 34710)
     check(bad.ok && !/\[graphs\] looks\.looks\.graph\.json: 5 nodes/.test(bad.log) && /looks\.graph\.json: node 'fog': 'effect' should be/.test(bad.log),
           `CONTROL: and refuses smoke, as the studio says (${bad.log.split('\n').filter((l) => /node 'fog'/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)

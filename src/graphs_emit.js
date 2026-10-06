@@ -293,5 +293,9 @@ export function emitGraph (graph, name, resolve, plain = null, { panels = null }
   // The panels its nodes name, as the runtime reads them (docs/PANELS.md 2).
   if (panels && Object.keys(panels).length) json.panels = panels
   json.meta = { editor: 'studio' }
+  // The board's notes and links' bends: the editor's, never run (graph_vocab
+  // graph_fields: meta is "layout, comments").
+  if (graph.notes?.length) json.meta.notes = graph.notes.map((n) => ({ ...n }))
+  if (graph.bends && Object.keys(graph.bends).length) json.meta.bends = Object.fromEntries(Object.entries(graph.bends).map(([k, v]) => [k, v.map((p) => ({ x: p.x, y: p.y }))]))
   return { json, text: JSON.stringify(json, null, 1) + '\n', problems }
 }
