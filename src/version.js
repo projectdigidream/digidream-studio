@@ -6,4 +6,4 @@
 // studio/test/version.test.js fails if the two differ. It changes only with
 // the user's permission.
 //
-export const STUDIO_VERSION = '0.1.0'
+export const STUDIO_VERSION = '0.1.1'
