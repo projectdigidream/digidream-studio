@@ -24,11 +24,11 @@
 // A condition's or action's argument of a pinnable type has a data pin in its
 // row on the node: linked, it takes the value at run time and its field says so.
 //
-import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog } from './ui.js'
+import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog, addHelp } from './ui.js'
 import { argFields } from './argform.js'
 import { playScene } from './scene.js'
 import { isStart } from './scene_plan.js'
-import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME } from './graphs_emit.js'
+import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME, VAR_NODES, varChoices, propertiesOf, propertyFits } from './graphs_emit.js'
 
 const CATEGORY = { event: 'ev', condition: 'cond', action: 'act', branch: 'flow', sequence: 'flow', delay: 'flow', once: 'flow',
                    get_var: 'data', set_var: 'act', add_var: 'act', literal: 'data', compare: 'data', math: 'data', logic: 'data', random: 'data',
@@ -282,8 +282,9 @@ class GraphWindow {
       el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
       this.#graphPicker(),
       this.#palette(),
-      el('div', { class: 'wk-tabs gw-panes' }, [['board', 'board'], ['details', 'details']].map(([v, l]) =>
-        el('button', { text: l, 'data-on': this.pane === v ? '1' : '0', onclick: () => { this.pane = v; this.root.dataset.pane = v } }))),
+      el('div', { class: 'wk-tabs gw-panes' }, [['board', 'board'], ['details', 'details'], ['variables', '𝑥']].map(([v, l]) =>
+        el('button', { text: l, 'data-pane-tab': v, 'data-on': (v === 'variables' ? this.pane === 'details' && this.side === 'variables' : this.pane === v && !(v === 'details' && this.side === 'variables')) ? '1' : '0',
+          onclick: () => { this.pane = v === 'variables' ? 'details' : v; if (v !== 'board') this.side = v; this.root.dataset.pane = this.pane; this.render() } }))),
       this.graph?.nodes.length ? button('▶ scene', () => this.playScene(), 'gw-play') : null,
       el('span', { style: 'flex:1' }),
       problems.length ? el('span', { class: 'st-danger', text: `${problems.length} problem${problems.length > 1 ? 's' : ''}` }) : null,
@@ -312,7 +313,7 @@ class GraphWindow {
     this.#boardGestures(board)
     board.appendChild(this.#zoomBar(board))
 
-    const side = el('div', { class: 'wk-details' }, this.#details(problems))
+    const side = el('div', { class: 'wk-details' }, this.#sideRows(problems))
     this.root.replaceChildren(top, el('div', { class: 'wk-graph' }, [board]), side)
     requestAnimationFrame(() => this.#drawLinks())
   }
@@ -500,7 +501,8 @@ class GraphWindow {
       if (name === 'math') n.op = '+'
       if (name === 'logic') n.op = 'and'
       if (name === 'literal') n.value = 0
-      if (['get_var', 'set_var', 'add_var'].includes(name)) n.var = Object.keys(g.vars ?? {})[0] ?? 'count'
+      // A var node starts on the graph's first variable, else on hp, which every node may use.
+      if (VAR_NODES.includes(name)) n.var = Object.keys(g.vars ?? {})[0] ?? (propertiesOf(this.gv).has('hp') ? 'hp' : 'count')
       if (name === 'call') Object.assign(n, { to: this.game ? 'level' : 'game', name: this.S.callNames?.()[0] ?? 'hello' })
       if (name === 'on_call') n.name = this.S.callNames?.()[0] ?? 'hello'
       if (name === 'log' || (kind === 'act' && !name)) n.text ??= 'hello'
@@ -535,6 +537,91 @@ class GraphWindow {
   }
 
   /** A node and every link to or from it. */
+  /**
+   * A var node's `var`: the graph's own variables, then the entity's
+   * properties this node may use (set and add: settable ones; add: numbers),
+   * grouped. A name that is neither stays, said as such.
+   */
+  #varRow (n) {
+    const choices = varChoices(this.graph, this.gv, n.type)
+    const sel = el('select', { class: 'gw-pick gw-var', 'data-var': '1' })
+    const groups = new Map()
+    for (const c of choices) {
+      if (!groups.has(c.group)) { const og = el('optgroup', { label: c.group }); groups.set(c.group, og); sel.appendChild(og) }
+      groups.get(c.group).appendChild(el('option', { value: c.value, text: c.label, title: c.doc }))
+    }
+    if (n.var !== undefined && !choices.some((c) => c.value === n.var)) sel.prepend(el('option', { value: n.var, text: `${n.var} -- not one this node can use` }))
+    if (!choices.length) sel.appendChild(el('option', { value: '', text: '(no variables yet)' }))
+    sel.value = n.var ?? ''
+    sel.addEventListener('change', () => { n.var = sel.value; this.changed() })
+    return el('div', { class: 'st-row' }, [el('label', { text: 'variable' }), sel])
+  }
+
+  /** A get, set or add of `name`, dropped in at a free spot. */
+  addVarNode (type, name) {
+    const id = this.addFrom(`node:${type}`)
+    const n = this.graph.nodes.find((x) => x.id === id)
+    n.var = name
+    const fresh = this.#newId(`${type.replace('_var', '')}_${name}`)
+    if (fresh !== n.id && !this.graph.links.some(([f, t]) => f.startsWith(`${n.id}.`) || t.startsWith(`${n.id}.`))) n.id = fresh
+    this.picked = { kind: 'node', id: n.id }
+    this.changed()
+    return n.id
+  }
+
+  /**
+   * THE VARIABLES PANE: what a graph's get, set and add can name -- its own
+   * variables (made and given a start here), then every property of an
+   * entity (graph_vocab.properties), each with its type, whether a graph may
+   * set it, what it is, and a button to drop the node that uses it.
+   */
+  #varsPane () {
+    const g = this.graph
+    const props = this.gv.properties ?? []
+    const q = (this.varFilter ?? '').trim().toLowerCase()
+    const hit = (name, doc) => !q || q.split(/\s+/).every((w) => name.toLowerCase().includes(w) || (doc ?? '').toLowerCase().includes(w))
+    const find = el('input', { type: 'search', class: 'gw-var-find', placeholder: 'find: hp, speed, jump…', value: this.varFilter ?? '' })
+    find.addEventListener('input', () => { this.varFilter = find.value; const pos = find.selectionStart; this.#drawSide(); const f = this.root.querySelector('.gw-var-find'); f?.focus(); f?.setSelectionRange(pos, pos) })
+    const drop = (type, name, ok = true) => ok ? button(type.replace('_var', ''), () => this.addVarNode(type, name), 'gw-var-drop') : null
+    const rows = [find]
+    // The graph's own, each with its start and a node away.
+    rows.push(...this.#varsRows((k) => [drop('get_var', k), drop('set_var', k), drop('add_var', k)]))
+    if (!props.length) {
+      rows.push(muted('This engine lets a graph name only its own variables.'))
+      return rows
+    }
+    for (const [of, title, note] of [
+      ['entity', 'the entity', 'Its own facts: the event\'s entity, or the one linked to a node\'s entity input.'],
+      ['movement', 'its movement rules', 'How it moves (docs/PLAYER.md). Set on a player, a rule lasts as an effect a later set replaces; on anything else it is its body\'s.']]) {
+      const list = props.filter((p) => p.of === of && hit(p.name, p.doc))
+      if (!list.length) continue
+      rows.push(el('div', { class: 'st-section-head', text: `${title} (${list.length})` }), muted(note))
+      for (const p of list) {
+        rows.push(addHelp(el('div', { class: 'st-row gw-var-row', 'data-prop': p.name }, [
+          el('span', { class: 'st-entry', text: p.name }),
+          el('span', { class: 'gw-var-type', text: `${p.type}${p.access === 'read' ? ' · read only' : ''}` }),
+          el('span', { style: 'flex:1 1 auto' }),
+          drop('get_var', p.name), drop('set_var', p.name, propertyFits('set_var', p)), drop('add_var', p.name, propertyFits('add_var', p))
+        ].filter(Boolean)), p.doc))
+      }
+    }
+    return rows
+  }
+
+  /** The side panel: a node's details, or the variables. */
+  #drawSide () {
+    const side = this.root.querySelector('.wk-details')
+    if (!side) return
+    const problems = graphProblems(this.graph, this.gv, this.tv, { game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
+    side.replaceChildren(...this.#sideRows(problems))
+  }
+
+  #sideRows (problems) {
+    const tabs = el('div', { class: 'wk-tabs gw-side-tabs' }, [['details', 'details'], ['variables', '𝑥 variables']].map(([v, l]) =>
+      el('button', { text: l, 'data-side': v, 'data-on': (this.side ?? 'details') === v ? '1' : '0', onclick: () => { this.side = v; this.#drawSide() } })))
+    return [tabs, ...((this.side ?? 'details') === 'variables' ? this.#varsPane() : this.#details(problems))]
+  }
+
   /** A node's description: its verb's for an event, condition or action, else its type's. */
   #nodeDoc (n, spec) {
     if (n.type === 'event') return this.#verbDoc('event', n.event) || spec?.doc || ''
@@ -606,8 +693,10 @@ class GraphWindow {
     } }) : null
     const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title', text: `${n.type === 'event' ? '⚡ ' : ''}${n.id}` }), info, del].filter(Boolean))
     const body = el('div', { class: 'gw-body' })
+    // A var node's entity input matters only for a property: dimmed for the graph's own variable.
+    const idle = (name) => name === 'entity' && VAR_NODES.includes(n.type) && Object.prototype.hasOwnProperty.call(this.graph?.vars ?? {}, n.var ?? '')
     const pin = this.pin = (name, dir, kind) => {
-      const d = el('div', { class: `gw-pin gw-${dir} gw-${kind}`, 'data-pin': `${n.id}.${name}`, 'data-dir': dir, 'data-kind': kind },
+      const d = el('div', { class: `gw-pin gw-${dir} gw-${kind}${dir === 'in' && idle(name) ? ' gw-pin-idle' : ''}`, 'data-pin': `${n.id}.${name}`, 'data-dir': dir, 'data-kind': kind, title: dir === 'in' && idle(name) ? 'only for a property: this is the graph\'s own variable' : '' },
         [el('span', { class: 'gw-dot', text: kind === 'exec' ? '▷' : '●' }), el('span', { class: 'gw-pname', text: name === 'in' || name === 'then' ? '' : name })])
       if (dir === 'out') this.#linkGesture(d)
       return d
@@ -669,7 +758,7 @@ class GraphWindow {
       if (verb) out.push(...this.#argRows(verb.args, shown, argPins, linked, (args) => argFields(args, n, ctx, HIDDEN_ARGS, n[key])))
     } else if (spec) {
       if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
-        out.push(pick('variable', n.var, Object.keys(this.graph?.vars ?? {}).map((v) => [v, v]), (v) => { n.var = v; this.changed() }))
+        out.push(this.#varRow(n))
         if (n.type !== 'get_var') out.push(this.#literalRow('value', n, 'value'))
       } else {
         out.push(...this.#argRows(spec.args, shown, argPins, linked, (args) => [
@@ -1099,7 +1188,7 @@ class GraphWindow {
           ? 'The game has no graph yet. It runs once for the whole game, across levels: start from "when on_player_enter", count, keep score, open a screen. To act in a level, "call" it -- the level\'s graph starts from "on_call".'
           : 'This map has no graph yet. Add a "when …" node from the menu above: it is where a run starts. Then do something, ask something, wait, count.'))
     }
-    rows.push(...this.#varsRows())
+    rows.push(button('𝑥 variables…', () => { this.side = 'variables'; this.#drawSide() }))
     rows.push(...this.#graphRows())
     rows.push(muted(this.game
       ? 'The game\'s graph runs once, in the game, not in any level: it hears the players arrive and leave, and its variables are kept from level to level and saved with the game. What happens in a level is a "call" to it (to: level), which that level\'s "on_call" of the same name takes.'
@@ -1147,7 +1236,9 @@ class GraphWindow {
       for (const [name, from] of linked) if ((verb?.args ?? []).some((a) => a.name === name)) rows.push(row(name, el('span', { class: 'gw-from', text: `← linked from ${from}` })))
       if (verb) rows.push(...argFields(verb.args ?? [], n, ctx, [...HIDDEN_ARGS, ...linked.keys()], n[key]))
     } else if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
-      rows.push(select('variable', n.var ?? '', Object.keys(g.vars ?? {}).map((v) => [v, v]), (v) => { n.var = v; ch() }))
+      rows.push(this.#varRow(n))
+      const p = propertiesOf(this.gv).get(n.var)
+      if (p) rows.push(muted(`${p.doc} (${p.type}, ${p.access === 'read' ? 'read only' : 'read and set'}${p.of === 'movement' ? ', a movement rule' : ''}). Whose: the event's entity, or the one linked to \`entity\`.`))
       if (n.type !== 'get_var') rows.push(text('value (unless linked)', n.value ?? '', (v) => { n.value = literal(v); ch() }))
     } else if (spec) {
       if (spec.doc) rows.push(muted(spec.doc))
@@ -1180,13 +1271,14 @@ class GraphWindow {
       muted(`${this.game ? 'The game' : this.S.docName} ${others.length ? `has ${others.length} other graph${others.length > 1 ? 's' : ''} (${others.join(', ')})` : 'has no other graph'}. Each runs on its own, under its own name${this.game ? '' : ', and takes one of the map\'s script slots'}; an empty one is not written.`)]
   }
 
-  #varsRows () {
+  #varsRows (extra = null) {
     const g = this.graph
-    const rows = [el('div', { class: 'st-section-head', text: 'variables' })]
+    const rows = [el('div', { class: 'st-section-head', text: 'this graph\'s variables' })]
     for (const [k, v] of Object.entries(g?.vars ?? {})) {
-      rows.push(el('div', { class: 'st-row' }, [
+      rows.push(el('div', { class: 'st-row gw-var-row', 'data-var-row': k }, [
         el('span', { class: 'st-entry', text: k }),
         text('starts at', String(v), (x) => { g.vars[k] = literal(x) ?? 0; this.changed() }).lastChild,
+        ...(extra ? extra(k) : []),
         button('✕', () => { delete g.vars[k]; this.changed() })
       ]))
     }
@@ -1197,6 +1289,7 @@ class GraphWindow {
       const gg = this.ensure()
       gg.vars ??= {}
       if (k in gg.vars) { this.S.status(`there is a variable called ${k} already`, 'warn'); return }
+      if (propertiesOf(this.gv).has(k)) { this.S.status(`${k} is an entity's property (in the list below) -- a variable needs another name`, 'warn'); return }
       gg.vars[k] = 0
       this.changed()
     }))
@@ -1261,6 +1354,12 @@ const STYLE = `
 .gw-swatch[data-on="1"]{outline:2px solid #ffe066}
 .gw-bend{fill:#121620;stroke:#e8f0ff;stroke-width:2;cursor:grab;touch-action:none;pointer-events:all}
 .gw-bend-on{stroke:#ffe066}
+.gw-pin-idle{opacity:.35}
+.gw-side-tabs{margin-bottom:6px}
+.gw-var-find{width:100%;height:36px;font-size:14px;box-sizing:border-box}
+.gw-var-row{min-height:34px;gap:6px}
+.gw-var-type{font-size:11px;color:#8fa6c4;white-space:nowrap}
+.gw-var-drop{min-width:0;height:28px;padding:0 8px;font-size:11px}
 .gw-menu{position:absolute;z-index:40;top:52px;left:8px;width:min(420px,calc(100% - 16px));max-height:calc(100% - 64px);display:flex;flex-direction:column;background:#121620;border:1px solid #2a3446;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden}
 .gw-menu-top{display:flex;gap:6px;padding:8px;border-bottom:1px solid #2a3446}
 .gw-menu-find{flex:1 1 auto;min-width:0;height:36px;font-size:14px}

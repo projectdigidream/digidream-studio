@@ -21,7 +21,7 @@ import { newDoc, addSector, addSpawn, addPath, addPathPoint, CAP } from '../src/
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { makeResolver } from '../src/lua_emit.js'
-import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, migrateGraphs, graphsOf, liveGraphs, gameGraphFile, graphFile, parseGraphRoute, graphRoute } from '../src/graphs_emit.js'
+import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, migrateGraphs, graphsOf, liveGraphs, gameGraphFile, graphFile, parseGraphRoute, graphRoute, varChoices, varProblem, propertiesOf } from '../src/graphs_emit.js'
 import { emitLevel, emitModule, scriptDecls, moduleTxt, gameScripts, newModule, RUNTIME_SCRIPTS, MODULE_FILE } from '../src/module_emit.js'
 import { toLua } from '../src/lua.js'
 import { bake } from '../src/bake.js'
@@ -430,6 +430,38 @@ if (specs.has('set_sector_effect')) {
     const bad = await serveOne([{ ...structuredClone(plain), name: 'looks', graphs: { looks: smoke } }], 34710)
     check(bad.ok && !/\[graphs\] looks\.looks\.graph\.json: 5 nodes/.test(bad.log) && /looks\.graph\.json: node 'fog': 'effect' should be/.test(bad.log),
           `CONTROL: and refuses smoke, as the studio says (${bad.log.split('\n').filter((l) => /node 'fog'/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
+  }
+}
+
+// VARIABLES AND PROPERTIES (docs/GRAPH_VARIABLES.md): a var node names the
+// graph's own variable or an entity's property; set and add only a settable
+// one, add only a number. What the studio says is what the server refuses.
+if ((GV.properties ?? []).length) {
+  const ch = (type) => varChoices({ vars: { score: 0 } }, GV, type).map((c) => c.value)
+  check(ch('get_var')[0] === 'score' && ch('get_var').includes('x') && ch('get_var').includes('hp'), 'get_var offers the graph\'s variables, then every property')
+  check(!ch('set_var').includes('x') && ch('set_var').includes('hp') && ch('set_var').includes('climb_enabled'), 'set_var only the settable ones (not x, which is read only)')
+  check(!ch('add_var').includes('climb_enabled') && ch('add_var').includes('move_speed'), 'add_var only settable numbers (not a switch)')
+  const stats = { vars: { score: 0 }, nodes: [
+    { id: 'go', type: 'when_level_starts', pos: { x: 0, y: 0 } },
+    { id: 'heal', type: 'set_var', var: 'hp', value: 50, pos: { x: 260, y: 0 } },
+    { id: 'fast', type: 'add_var', var: 'move_speed', value: 2, pos: { x: 520, y: 0 } },
+    { id: 'count', type: 'add_var', var: 'score', value: 1, pos: { x: 780, y: 0 } },
+    { id: 'where', type: 'get_var', var: 'x', pos: { x: 260, y: 200 } }
+  ], links: [['go.then', 'heal.in'], ['heal.then', 'fast.in'], ['fast.then', 'count.in']] }
+  check(graphProblems(stats, GV, TV).length === 0, `setting hp, adding to move_speed and a counter, reading x: clean (${graphProblems(stats, GV, TV).join(' | ')})`)
+  const bad = (mutate) => { const g = structuredClone(stats); mutate(g); return graphProblems(g, GV, TV).join(' | ') }
+  check(/heal.*x can only be read/.test(bad((g) => { g.nodes[1].var = 'x' })), 'CONTROL: setting x is named -- it can only be read')
+  check(/count.*grounded is not a number/.test(bad((g) => { g.nodes[3].var = 'grounded' })) || /count.*grounded can only be read/.test(bad((g) => { g.nodes[3].var = 'grounded' })), 'adding to a non-number is named')
+  check(/neither one of this graph's variables nor a property/.test(bad((g) => { g.nodes[4].var = 'nonsense' })), 'a name that is neither is named')
+  check(/variable hp: an entity has a property called hp/.test(bad((g) => { g.vars.hp = 3 })), 'a variable with a property\'s name is named')
+  if (existsSync(SERVER)) {
+    const good = await serveOne([{ ...structuredClone(plain), name: 'stats', graphs: { stats } }], 34711)
+    check(good.ok && /\[graphs\] stats\.stats\.graph\.json: 5 nodes, 3 links/.test(good.log),
+          `the server loads it (${good.log.split('\n').filter((l) => /stats\.graph/.test(l)).slice(0, 2).join(' | ').replace(/^.*\[graphs\] /, '')})`)
+    const g2 = structuredClone(stats); g2.nodes[1].var = 'x'
+    const refused = await serveOne([{ ...structuredClone(plain), name: 'stats', graphs: { stats: g2 } }], 34712)
+    check(refused.ok && !/stats\.stats\.graph\.json: 5 nodes/.test(refused.log) && /heal/.test(refused.log),
+          `CONTROL: and refuses setting x, as the studio says (${refused.log.split('\n').filter((l) => /heal/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
   }
 }
 

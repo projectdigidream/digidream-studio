@@ -1538,6 +1538,35 @@ await page.keyboard.press('Escape')
   })
   check(helped.info && helped.open1 && helped.kept, `a node's ⓘ opens its description, and it stays open when the board is drawn again (${JSON.stringify(helped)})`)
   check(helped.field, 'a field\'s ⓘ opens the field\'s own description')
+  // THE VARIABLES PANE AND THE VAR DROPDOWN: the graph's variables and every
+  // property; a property's set dropped in from its row; the node's dropdown
+  // grouped, offering only what a set may name.
+  const vars = await page.evaluate(async () => {
+    const S = window.__studio
+    const w = S.window
+    if (!(S.vocab.graph.properties ?? []).length) return { skip: true }
+    w.side = 'variables'; w.render()
+    const find = document.querySelector('.gw .gw-var-find')
+    const rows = { props: document.querySelectorAll('.gw [data-prop]').length, readOnlyX: [...(document.querySelector('.gw [data-prop="x"]')?.querySelectorAll('.gw-var-drop') ?? [])].map((b) => b.textContent) }
+    find.value = 'jump'; find.dispatchEvent(new Event('input'))
+    const filtered = [...document.querySelectorAll('.gw [data-prop]')].map((r) => r.dataset.prop)
+    const setHp = [...document.querySelectorAll('.gw [data-prop]')].length >= 0 && (() => { find.value = 'hp'; find.dispatchEvent(new Event('input')); return [...document.querySelector('.gw [data-prop="hp"]').querySelectorAll('.gw-var-drop')].find((b) => b.textContent === 'set') })()
+    setHp.click()
+    await new Promise((r) => setTimeout(r, 200))
+    const node = S.doc.graphs.main.nodes.find((n) => n.type === 'set_var' && n.var === 'hp')
+    w.side = 'details'; w.render()
+    const sel = document.querySelector(`.gw-node[data-node="${node?.id}"] select[data-var]`)
+    const groups = sel ? [...sel.querySelectorAll('optgroup')].map((g) => g.label) : []
+    const offersX = sel ? [...sel.options].some((o) => o.value === 'x') : null
+    S.doc.graphs.main.nodes = S.doc.graphs.main.nodes.filter((n) => n !== node); w.varFilter = ''; S.commit(); w.render()
+    return { rows, filtered, node: node && { type: node.type, var: node.var }, groups, offersX }
+  })
+  if (!vars.skip) {
+    check(vars.rows.props > 50 && vars.rows.readOnlyX.join() === 'get', `the variables pane lists every property, a read-only one only to get (${JSON.stringify(vars.rows)})`)
+    check(vars.filtered.length && vars.filtered.every((n) => /jump/.test(n)) , `and is searched (${vars.filtered.join(', ')})`)
+    check(vars.node?.var === 'hp' && vars.groups.includes('the entity') && vars.offersX === false,
+          `a property's set is dropped in from its row, and the node's dropdown is grouped, offering only what a set may name (${JSON.stringify(vars)})`)
+  }
   check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
         `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {

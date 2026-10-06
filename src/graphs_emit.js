@@ -157,6 +157,50 @@ const split = (s) => { const i = String(s).lastIndexOf('.'); return i < 0 ? [s, 
  * @param tv  trigger_vocab.json
  * @returns [string]
  */
+// --- variables and properties (docs/GRAPH_VARIABLES.md) ----------------------------------
+//
+// get_var, set_var and add_var take, as `var`, a name in the graph's own
+// `vars` or one of graph_vocab's `properties`: an entity's own facts (hp,
+// position ...) and its movement rules, each `read` or `read_write`.
+
+export const VAR_NODES = ['get_var', 'set_var', 'add_var']
+const NUMERIC = new Set(['int', 'number'])
+/** The properties a graph can reach, by name (empty for an engine without them). */
+export const propertiesOf = (gv) => new Map((gv?.properties ?? []).map((p) => [p.name, p]))
+/** Can this node use that property: get any; set a settable one; add a settable number. */
+export function propertyFits (type, p) {
+  if (!p) return false
+  if (type === 'get_var') return true
+  if (p.access !== 'read_write') return false
+  return type !== 'add_var' || NUMERIC.has(p.type)
+}
+
+/**
+ * What a var node's `var` may be, grouped: [{ group, value, label, doc }] --
+ * the graph's own variables, then the properties this node may use.
+ */
+export function varChoices (graph, gv, type) {
+  const out = []
+  for (const [k, v] of Object.entries(graph?.vars ?? {})) out.push({ group: 'this graph', value: k, label: `${k} (starts at ${JSON.stringify(v)})`, doc: '' })
+  for (const p of gv?.properties ?? []) {
+    if (!propertyFits(type, p)) continue
+    out.push({ group: p.of === 'movement' ? 'its movement rules' : 'the entity', value: p.name, label: `${p.name} · ${p.type}${p.access === 'read' ? ' · read only' : ''}`, doc: p.doc ?? '' })
+  }
+  return out
+}
+
+/** A var node's problem, as the engine refuses it at load; null when it is fine. */
+export function varProblem (n, graph, props) {
+  if (!VAR_NODES.includes(n.type) || n.var === undefined || n.var === '') return null
+  const own = Object.prototype.hasOwnProperty.call(graph?.vars ?? {}, n.var)
+  const p = props.get(n.var)
+  if (own) return null
+  if (!p) return `\`${n.var}\` is neither one of this graph's variables nor a property an entity has`
+  if (n.type !== 'get_var' && p.access !== 'read_write') return `${n.var} can only be read -- a graph cannot set it`
+  if (n.type === 'add_var' && !NUMERIC.has(p.type)) return `${n.var} is not a number, so nothing can be added to it`
+  return null
+}
+
 export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null } = {}) {
   const problems = []
   if (!graph) return problems
@@ -169,8 +213,13 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
   const conds = new Map((tv?.conditions ?? []).map((c) => [c.name, c]))
   const acts = new Map((tv?.actions ?? []).map((a) => [a.name, a]))
   const byId = new Map()
+  // Properties, when the engine has them: a variable may not take one's name,
+  // and a var node names a variable or a property it may use.
+  const props = propertiesOf(gv)
+  if (props.size) for (const k of Object.keys(graph.vars ?? {})) if (props.has(k)) problems.push(`variable ${k}: an entity has a property called ${k} -- give the variable another name`)
   for (const n of graph.nodes ?? []) {
     const where = `node '${n.id}'`
+    if (props.size) { const vp = varProblem(n, graph, props); if (vp) problems.push(`${where}: ${vp}`) }
     if (!n.id || String(n.id).includes('.')) problems.push(`${where}: an id must be a non-empty name without dots`)
     if (byId.has(n.id)) problems.push(`${where}: two nodes have this id`)
     byId.set(n.id, n)
