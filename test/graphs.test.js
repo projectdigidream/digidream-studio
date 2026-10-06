@@ -506,5 +506,19 @@ if ((GV.properties ?? []).length) {
   }
 }
 
+// EVERY TICK: the menu's "every tick" is the trigger runtime's on_tick as a
+// start; a graph counting ticks is clean and the server loads it, in a level
+// and in the game.
+{
+  const ticker = { vars: { ticks: 0 }, nodes: [
+    { id: 'tick', type: 'event', event: 'on_tick', pos: { x: 0, y: 0 } },
+    { id: 'count', type: 'add_var', var: 'ticks', value: 1, pos: { x: 260, y: 0 } }], links: [['tick.then', 'count.in']] }
+  check(graphProblems(ticker, GV, TV).length === 0 && graphProblems(ticker, GV, TV, { game: true }).length === 0, `a graph run every tick is clean, in a level and in the game (${graphProblems(ticker, GV, TV).join(' | ')})`)
+  if (existsSync(SERVER)) {
+    const ok = await serveOne([{ ...structuredClone(plain), name: 'ticker', graphs: { ticker } }], 34716)
+    check(ok.ok && /\[graphs\] ticker\.ticker\.graph\.json: 2 nodes, 1 links/.test(ok.log), `and the server loads it (${ok.log.split('\n').filter((l) => /ticker\.graph/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
+  }
+}
+
 console.log(`graphs: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

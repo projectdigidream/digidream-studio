@@ -1468,6 +1468,13 @@ await page.keyboard.press('Escape')
           `"shop buy" finds the button's own entry, and Enter drops in the panel event and its widget, linked (${JSON.stringify(found)})`)
   }
   check(found.verbs > 30, `every trigger condition and action is in the menu by name (${found.verbs})`)
+  const ticked = await page.evaluate(() => {
+    const w = window.__studio.window
+    const items = w.menuItems()
+    const tick = items.find((i) => i.value === 'event:on_tick')
+    return { group: tick?.group, label: tick?.label, afterEvery: items.findIndex((i) => i.value === 'event:on_tick') > items.findIndex((i) => i.value === 'node:every') }
+  })
+  check(ticked.group === 'when …' && ticked.label === 'every tick' && ticked.afterEvery, `"every tick" is a start in the when group, after "every" (${JSON.stringify(ticked)})`)
   // NOTES AND BENDS: a note round the picked node, its title dragged with
   // the node inside; a bend in a link, drawn through; the link gone, its bend too.
   const noted = await page.evaluate(async () => {

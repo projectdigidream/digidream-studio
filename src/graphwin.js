@@ -354,6 +354,12 @@ class GraphWindow {
     for (const n of panelNodes) taken.add(n.name)
     for (const [label, test] of MENU) {
       for (const n of specs.filter((x) => !taken.has(x.name) && test(x))) { taken.add(n.name); push(label, `node:${n.name}`, words(n), n.doc) }
+      // EVERY TICK, beside "every N seconds": the trigger runtime's on_tick
+      // (and on_post_tick, after the world steps), said as a start.
+      if (label === 'when …') {
+        if (this.events.some((e) => e.name === 'on_tick')) push(label, 'event:on_tick', 'every tick', 'Every tick of the game, 60 a second, before the world moves: a run each time, so keep what it does small. For a slower beat, every N seconds.')
+        if (this.events.some((e) => e.name === 'on_post_tick')) push(label, 'event:on_post_tick', 'every tick, after the world moves', 'Every tick, 60 a second, once the world has moved and positions are final: to read where things ended up.')
+      }
     }
     // THE PANELS. The engine's own panel nodes (docs/PANELS.md §3) first, the
     // moment graph_vocab has them; then the trigger words, ready-made.
