@@ -21,7 +21,7 @@ import { newDoc, addSector, addSpawn, addPath, addPathPoint, CAP } from '../src/
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { makeResolver } from '../src/lua_emit.js'
-import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, migrateGraphs, graphsOf, liveGraphs, gameGraphFile, graphFile, parseGraphRoute, graphRoute, varChoices, varProblem, propertiesOf } from '../src/graphs_emit.js'
+import { emitGraph, graphProblems, newGraph, pinsOf, nodeSpecs, migrateGraph, migrateGraphs, graphsOf, liveGraphs, gameGraphFile, graphFile, parseGraphRoute, graphRoute, varChoices, varProblem, propertiesOf, bindableArgs, isVarRef, boundId } from '../src/graphs_emit.js'
 import { emitLevel, emitModule, scriptDecls, moduleTxt, gameScripts, newModule, RUNTIME_SCRIPTS, MODULE_FILE } from '../src/module_emit.js'
 import { toLua } from '../src/lua.js'
 import { bake } from '../src/bake.js'
@@ -462,6 +462,37 @@ if ((GV.properties ?? []).length) {
     const refused = await serveOne([{ ...structuredClone(plain), name: 'stats', graphs: { stats: g2 } }], 34712)
     check(refused.ok && !/stats\.stats\.graph\.json: 5 nodes/.test(refused.log) && /heal/.test(refused.log),
           `CONTROL: and refuses setting x, as the studio says (${refused.log.split('\n').filter((l) => /heal/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
+  }
+}
+
+// A NUMBER FROM A VARIABLE: a numeric argument with a data input can be held
+// as { var }, written as a hidden get_var linked in. The server loads it;
+// CONTROL: an argument the engine gives no input is named, and refused there.
+{
+  const spec = (t) => specs.get(t)
+  check(bindableArgs({ type: 'damage' }, spec('damage'), TV, GV).includes('amount') && !bindableArgs({ type: 'delay' }, spec('delay'), TV, GV).includes('ticks'),
+        'a damage amount can be taken from a variable; a delay\'s ticks cannot (the engine gives it no input)')
+  check(bindableArgs({ type: 'action', a: 'counter_set' }, spec('action'), TV, GV).includes('value'), `and a verb's numeric argument can (${bindableArgs({ type: 'action', a: 'counter_set' }, spec('action'), TV, GV).join(', ')})`)
+  const fed = { vars: { dmg: 5, hp_to: 70 }, nodes: [
+    { id: 'go', type: 'when_player_arrives', pos: { x: 0, y: 0 } },
+    { id: 'hurt', type: 'damage', amount: { var: 'dmg' }, pos: { x: 260, y: 0 } },
+    { id: 'set', type: 'action', a: 'counter_set', counter: 'kills', value: { var: 'hp_to' }, pos: { x: 520, y: 0 } }
+  ], links: [['go.then', 'hurt.in'], ['hurt.then', 'set.in']] }
+  check(graphProblems(fed, GV, TV).length === 0, `numbers taken from variables are clean (${graphProblems(fed, GV, TV).join(' | ')})`)
+  const fj = emitGraph(fed, 'fed', (a) => a, (a) => a).json
+  const hid = fj.nodes.find((x) => x.id === boundId('hurt', 'amount'))
+  check(hid?.type === 'get_var' && hid.var === 'dmg' && fj.links.some(([f, t]) => f === `${boundId('hurt', 'amount')}.value` && t === 'hurt.amount') && !isVarRef(fj.nodes.find((x) => x.id === 'hurt').amount) && !('amount' in fj.nodes.find((x) => x.id === 'hurt')),
+        'written as a hidden get_var linked into the argument, the field itself left out')
+  check(graphProblems({ ...structuredClone(fed), nodes: [...structuredClone(fed.nodes), { id: 'wait', type: 'delay', ticks: { var: 'dmg' } }] }, GV, TV).some((p) => /`ticks` cannot be taken from a variable/.test(p)),
+        'CONTROL: a delay\'s ticks from a variable is named')
+  check(graphProblems({ ...structuredClone(fed), vars: { hp_to: 70 } }, GV, TV).some((p) => /taken from dmg, which is neither/.test(p)), 'and a variable that is not there')
+  if (existsSync(SERVER)) {
+    const ok = await serveOne([{ ...structuredClone(plain), name: 'fed', graphs: { fed } }], 34713)
+    check(ok.ok && /\[graphs\] fed\.fed\.graph\.json: 5 nodes, 4 links/.test(ok.log), `the server loads it, hidden nodes and all (${ok.log.split('\n').filter((l) => /fed\.graph/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
+    const wait = structuredClone(fed); wait.nodes.push({ id: 'wait', type: 'delay', ticks: { var: 'dmg' }, pos: { x: 780, y: 0 } }); wait.links.push(['set.then', 'wait.in'])
+    const no = await serveOne([{ ...structuredClone(plain), name: 'fed', graphs: { fed: wait } }], 34714)
+    check(no.ok && !/fed\.fed\.graph\.json: 6 nodes/.test(no.log) && /wait/.test(no.log),
+          `CONTROL: and refuses a delay's ticks from a variable, as the studio says (${no.log.split('\n').filter((l) => /wait/.test(l)).slice(0, 1).join('').replace(/^.*\[graphs\] /, '')})`)
   }
 }
 

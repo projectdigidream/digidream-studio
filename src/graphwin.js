@@ -28,7 +28,7 @@ import { el, row, text, select, button, muted, number, toggle, ask, confirmDialo
 import { argFields } from './argform.js'
 import { playScene } from './scene.js'
 import { isStart } from './scene_plan.js'
-import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME, VAR_NODES, varChoices, propertiesOf, propertyFits } from './graphs_emit.js'
+import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME, VAR_NODES, varChoices, propertiesOf, propertyFits, isVarRef, bindableArgs, numberSources } from './graphs_emit.js'
 
 const CATEGORY = { event: 'ev', condition: 'cond', action: 'act', branch: 'flow', sequence: 'flow', delay: 'flow', once: 'flow',
                    get_var: 'data', set_var: 'act', add_var: 'act', literal: 'data', compare: 'data', math: 'data', logic: 'data', random: 'data',
@@ -779,7 +779,8 @@ class GraphWindow {
    */
   #argRows (args, shown, argPins, linked, make) {
     const n = this.#current
-    const rows = make(shown(args))
+    // A number taken from a variable is not a field to type into: drawn as its own row below.
+    const rows = this.#withBinding(n, shown(args), linked, make)
     for (const name of argPins) {
       if (!shown(args).some((a) => a.name === name)) continue
       let r = rows.find((x) => x.dataset?.arg === name)
@@ -798,6 +799,55 @@ class GraphWindow {
       rows.push(el('div', { class: 'st-row' }, [sel]))
     }
     return rows
+  }
+
+  /** A form's argument rows with numbers from variables: bound ones as their own rows, 𝑥 on the rest. */
+  #withBinding (n, args, linked, make) {
+    const bindable = new Set(this.#bindable(n))
+    const rows = make(args.filter((a) => !isVarRef(n[a.name])))
+    for (const a of args) if (isVarRef(n[a.name]) && !linked.has(a.name)) rows.push(this.#boundRow(n, a.name))
+    for (const r of rows) {
+      const name = r.dataset?.arg
+      if (name && bindable.has(name) && !linked.has(name) && !isVarRef(n[name]) && !r.querySelector('.gw-bind')) r.appendChild(this.#bindButton(n, name))
+    }
+    return rows
+  }
+
+  /** Which of a node's arguments can take a variable (numeric, with a data input). */
+  #bindable (n) { return bindableArgs(n, nodeSpecs(this.gv).get(n.type), this.tv, this.gv) }
+
+  /** 𝑥 beside a number: take it from a variable instead. */
+  #bindButton (n, name) {
+    return el('button', { class: 'gw-bind', type: 'button', text: '𝑥', title: `take ${name} from a variable`, 'data-bind': name, onclick: (e) => {
+      e.stopPropagation()
+      const first = numberSources(this.graph, this.gv)[0]
+      if (!first) { this.S.status('no variable to take it from yet: make one in 𝑥 variables', 'warn'); this.side = 'variables'; this.#drawSide(); return }
+      n[name] = { var: first.value }
+      this.changed()
+    } })
+  }
+
+  /** A number taken from a variable: which one, and ✕ back to a typed number. */
+  #boundRow (n, name) {
+    const sources = numberSources(this.graph, this.gv)
+    const sel = el('select', { class: 'gw-pick gw-bound', 'data-bound': name })
+    const groups = new Map()
+    for (const c of sources) {
+      if (!groups.has(c.group)) { const og = el('optgroup', { label: c.group }); groups.set(c.group, og); sel.appendChild(og) }
+      groups.get(c.group).appendChild(el('option', { value: c.value, text: c.label, title: c.doc }))
+    }
+    const cur = n[name].var
+    if (!sources.some((c) => c.value === cur)) sel.prepend(el('option', { value: cur, text: `${cur} -- no such variable` }))
+    sel.value = cur
+    sel.addEventListener('change', () => { n[name] = { var: sel.value }; this.changed() })
+    return el('div', { class: 'st-row gw-bound-row', 'data-arg': name }, [el('label', { text: `${name} 𝑥` }), sel,
+      el('button', { class: 'gw-bind', type: 'button', text: '✕', title: 'a typed number again', onclick: (e) => {
+        e.stopPropagation()
+        delete n[name]
+        // Kept on the node, to type the number into (an optional one would otherwise go).
+        n.show = [...new Set([...(n.show ?? []), name])]
+        this.changed()
+      } })])
   }
 
   /** The node's arguments a link feeds: name -> where from ("node.pin"). */
@@ -1234,7 +1284,7 @@ class GraphWindow {
       }
       const linked = this.#linkedArgs(n)
       for (const [name, from] of linked) if ((verb?.args ?? []).some((a) => a.name === name)) rows.push(row(name, el('span', { class: 'gw-from', text: `← linked from ${from}` })))
-      if (verb) rows.push(...argFields(verb.args ?? [], n, ctx, [...HIDDEN_ARGS, ...linked.keys()], n[key]))
+      if (verb) rows.push(...this.#withBinding(n, verb.args ?? [], linked, (args) => argFields(args, n, ctx, [...HIDDEN_ARGS, ...linked.keys()], n[key])))
     } else if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
       rows.push(this.#varRow(n))
       const p = propertiesOf(this.gv).get(n.var)
@@ -1245,7 +1295,7 @@ class GraphWindow {
       const linked = this.#linkedArgs(n)
       const own = (spec.args ?? []).filter((a) => !linked.has(a.name))
       for (const a of (spec.args ?? []).filter((x) => linked.has(x.name))) rows.push(row(a.name, el('span', { class: 'gw-from', text: `← linked from ${linked.get(a.name)}` })))
-      rows.push(...argFields(own.filter((a) => a.type !== 'value' || a.name === 'level'), n, ctx, [], n.type))
+      rows.push(...this.#withBinding(n, own.filter((a) => a.type !== 'value' || a.name === 'level'), linked, (args) => argFields(args, n, ctx, [], n.type)))
       for (const a of own.filter((x) => x.type === 'value' && x.name !== 'level')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
     }
     rows.push(button('delete node', () => this.#deleteNode(n), 'st-danger'))
@@ -1355,6 +1405,9 @@ const STYLE = `
 .gw-bend{fill:#121620;stroke:#e8f0ff;stroke-width:2;cursor:grab;touch-action:none;pointer-events:all}
 .gw-bend-on{stroke:#ffe066}
 .gw-pin-idle{opacity:.35}
+.gw-bind{flex:0 0 auto;width:28px;height:28px;min-width:0;min-height:0;padding:0;border-radius:8px;font-size:13px;background:transparent;border:1px solid rgba(122,212,138,.45);color:#7ad48a}
+.gw-bound-row label{color:#7ad48a}
+.gw-bound{color:#7ad48a}
 /* A button alone in the side panel's column keeps a finger's height. */
 .gw .wk-details > button{flex:0 0 auto;min-height:36px}
 .gw-side-tabs{margin-bottom:6px}

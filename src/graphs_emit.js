@@ -189,6 +189,33 @@ export function varChoices (graph, gv, type) {
   return out
 }
 
+// --- a number from a variable ----------------------------------------------------------
+//
+// A numeric argument with a data input (a verb's pinnable one, or a world
+// node's in its data_in) can be held as { var: NAME }: the graph's variable or
+// a readable numeric property. Written out, it is a get_var of that name linked
+// into the argument's pin -- a node the board never shows -- so the engine
+// sees an ordinary link and needs nothing new.
+
+const NUMERIC_ARG = new Set(['int', 'number', 'fx'])
+export const isVarRef = (v) => !!v && typeof v === 'object' && !Array.isArray(v) && typeof v.var === 'string' && Object.keys(v).length === 1
+
+/** The arguments of a node that can take a variable: numeric, with a data input. */
+export function bindableArgs (node, spec, tv, gv) {
+  const p = pinsOf(node, spec, tv, gv)
+  const args = (node.type === 'condition' || node.type === 'action') ? (verbOf(node, tv)?.args ?? []) : (spec?.args ?? [])
+  const ins = new Set([...p.argPins, ...p.dataIn])
+  return args.filter((a) => NUMERIC_ARG.has(a.type) && ins.has(a.name)).map((a) => a.name)
+}
+
+/** What a number may be taken from: the graph's variables, then the numeric properties. */
+export function numberSources (graph, gv) {
+  return varChoices(graph, gv, 'get_var').filter((c) => c.group === 'this graph' || NUMERIC.has(propertiesOf(gv).get(c.value)?.type))
+}
+
+/** The hidden get_var a bound argument is written as: its id. */
+export const boundId = (nodeId, arg) => `${nodeId}__${arg}`
+
 /** A var node's problem, as the engine refuses it at load; null when it is fine. */
 export function varProblem (n, graph, props) {
   if (!VAR_NODES.includes(n.type) || n.var === undefined || n.var === '') return null
@@ -225,8 +252,17 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
     byId.set(n.id, n)
     const spec = specs.get(n.type)
     if (!spec) { problems.push(`${where}: no node type '${n.type}'`); continue }
+    // Numbers taken from a variable: only where the argument has an input, from a name there is.
+    const bindable = new Set(bindableArgs(n, spec, tv, gv))
+    for (const [k, v] of Object.entries(n)) {
+      if (!isVarRef(v)) continue
+      if (!bindable.has(k)) problems.push(`${where}: \`${k}\` cannot be taken from a variable -- the engine gives it no input`)
+      else if (linkedInto.has(`${n.id}.${k}`)) problems.push(`${where}: \`${k}\` is both linked and taken from ${v.var} -- one or the other`)
+      else if (!Object.prototype.hasOwnProperty.call(graph.vars ?? {}, v.var) && !props.has(v.var)) problems.push(`${where}: \`${k}\` is taken from ${v.var}, which is neither one of this graph's variables nor a property`)
+    }
     for (const a of spec.args ?? []) {
       const v = n[a.name]
+      if (isVarRef(v)) continue
       if (v === undefined || v === '') { if (!a.optional && !linkedInto.has(`${n.id}.${a.name}`)) problems.push(`${where}: needs \`${a.name}\``); continue }
       // The runtime checks a world node's fields by type: a number is a number.
       if (a.type === 'number' && typeof v !== 'number') problems.push(`${where}: \`${a.name}\` should be a number`)
@@ -313,8 +349,15 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
  */
 export function emitGraph (graph, name, resolve, plain = null, { panels = null } = {}) {
   const problems = []
+  // Numbers taken from a variable become hidden get_var nodes linked in.
+  const bound = []
   const nodes = (graph.nodes ?? []).map((n) => {
-    const { pos, show, ...rest } = n
+    const { pos, show, ...withRefs } = n
+    const rest = {}
+    for (const [k, v] of Object.entries(withRefs)) {
+      if (isVarRef(v)) bound.push({ node: n.id, arg: k, var: v.var, pos })
+      else rest[k] = v
+    }
     let out = rest
     if (n.type === 'condition' || n.type === 'action') {
       const where = `graph node '${n.id}'`
@@ -337,7 +380,13 @@ export function emitGraph (graph, name, resolve, plain = null, { panels = null }
     if (show?.length) out.meta = { ...(out.meta ?? {}), show: [...show] }
     return out
   })
-  const json = { graph: 1, name, vars: { ...(graph.vars ?? {}) }, nodes, links: (graph.links ?? []).map((l) => [...l]) }
+  const links = (graph.links ?? []).map((l) => [...l])
+  for (const b of bound) {
+    const id = boundId(b.node, b.arg)
+    nodes.push({ id, type: 'get_var', var: b.var, meta: { x: Math.round((b.pos?.x ?? 0) - 160), y: Math.round(b.pos?.y ?? 0), bound: `${b.node}.${b.arg}` } })
+    links.push([`${id}.value`, `${b.node}.${b.arg}`])
+  }
+  const json = { graph: 1, name, vars: { ...(graph.vars ?? {}) }, nodes, links }
   if (!Object.keys(json.vars).length) delete json.vars
   // The panels its nodes name, as the runtime reads them (docs/PANELS.md 2).
   if (panels && Object.keys(panels).length) json.panels = panels

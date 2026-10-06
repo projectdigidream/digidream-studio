@@ -1568,6 +1568,35 @@ await page.keyboard.press('Escape')
     check(vars.node?.var === 'hp' && vars.groups.includes('the entity') && vars.offersX === false,
           `a property's set is dropped in from its row, and the node's dropdown is grouped, offering only what a set may name (${JSON.stringify(vars)})`)
   }
+  // A NUMBER FROM A VARIABLE: 𝑥 beside a damage amount takes it from the
+  // graph's variable instead; ✕ makes it a typed number again; a delay's
+  // ticks, which the engine gives no input, has no 𝑥.
+  const bound = await page.evaluate(async () => {
+    const S = window.__studio
+    const w = S.window
+    const g = S.doc.graphs.main
+    g.vars = { ...(g.vars ?? {}), dmg: 5 }
+    const hurt = w.addFrom('node:damage')
+    const wait = w.addFrom('node:delay')
+    g.nodes.find((n) => n.id === hurt).amount = 10
+    S.commit(); w.side = 'details'; w.render()
+    await new Promise((r) => setTimeout(r, 100))
+    const node = () => document.querySelector(`.gw-node[data-node="${hurt}"]`)
+    const offered = !!node().querySelector('[data-bind="amount"]')
+    const onDelay = !!document.querySelector(`.gw-node[data-node="${wait}"] [data-bind]`)
+    node().querySelector('[data-bind="amount"]').click()
+    await new Promise((r) => setTimeout(r, 100))
+    const held = JSON.stringify(g.nodes.find((n) => n.id === hurt).amount)
+    const sel = node().querySelector('[data-bound="amount"]')
+    const choices = sel ? [...sel.options].map((o) => o.value) : []
+    ;[...node().querySelectorAll('.gw-bound-row .gw-bind')].find((b) => b.textContent === '✕')?.click()
+    await new Promise((r) => setTimeout(r, 100))
+    const back = g.nodes.find((n) => n.id === hurt).amount
+    g.nodes = g.nodes.filter((n) => n.id !== hurt && n.id !== wait); delete g.vars.dmg; S.commit(); w.render()
+    return { offered, onDelay, held, choices: choices.slice(0, 3), hasHp: choices.includes('hp'), back: back === undefined ? 'unset' : back }
+  })
+  check(bound.offered && !bound.onDelay && bound.held === '{"var":"dmg"}' && bound.choices[0] === 'dmg' && bound.hasHp && bound.back === 'unset',
+        `𝑥 takes a number from a variable (the graph's, or a numeric property), ✕ makes it typed again; a delay's ticks has none (${JSON.stringify(bound)})`)
   check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
         `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {
