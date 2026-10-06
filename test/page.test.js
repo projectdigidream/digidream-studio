@@ -1391,8 +1391,7 @@ await page.keyboard.press('Escape')
     S.commit()
     await S.go('graph')
     const w = S.window
-    const pal = () => document.querySelector('.gw .wk-top .gw-palette')
-    const pick = (v) => { const s = pal(); s.value = v; s.dispatchEvent(new Event('change')) }
+    const pick = (v) => w.addFrom(v)
     pick('event:on_interact')
     pick('act:')
     await new Promise((r) => setTimeout(r, 300))
@@ -1407,10 +1406,8 @@ await page.keyboard.press('Escape')
     const hadPanels = S.module.panels
     S.module.panels = { shop: { title: 'Shop', widgets: [] }, ...(hadPanels ?? {}) }
     S.window.render()
-    const pal = () => document.querySelector('.gw .wk-top .gw-palette')
-    const group = [...pal().querySelectorAll('optgroup')].find((g) => /panels/.test(g.label))
-    const offered = group ? [...group.querySelectorAll('option')].map((o) => o.value) : []
-    const pick = (v) => { const s = pal(); s.value = v; s.dispatchEvent(new Event('change')) }
+    const offered = S.window.menuItems().filter((i) => /panels/.test(i.group)).map((i) => i.value)
+    const pick = (v) => S.window.addFrom(v)
     pick('act:ui_open'); pick('event:on_ui_event')
     await new Promise((r) => setTimeout(r, 200))
     const nodes = S.doc.graphs.main.nodes
@@ -1435,6 +1432,35 @@ await page.keyboard.press('Escape')
   })
   check(['act:ui_open', 'act:ui_close', 'event:on_ui_event', 'cond:widget_is'].every((v) => panelled.offered.includes(v)) && panelled.opened.panel === 'shop',
         `the menu has the panels in a group of their own, dropped in ready (${JSON.stringify(panelled.offered)} -> ${JSON.stringify(panelled.opened)})`)
+  // THE MENU IS SEARCHED: + node… opens it, a word narrows it, Enter adds
+  // the first. Every trigger verb is there by name; a panel's widgets are
+  // entries of their own.
+  const found = await page.evaluate(async () => {
+    const S = window.__studio
+    S.module.panels = { shop: { title: 'Shop', widgets: [{ kind: 'button', id: 1, name: 'buy', label: 'Buy', slot: 0 }], decor: [] } }
+    S.window.render()
+    document.querySelector('.gw .wk-top .gw-palette').click()
+    await new Promise((r) => setTimeout(r, 50))
+    const input = document.querySelector('.gw-menu .gw-menu-find')
+    const all = document.querySelectorAll('.gw-menu .gw-menu-item').length
+    input.value = 'fog'; input.dispatchEvent(new Event('input'))
+    const fog = [...document.querySelectorAll('.gw-menu .gw-menu-item')].map((b) => b.dataset.value)
+    input.value = 'shop buy'; input.dispatchEvent(new Event('input'))
+    const buy = [...document.querySelectorAll('.gw-menu .gw-menu-item')].map((b) => b.dataset.value)
+    const had = S.doc.graphs.main.nodes.length
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await new Promise((r) => setTimeout(r, 100))
+    const added = S.doc.graphs.main.nodes.slice(had).map((n) => `${n.type}:${n.event ?? n.c ?? ''}:${n.widget ?? ''}`)
+    const linked = S.doc.graphs.main.links.some(([f, t]) => f.startsWith('shop_used') && t.startsWith('if_shop_1'))
+    const closed = !document.querySelector('.gw-menu')
+    S.doc.graphs.main.nodes = S.doc.graphs.main.nodes.slice(0, had); S.doc.graphs.main.links = S.doc.graphs.main.links.filter(([f]) => !f.startsWith('shop_used'))
+    delete S.module.panels; S.commit(); S.window.render()
+    return { all, fog, buy, added, linked, closed, verbs: S.window.menuItems().filter((i) => i.value.startsWith('cond:') || i.value.startsWith('act:')).length }
+  })
+  check(found.all > 60 && found.fog[0] === 'node:set_sector_effect', `+ node… opens a menu of everything, and "fog" finds the sector effect first (${found.all} entries; ${found.fog.slice(0, 3).join(', ')})`)
+  check(found.buy[0] === 'ui:shop:1' && found.added.join() === 'event:on_ui_event:,condition:widget_is:1' && found.linked && found.closed,
+        `"shop buy" finds the button's own entry, and Enter drops in the panel event and its widget, linked (${JSON.stringify(found)})`)
+  check(found.verbs > 30, `every trigger condition and action is in the menu by name (${found.verbs})`)
   check(panelled.after.nodes === panelled.before - 1 && panelled.after.links === 0 && !panelled.after.drawn && panelled.undoable && panelled.back,
         `a node's ✕ deletes it and its links, and undo brings it back (${JSON.stringify(panelled)})`)
   const pins = await page.evaluate(() => {
@@ -1677,8 +1703,7 @@ await page.keyboard.press('Escape')
   await page.waitForFunction(() => window.__studio.window?.gname === 'doors', { timeout: 3000 }).catch(() => {})
   const made = await page.evaluate(async () => {
     const S = window.__studio
-    const pal = document.querySelector('.gw .wk-top .gw-palette')
-    pal.value = 'node:delay'; pal.dispatchEvent(new Event('change'))
+    S.window.addFrom('node:delay')
     await new Promise((r) => setTimeout(r, 200))
     const out = { names: Object.keys(S.doc.graphs), gname: S.window.gname, hash: location.hash, doors: S.doc.graphs.doors?.nodes.map((n) => n.type), main: S.doc.graphs.main.nodes.map((n) => n.type),
                   picker: [...document.querySelectorAll('.gw .gw-graphs option')].map((o) => o.value).filter((v) => v !== '\u0000new') }
@@ -1855,9 +1880,8 @@ await page.keyboard.press('Escape')
     await S.go('map', Object.keys(S.docs)[0])
     delete S.doc.graphs; S.commit()
     await S.go('graph')
-    const sel = document.querySelector('.gw .wk-top .gw-palette')
-    const groups = [...sel.querySelectorAll('optgroup')].map((g) => g.label)
-    sel.value = 'node:open_door'; sel.dispatchEvent(new Event('change'))
+    const groups = [...new Set(S.window.menuItems().map((i) => i.group))]
+    S.window.addFrom('node:open_door')
     await new Promise((r) => setTimeout(r, 200))
     const n = S.doc.graphs.main.nodes[0]
     const sid = S.doc.order[0]; const room = S.doc.sectors[sid]
@@ -1911,7 +1935,7 @@ await page.keyboard.press('Escape')
     const rows = [...document.querySelectorAll('[data-graph]')].map((r) => r.dataset.graph)
     document.querySelector('[data-graph="game:game"]').click()
     await new Promise((r) => setTimeout(r, 300))
-    const opts = [...document.querySelector('.gw .wk-top .gw-palette').options].map((o) => o.value)
+    const opts = S.window.menuItems().map((i) => i.value)
     return { rows, maps: Object.keys(S.docs), scope: S.window?.scope, title: document.querySelector('.gw .wk-title')?.textContent, opts }
   })
   check(listed.rows[0] === 'game:game', `the Graphs section lists the game's graphs first (${listed.rows.join(', ')})`)
@@ -1922,7 +1946,7 @@ await page.keyboard.press('Escape')
         'and of the world\'s nodes, only those that need no level')
   const game = await page.evaluate(async () => {
     const S = window.__studio
-    const pick = (v) => { const s = document.querySelector('.gw .wk-top .gw-palette'); s.value = v; s.dispatchEvent(new Event('change')) }
+    const pick = (v) => S.window.addFrom(v)
     pick('event:on_player_enter')
     pick('node:call')
     await new Promise((r) => setTimeout(r, 200))

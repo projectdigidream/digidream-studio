@@ -60,7 +60,12 @@ const MENU = [
   ['data', (s) => ['get_var', 'set_var', 'add_var', 'literal', 'compare', 'math', 'logic', 'random'].includes(s.name)]
 ]
 
-// The panel words, in the menu's own group (#palette): [kind, verb, label].
+// The panel words, in the menu's own group (menuItems): [kind, verb, label].
+const PANELS_GROUP = '🪟 panels'
+// What using each kind of widget is called.
+const USED = { button: 'pressed', toggle: 'flipped', slider: 'moved', select: 'chosen' }
+/** A doc's first sentence, for a line under a menu entry. */
+const firstSentence = (d) => { const m = /^(.+?[.!?])(\s|$)/.exec(String(d).replace(/\s+/g, ' ')); return (m ? m[1] : String(d)).slice(0, 140) }
 const PANEL_ITEMS = [
   ['event', 'on_ui_event', 'when a panel is used'],
   ['condition', 'widget_is', 'if it was this widget …'],
@@ -320,57 +325,162 @@ class GraphWindow {
 
   // --- adding ---------------------------------------------------------------------
 
-  #palette () {
-    const sel = el('select', { class: 'gw-palette' }, [el('option', { value: '', text: '+ node…' })])
-    const group = (label, opts) => { if (opts.length) sel.append(el('optgroup', { label }, opts.map(([v, t]) => el('option', { value: v, text: t })))) }
+  /**
+   * Everything the + node menu offers, in its groups: [{ group, value, label, doc }].
+   * The world's nodes by graph_vocab category, then flow and data; the
+   * panels -- the engine's panel nodes when it has them, and the trigger
+   * words a panel is opened, closed and answered with, ready-made per panel
+   * and per widget; and every trigger event, condition and action by name.
+   * `doc` is the vocabulary's own description, which the search reads too.
+   */
+  menuItems () {
+    const out = []
+    const push = (group, value, label, doc = '') => out.push({ group, value, label, doc: doc ?? '' })
     // The game has no level: what needs one is not offered there.
     const specs = this.gv.nodes.filter((n) => !['event', 'condition', 'action'].includes(n.name) && !(this.game && n.level_only))
     const taken = new Set()
+    const words = (n) => n.name.replace(/_/g, ' ')
+    // The engine's panel nodes are the panels group's, start nodes included.
+    const panelNodes = specs.filter((x) => x.category === 'panel')
+    for (const n of panelNodes) taken.add(n.name)
     for (const [label, test] of MENU) {
-      const list = specs.filter((n) => !taken.has(n.name) && test(n))
-      for (const n of list) taken.add(n.name)
-      group(label, list.map((n) => [`node:${n.name}`, n.name.replace(/_/g, ' ')]))
+      for (const n of specs.filter((x) => !taken.has(x.name) && test(x))) { taken.add(n.name); push(label, `node:${n.name}`, words(n), n.doc) }
     }
-    group('other', specs.filter((n) => !taken.has(n.name)).map((n) => [`node:${n.name}`, n.name.replace(/_/g, ' ')]))
-    // THE PANELS, ready-made: the trigger words a panel is opened, closed and
-    // answered with, each dropped in as its node with the module's first panel
-    // filled in -- rather than "do … (an action)" and then finding ui_open.
+    // THE PANELS. The engine's own panel nodes (docs/PANELS.md §3) first, the
+    // moment graph_vocab has them; then the trigger words, ready-made.
+    for (const n of panelNodes) push(PANELS_GROUP, `node:${n.name}`, words(n), n.doc)
     const has = (kind, name) => kind === 'event' ? this.events.some((e) => e.name === name) : this.verbs(kind).some((v) => v.name === name)
-    group('🪟 panels', PANEL_ITEMS.filter(([kind, name]) => has(kind, name)).map(([kind, name, text]) => [`${kind === 'event' ? 'event' : kind === 'condition' ? 'cond' : 'act'}:${name}`, text]))
-    // The trigger vocabulary's own words, for what the world's nodes do not say.
-    group('trigger words', [...this.events.map((e) => [`event:${e.name}`, `when ${e.name}`]), ['cond:', 'if … (a condition)'], ['act:', 'do … (an action)']])
-    sel.addEventListener('change', () => {
-      const v = sel.value
-      if (!v) return
-      const [kind, name] = v.split(':')
-      const g = this.ensure()
-      const at = this.#freeSpot()
-      const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name.replace(/^when_/, '') : kind === 'cond' ? (name ? `if_${name}` : 'if') : (name || 'do'))
-      const n = { id, pos: { x: at.x, y: at.y } }
-      if (kind === 'event') Object.assign(n, { type: 'event', event: name })
-      else if (kind === 'cond') Object.assign(n, { type: 'condition', c: name || this.verbs('condition')[0]?.name })
-      else if (kind === 'act') Object.assign(n, name ? { type: 'action', a: name } : { type: 'action', a: 'log', text: 'hello' })
-      else {
-        n.type = name
-        if (name === 'sequence') n.count = 2
-        if (name === 'delay') n.ticks = 60
-        if (name === 'random') Object.assign(n, { lo: 1, hi: 6 })
-        if (name === 'compare') n.op = '=='
-        if (name === 'math') n.op = '+'
-        if (name === 'logic') n.op = 'and'
-        if (name === 'literal') n.value = 0
-        if (['get_var', 'set_var', 'add_var'].includes(name)) n.var = Object.keys(g.vars ?? {})[0] ?? 'count'
-        if (name === 'call') Object.assign(n, { to: this.game ? 'level' : 'game', name: this.S.callNames?.()[0] ?? 'hello' })
-        if (name === 'on_call') n.name = this.S.callNames?.()[0] ?? 'hello'
-        this.#defaults(n, nodeSpecs(this.gv).get(name))
+    for (const [kind, name, text] of PANEL_ITEMS) if (has(kind, name)) push(PANELS_GROUP, `${kind === 'event' ? 'event' : kind === 'condition' ? 'cond' : 'act'}:${name}`, text, this.#verbDoc(kind, name))
+    const panels = this.S.module.panels ?? {}
+    // A widget's id is its panel's, so two panels can share one: said, as
+    // widget_is cannot tell them apart (the engine's when_panel_used will).
+    const idCount = new Map()
+    for (const q of Object.values(panels)) for (const w of q.widgets ?? []) if (w.kind !== 'label') idCount.set(w.id, (idCount.get(w.id) ?? 0) + 1)
+    for (const [p, q] of Object.entries(panels)) {
+      if (has('action', 'ui_open')) push(PANELS_GROUP, `act:ui_open:${p}`, `open ${p}`, `Open the panel ${p} for the player the run started from.`)
+      if (has('action', 'ui_close')) push(PANELS_GROUP, `act:ui_close:${p}`, `close ${p}`, `Close the panel ${p} this level opened for that player.`)
+      if (!has('event', 'on_ui_event') || !has('condition', 'widget_is')) continue
+      for (const w of q.widgets ?? []) {
+        if (w.kind === 'label') continue
+        const shared = idCount.get(w.id) > 1
+        push(PANELS_GROUP, `ui:${p}:${w.id}`, `when ${p} › ${w.name ?? w.label} is ${USED[w.kind] ?? 'used'}${shared ? ` (id ${w.id}, shared)` : ''}`,
+          `A panel event, then "if it was widget ${w.id}" -- the ${w.kind} ${w.name ?? w.label} on ${p}.${shared ? ` Another panel has a widget ${w.id} too, and widget_is cannot tell them apart.` : ''}`)
       }
-      // A panel verb starts on the module's first panel.
-      if (kind === 'act' && (name === 'ui_open' || name === 'ui_close')) { const p = Object.keys(this.S.module.panels ?? {})[0]; if (p) n.panel = p }
-      g.nodes.push(n)
-      this.picked = { kind: 'node', id }
-      this.changed()
+    }
+    for (const n of specs.filter((x) => !taken.has(x.name))) push('other', `node:${n.name}`, words(n), n.doc)
+    // The trigger vocabulary's own words, each by name, for what the world's nodes do not say.
+    for (const e of this.events) push('trigger words', `event:${e.name}`, `when ${e.name.replace(/^on_/, '').replace(/_/g, ' ')}`, this.#verbDoc('event', e.name))
+    for (const c of this.verbs('condition')) push('trigger words', `cond:${c.name}`, `if ${c.name.replace(/_/g, ' ')}`, c.doc)
+    for (const v of this.verbs('action')) push('trigger words', `act:${v.name}`, `do ${v.name.replace(/_/g, ' ')}`, v.doc)
+    return out
+  }
+
+  #verbDoc (kind, name) {
+    const list = kind === 'event' ? this.tv.events : kind === 'condition' ? this.tv.conditions : this.tv.actions
+    return list.find((v) => v.name === name)?.doc ?? ''
+  }
+
+  /** The + node button, and the menu it opens: a search over menuItems, by group. */
+  #palette () {
+    const b = el('button', { class: 'gw-palette', text: '+ node…', 'data-menu': '1', onclick: (e) => { e.stopPropagation(); this.#openMenu() } })
+    return b
+  }
+
+  #openMenu () {
+    this.#closeMenu()
+    const items = this.menuItems()
+    const input = el('input', { type: 'search', class: 'gw-menu-find', placeholder: 'find a node: open, fog, damage, panel…', autocomplete: 'off' })
+    const list = el('div', { class: 'gw-menu-list' })
+    const menu = el('div', { class: 'gw-menu', role: 'dialog' }, [el('div', { class: 'gw-menu-top' }, [input, button('✕', () => this.#closeMenu())]), list])
+    let shown = []
+    const draw = () => {
+      const q = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+      // Every word must appear in the label, the group, the name or the doc.
+      shown = items.filter((it) => { const hay = `${it.label} ${it.group} ${it.value} ${it.doc}`.toLowerCase(); return q.every((w) => hay.includes(w)) })
+      // A label match first: "open" finds "open door" before a doc that says open.
+      if (q.length) shown.sort((x, y) => (q.every((w) => y.label.toLowerCase().includes(w)) ? 1 : 0) - (q.every((w) => x.label.toLowerCase().includes(w)) ? 1 : 0))
+      const rows = []
+      let last = null
+      for (const it of shown) {
+        if (!q.length && it.group !== last) { rows.push(el('div', { class: 'gw-menu-group', text: it.group })); last = it.group }
+        rows.push(el('button', { class: 'gw-menu-item', 'data-value': it.value, onclick: () => { this.#closeMenu(); this.addFrom(it.value) } }, [
+          el('span', { class: 'gw-menu-label', text: it.label }),
+          q.length ? el('span', { class: 'gw-menu-in', text: it.group }) : null,
+          it.doc ? el('span', { class: 'gw-menu-doc', text: firstSentence(it.doc) }) : null].filter(Boolean)))
+      }
+      if (!shown.length) rows.push(muted('Nothing by that name. Try a shorter word.'))
+      list.replaceChildren(...rows)
+    }
+    input.addEventListener('input', draw)
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && shown[0]) { e.preventDefault(); this.#closeMenu(); this.addFrom(shown[0].value) }
+      if (e.key === 'Escape') this.#closeMenu()
     })
-    return sel
+    draw()
+    this.root.appendChild(menu)
+    this.menu = menu
+    // A tap anywhere else closes it.
+    this.menuAway = (e) => { if (!menu.contains(e.target) && !e.target.closest?.('[data-menu]')) this.#closeMenu() }
+    setTimeout(() => document.addEventListener('pointerdown', this.menuAway), 0)
+    // Not on a phone's first tap: the keyboard would cover the list.
+    if (matchMedia('(pointer: fine)').matches) input.focus()
+  }
+
+  #closeMenu () {
+    this.menu?.remove(); this.menu = null
+    if (this.menuAway) document.removeEventListener('pointerdown', this.menuAway)
+    this.menuAway = null
+  }
+
+  /**
+   * Add what a menu entry names, at a free spot: `node:<type>`,
+   * `event:<name>`, `cond:<name>`, `act:<name>[:<panel>]`, or
+   * `ui:<panel>:<widget id>` (a panel event and its widget_is, linked).
+   */
+  addFrom (value) {
+    const [kind, name, arg] = String(value).split(':')
+    const g = this.ensure()
+    const at = this.#freeSpot()
+    if (kind === 'ui') {
+      const ev = { id: this.#newId(`${name}_used`), type: 'event', event: 'on_ui_event', pos: { x: at.x, y: at.y } }
+      g.nodes.push(ev)
+      const cond = { id: this.#newId(`if_${name}_${arg}`), type: 'condition', c: 'widget_is', widget: Number(arg), pos: { x: at.x + NODE_W + 40, y: at.y } }
+      g.nodes.push(cond)
+      g.links.push([`${ev.id}.then`, `${cond.id}.in`])
+      this.picked = { kind: 'node', id: cond.id }
+      this.changed()
+      return cond.id
+    }
+    const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '') : kind === 'node' ? name.replace(/^when_/, '') : kind === 'cond' ? (name ? `if_${name}` : 'if') : (arg ? `${name.replace(/^ui_/, '')}_${arg}` : name || 'do'))
+    const n = { id, pos: { x: at.x, y: at.y } }
+    if (kind === 'event') Object.assign(n, { type: 'event', event: name })
+    else if (kind === 'cond') Object.assign(n, { type: 'condition', c: name || this.verbs('condition')[0]?.name })
+    else if (kind === 'act') Object.assign(n, name ? { type: 'action', a: name } : { type: 'action', a: 'log', text: 'hello' })
+    else {
+      n.type = name
+      if (name === 'sequence') n.count = 2
+      if (name === 'delay') n.ticks = 60
+      if (name === 'random') Object.assign(n, { lo: 1, hi: 6 })
+      if (name === 'compare') n.op = '=='
+      if (name === 'math') n.op = '+'
+      if (name === 'logic') n.op = 'and'
+      if (name === 'literal') n.value = 0
+      if (['get_var', 'set_var', 'add_var'].includes(name)) n.var = Object.keys(g.vars ?? {})[0] ?? 'count'
+      if (name === 'call') Object.assign(n, { to: this.game ? 'level' : 'game', name: this.S.callNames?.()[0] ?? 'hello' })
+      if (name === 'on_call') n.name = this.S.callNames?.()[0] ?? 'hello'
+      if (name === 'log' || (kind === 'act' && !name)) n.text ??= 'hello'
+      this.#defaults(n, nodeSpecs(this.gv).get(name))
+    }
+    if (kind === 'act' && name === 'log') n.text ??= 'hello'
+    // A panel verb (or the engine's panel node) starts on the panel named, else the module's first.
+    if ((kind === 'act' && (name === 'ui_open' || name === 'ui_close')) || (kind === 'node' && nodeSpecs(this.gv).get(name)?.args?.some((x) => x.name === 'panel'))) {
+      const p = arg ?? Object.keys(this.S.module.panels ?? {})[0]
+      if (p) n.panel = p
+    }
+    g.nodes.push(n)
+    this.picked = { kind: 'node', id }
+    this.changed()
+    return id
   }
 
   /**
@@ -914,6 +1024,16 @@ const STYLE = `
 .gw-node.gw-on{box-shadow:0 0 0 2px #ffe066}
 .gw-head{padding:6px 10px;font-weight:700;font-size:12px;border-radius:9px 9px 0 0;cursor:grab;touch-action:none;display:flex;align-items:center;gap:6px}
 .gw-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gw-menu{position:absolute;z-index:40;top:52px;left:8px;width:min(420px,calc(100% - 16px));max-height:calc(100% - 64px);display:flex;flex-direction:column;background:#121620;border:1px solid #2a3446;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden}
+.gw-menu-top{display:flex;gap:6px;padding:8px;border-bottom:1px solid #2a3446}
+.gw-menu-find{flex:1 1 auto;min-width:0;height:36px;font-size:14px}
+.gw-menu-list{overflow:auto;-webkit-overflow-scrolling:touch;padding:4px 6px 8px}
+.gw-menu-group{font:700 11px ui-monospace,Menlo,monospace;color:#8fa6c4;padding:10px 6px 4px;text-transform:none}
+.gw-menu-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;height:auto;min-height:34px;padding:6px 8px;text-align:left;border:0;border-radius:8px;background:transparent}
+.gw-menu-item:hover,.gw-menu-item:focus{background:#1b2230}
+.gw-menu-label{font-weight:700;color:#e8f0ff}
+.gw-menu-in{font-size:10px;color:#8fa6c4}
+.gw-menu-doc{flex:1 1 100%;font-size:11px;color:#8a93a6;white-space:normal}
 .gw-del{flex:0 0 auto;width:22px;height:22px;min-width:0;min-height:0;padding:0;border-radius:6px;font-size:11px;line-height:20px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.18);color:#e8e8ea;opacity:.7;cursor:pointer}
 .gw-del:hover,.gw-del:active{opacity:1;background:#5a2330;border-color:#ff6b6b}
 .gw-ev .gw-head{background:#5a2330}.gw-cond .gw-head{background:#5a4a1e}.gw-act .gw-head{background:#1f3a5c}
