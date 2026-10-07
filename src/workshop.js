@@ -431,6 +431,7 @@ class Workshop {
     const board = el('div', { class: 'wk-board' }, [world])
     pane.appendChild(board)
     this.#paneGestures(board, world)
+    board.appendChild(this.#zoomBar(board))
     return pane
   }
 
@@ -528,13 +529,81 @@ class Workshop {
     if (old) old.replaceWith(this.#edgesSvg(this.brain, this.layout))
   }
 
+  /**
+   * The board: one finger (or the mouse) on empty board pans, two pinch, the
+   * wheel zooms about the pointer -- as the graph window's board does.
+   */
   #paneGestures (pane, world) {
-    let pan = null
-    pane.addEventListener('pointerdown', (e) => { if (e.target !== pane && e.target !== world && !e.target.classList?.contains('wk-edges')) return; pan = { x: e.clientX, y: e.clientY, vx: this.view.x, vy: this.view.y }; capture(pane, e) })
-    pane.addEventListener('pointermove', (e) => { if (!pan) return; this.view.x = pan.vx + e.clientX - pan.x; this.view.y = pan.vy + e.clientY - pan.y; world.style.transform = `translate(${this.view.x}px,${this.view.y}px) scale(${this.view.z})` })
-    pane.addEventListener('pointerup', () => { pan = null })
-    pane.addEventListener('pointercancel', () => { pan = null })
-    pane.addEventListener('wheel', (e) => { e.preventDefault(); this.view.z = Math.min(2, Math.max(0.4, this.view.z * (e.deltaY > 0 ? 0.9 : 1.1))); world.style.transform = `translate(${this.view.x}px,${this.view.y}px) scale(${this.view.z})` }, { passive: false })
+    const apply = () => {
+      world.style.transform = `translate(${this.view.x}px,${this.view.y}px) scale(${this.view.z})`
+      if (this.zoomLabel) this.zoomLabel.textContent = `${Math.round(this.view.z * 100)}%`
+    }
+    this.applyView = apply
+    const pts = new Map()
+    let last = null
+    pane.addEventListener('pointerdown', (e) => {
+      if (e.target !== pane && e.target !== world && !e.target.classList?.contains('wk-edges')) return
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      last = null
+      capture(pane, e)
+    })
+    pane.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return
+      const prev = pts.get(e.pointerId)
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (pts.size === 1) { this.view.x += e.clientX - prev.x; this.view.y += e.clientY - prev.y }
+      else if (pts.size === 2) {
+        const [a, b] = [...pts.values()]
+        const d = Math.hypot(a.x - b.x, a.y - b.y)
+        if (last) this.#zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, d / last, pane)
+        last = d
+      }
+      apply()
+    })
+    const end = (e) => { pts.delete(e.pointerId); last = null }
+    pane.addEventListener('pointerup', end)
+    pane.addEventListener('pointercancel', end)
+    pane.addEventListener('wheel', (e) => { e.preventDefault(); this.#zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY / 400), pane); apply() }, { passive: false })
+  }
+
+  /** Zoom by `factor` about a screen point, keeping what is under it there. */
+  #zoomAt (cx, cy, factor, pane) {
+    const r = pane.getBoundingClientRect()
+    const z = Math.min(2.5, Math.max(0.25, this.view.z * factor))
+    const k = z / this.view.z
+    const px = cx - r.left; const py = cy - r.top
+    this.view.x = px - (px - this.view.x) * k
+    this.view.y = py - (py - this.view.y) * k
+    this.view.z = z
+  }
+
+  /** −, the zoom, +, and every node in view: for a phone, where a pinch is not always at hand. */
+  #zoomBar (pane) {
+    this.zoomLabel = el('span', { class: 'wk-zoom-pct', text: `${Math.round(this.view.z * 100)}%` })
+    const mid = (f) => { const r = pane.getBoundingClientRect(); this.#zoomAt(r.left + r.width / 2, r.top + r.height / 2, f, pane); this.applyView?.() }
+    const bar = el('div', { class: 'wk-zoom' }, [
+      el('button', { text: '−', title: 'zoom out', 'data-zoom': 'out', onclick: () => mid(1 / 1.25) }),
+      this.zoomLabel,
+      el('button', { text: '+', title: 'zoom in', 'data-zoom': 'in', onclick: () => mid(1.25) }),
+      el('button', { text: '⤢', title: 'every node in view', 'data-zoom': 'fit', onclick: () => this.fitAll(pane) })
+    ])
+    bar.addEventListener('pointerdown', (e) => e.stopPropagation())
+    return bar
+  }
+
+  /** Every node in view, as large as fits. */
+  fitAll (pane) {
+    const nodes = [...pane.querySelectorAll('.wk-world > .wk-node')]
+    const layout = this.layout
+    const names = Object.keys(this.nodes ?? {})
+    if (!names.length) return
+    const x0 = Math.min(...names.map((n) => layout[n]?.x ?? 0)); const y0 = Math.min(...names.map((n) => layout[n]?.y ?? 0))
+    const x1 = Math.max(...names.map((n, i) => (layout[n]?.x ?? 0) + (nodes[i]?.offsetWidth ?? 160)))
+    const y1 = Math.max(...names.map((n, i) => (layout[n]?.y ?? 0) + (nodes[i]?.offsetHeight ?? 70)))
+    const r = pane.getBoundingClientRect()
+    const z = Math.min(2, Math.max(0.25, Math.min((r.width - 40) / Math.max(1, x1 - x0), (r.height - 80) / Math.max(1, y1 - y0))))
+    this.view = { z, x: (r.width - (x1 - x0) * z) / 2 - x0 * z, y: 20 - y0 * z }
+    this.applyView?.()
   }
 
   #scrollToTransition (e) {

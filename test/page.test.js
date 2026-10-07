@@ -390,6 +390,32 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return { isPicker: !!sel, options: sel ? sel.options.length - 1 : 0 }
   })
   check(blood.isPicker && blood.options > 0, `what it bleeds is picked from the particle kinds, not typed as a number (${blood.options} offered)`)
+  // THE MONSTER BOARD ZOOMS: a bar of −, the zoom, + and fit; a pinch too.
+  const zoomed = await page.evaluate(async () => {
+    const S = window.__studio
+    const w = S.workshop
+    w.tab = 'brain'; w.render()
+    const board = document.querySelector('.wk .wk-board')
+    const bar = board?.querySelector('.wk-zoom')
+    const z0 = w.view.z
+    bar.querySelector('[data-zoom="in"]').click()
+    const zIn = w.view.z
+    bar.querySelector('[data-zoom="fit"]').click()
+    await new Promise((r) => setTimeout(r, 50))
+    const br = board.getBoundingClientRect()
+    const inside = [...board.querySelectorAll('.wk-world > .wk-node')].every((n) => { const r = n.getBoundingClientRect(); return r.left >= br.left - 1 && r.right <= br.right + 1 && r.top >= br.top - 1 && r.bottom <= br.bottom + 1 })
+    // A pinch: two fingers spreading apart on empty board.
+    const zBefore = w.view.z
+    const at = (id, x, y, type) => board.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))
+    const cx = br.left + br.width / 2; const cy = br.top + br.height - 30
+    at(1, cx - 20, cy, 'pointerdown'); at(2, cx + 20, cy, 'pointerdown')
+    at(1, cx - 25, cy, 'pointermove'); at(2, cx + 25, cy, 'pointermove')
+    at(1, cx - 60, cy, 'pointermove'); at(2, cx + 60, cy, 'pointermove')
+    at(1, cx - 60, cy, 'pointerup'); at(2, cx + 60, cy, 'pointerup')
+    return { bar: !!bar, z0, zIn, inside, pinched: w.view.z > zBefore * 1.5, label: bar.querySelector('.wk-zoom-pct').textContent }
+  })
+  check(zoomed.bar && zoomed.zIn > zoomed.z0 && zoomed.inside && zoomed.pinched && /%$/.test(zoomed.label),
+        `the monster board zooms: + in, ⤢ every state in view, a pinch too (${JSON.stringify(zoomed)})`)
   // THE FLINCH: switched on, a bigger hit holds the monster in pain longer,
   // said in ticks for a few hits by the runtime's own sum.
   const flinch = await page.evaluate(async () => {

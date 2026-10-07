@@ -192,6 +192,9 @@ const STYLE = `
 .wk-bar{flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;padding:8px}
 .wk-board{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;
   background-image:radial-gradient(#1b2230 1px,transparent 1px);background-size:24px 24px}
+.wk-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;background:rgba(11,13,18,.85);border:1px solid #2a3446;border-radius:10px;padding:4px}
+.wk-zoom button{min-width:36px;height:34px;padding:0 8px;border-radius:8px;background:rgba(27,34,48,.95);color:#cfe3ff;border:1px solid rgba(207,227,255,.22);font:600 15px/1 ui-monospace,Menlo,monospace;cursor:pointer}
+.wk-zoom-pct{font:600 11px ui-monospace,Menlo,monospace;color:#9fb0c8;min-width:42px;text-align:center}
 .wk-world{position:absolute;left:0;top:0;width:4000px;height:4000px;transform-origin:0 0}
 .wk-edges{position:absolute;left:0;top:0;width:4000px;height:4000px;overflow:visible}
 .wk-edge{fill:none;stroke:#8fa6c4;stroke-width:2}
