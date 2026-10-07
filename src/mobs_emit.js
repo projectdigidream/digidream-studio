@@ -25,3 +25,17 @@ export function emitMobsLua (module) {
   ].join('\n')
   return block('mobs', body) + '\n'
 }
+
+/**
+ * How long a flinch lasts (docs/MOBS.md `pain_time`): the pain state's own
+ * ticks, and -- switched on -- a share of each hit on top, capped. Said with
+ * what a few hits come to, by the runtime's own sum (mobs.lua pain_ticks_for).
+ */
+export function painLength (m, damage, base = m.states?.pain?.ticks) {
+  if (base === undefined || base === null) return null
+  let t = Number(base)
+  const pt = m.pain_time
+  if (pt?.per_damage !== undefined && damage > 0) t += Math.max(0, Math.floor(Math.floor(damage) * Number(pt.per_damage)))
+  if (pt?.max !== undefined && t > pt.max) t = pt.max
+  return Math.max(1, t)
+}

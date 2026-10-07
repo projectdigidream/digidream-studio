@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { toLua } from '../src/lua.js'
-import { emitMobsLua } from '../src/mobs_emit.js'
+import { emitMobsLua, painLength } from '../src/mobs_emit.js'
 import { emitProps, nextPropId } from '../src/props_emit.js'
 import { Vocab } from '../src/vocab.js'
 import { ROOT } from './oracle.js'
@@ -161,6 +161,21 @@ if (!existsSync(LUAJIT)) {
   const kfile = join(dir, 'kind.lua')
   writeFileSync(kfile, emitMobsLua({ id: 'x', mobs: kind }))
   check(spawnSync(LUAJIT, ['tools/mobcheck/check.lua', kfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' }).status !== 0, 'CONTROL: the runtime refuses the unknown target kind too')
+  // THE FLINCH (docs/MOBS.md pain_time): a share of each hit on top of the
+  // pain state's ticks, capped. The studio and mobcheck accept it; CONTROL:
+  // one on a monster with no pain state, named by both.
+  const pained = structuredClone(module.mobs); pained.mobs.spirit.pain_time = { per_damage: '0.5', max: 40 }
+  check(vocab.validateMobs(pained).length === 0, `a pain_time validates (${vocab.validateMobs(pained).join(' | ')})`)
+  const pfile = join(dir, 'pained.lua'); writeFileSync(pfile, emitMobsLua({ id: 'x', mobs: pained }))
+  const rp = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', pfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+  check(rp.status === 0 && /1 mobs, 0 missiles, 0 problems/.test(rp.stdout), `mobcheck accepts it as the studio writes it:\n${rp.stdout}${rp.stderr}`)
+  const sp = pained.mobs.spirit
+  check(painLength(sp, 0) === 10 && painLength(sp, 10) === 15 && painLength(sp, 50) === 35 && painLength(sp, 100) === 40,
+        `a flinch's length by the runtime's sum: 10 ticks, +half the damage, at most 40 (${[0, 10, 50, 100].map((d) => painLength(sp, d)).join(', ')})`)
+  const nopain = structuredClone(pained); delete nopain.mobs.spirit.states.pain
+  check(vocab.validateMobs(nopain).some((m) => /pain_time and no pain state/.test(m)), 'CONTROL: pain_time with no pain state is named')
+  const npfile = join(dir, 'nopain.lua'); writeFileSync(npfile, emitMobsLua({ id: 'x', mobs: nopain }))
+  check(spawnSync(LUAJIT, ['tools/mobcheck/check.lua', npfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' }).status !== 0, 'and mobcheck refuses it too')
   const bfile = join(dir, 'broken.lua')
   writeFileSync(bfile, emitMobsLua({ id: 'x', mobs: broken }))
   const rb = spawnSync(LUAJIT, ['tools/mobcheck/check.lua', bfile], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })

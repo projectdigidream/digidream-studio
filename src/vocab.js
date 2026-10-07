@@ -269,6 +269,12 @@ export class Vocab {
       // swing has, and the same rule: a swing with no damage is a collider
       // that costs nothing.
       if (m.swing) checkArgs(this.mob.swing_fields ?? [], m.swing, `${where}, swing`, problems, ctx)
+      // How a flinch's length follows the hit (docs/MOBS.md): its own fields,
+      // and a pain state to lengthen -- the runtime refuses one without.
+      if (m.pain_time) {
+        checkArgs(this.mob.pain_time_fields ?? [], m.pain_time, `${where}, pain_time`, problems, ctx)
+        if (!('pain' in states)) problems.push(`${where}: has pain_time and no pain state -- there is no flinch for it to lengthen`)
+      }
       if (m.initial === undefined) problems.push(`${where}: needs \`initial\``)
       if (m.corpse && !('death' in states)) problems.push(`${where}: has corpse = true and no death state`)
       for (const [sname, s] of Object.entries(states)) {

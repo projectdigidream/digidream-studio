@@ -10,6 +10,7 @@
 import { el, row, text, toggle, select, button, chips, card, muted, number, ask } from './ui.js'
 import { nextPropId } from './props_emit.js'
 import { argFields } from './argform.js'
+import { painLength } from './mobs_emit.js'
 import { guessStates } from './sheets.js'
 
 export const DEFAULT_BRAIN = () => ({
@@ -100,8 +101,32 @@ export function brainRows (S, m, ctx) {
   return [
     select('initial state', m.initial ?? '', [['', '(choose)'], ...states], (v) => { m.initial = v || undefined; ctx.onChange() }),
     ...argFields(S.vocab.mob.mob_fields, m, ctx, ['states', 'vars', 'prop', 'initial', 'drops']),
+    ...painRows(S, m, ctx),
     ...dropsRows(S, m, ctx)
   ]
+}
+
+function painRows (S, m, ctx) {
+  const V = S.vocab.mob
+  if (!V.pain_time_fields) return []
+  const pain = m.states?.pain
+  const rows = [el('div', { class: 'st-section-head', text: '💢 the flinch' })]
+  if (!pain) {
+    rows.push(muted('No state called "pain": this monster never flinches. Add one (with ticks and a next) and pain_chance decides how often it does.'))
+    if (m.pain_time) rows.push(el('div', { class: 'st-danger', text: 'pain_time is set and there is no pain state for it to lengthen.' }))
+    return rows
+  }
+  rows.push(toggle('a bigger hit, a longer flinch', !!m.pain_time, (v) => {
+    if (v) m.pain_time = { per_damage: '0.5', max: Math.max(40, (pain.ticks ?? 10) * 3) }
+    else delete m.pain_time
+    ctx.onChange()
+  }))
+  if (m.pain_time) rows.push(...argFields(V.pain_time_fields, m.pain_time, ctx))
+  const say = (d) => `${painLength(m, d)}`
+  rows.push(muted(pain.ticks === undefined
+    ? 'The pain state has no ticks, so its length is not the flinch\'s to change.'
+    : `A flinch lasts ${pain.ticks} ticks (60 a second)${m.pain_time ? `; a 10-point hit ${say(10)}, a 50-point ${say(50)}, a 100-point ${say(100)}` : ', whatever the hit'}. A graph can change the base while the game runs: set_var pain_ticks.`))
+  return rows
 }
 
 /**

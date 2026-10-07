@@ -390,6 +390,25 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return { isPicker: !!sel, options: sel ? sel.options.length - 1 : 0 }
   })
   check(blood.isPicker && blood.options > 0, `what it bleeds is picked from the particle kinds, not typed as a number (${blood.options} offered)`)
+  // THE FLINCH: switched on, a bigger hit holds the monster in pain longer,
+  // said in ticks for a few hits by the runtime's own sum.
+  const flinch = await page.evaluate(async () => {
+    const S = window.__studio
+    const g = S.module.mobs.mobs.ghost
+    const hadPain = !!g.states.pain
+    g.states.pain ??= { anim: 0, move: 'stop', face: 'hold', ticks: 12, next: g.initial }
+    S.workshop.render()
+    const row = [...document.querySelectorAll('.wk-details .st-row')].find((r) => r.querySelector('label')?.textContent === 'a bigger hit, a longer flinch')
+    row?.querySelector('button').click()
+    await new Promise((r) => setTimeout(r, 100))
+    const said = [...document.querySelectorAll('.wk-details .st-muted')].map((m) => m.textContent).find((t) => /a 10-point hit/.test(t)) ?? ''
+    const r = { pt: g.pain_time ? { ...g.pain_time } : null, said, problems: S.vocab.validateMobs(S.module.mobs).filter((p) => /pain/.test(p)) }
+    delete g.pain_time; if (!hadPain) delete g.states.pain; S.moduleChanged()
+    return r
+  })
+  const base = Number(/lasts (\d+) ticks/.exec(flinch.said)?.[1])
+  check(flinch.pt?.per_damage === '0.5' && flinch.pt.max >= 30 && new RegExp(`a 10-point hit ${Math.min(base + 5, flinch.pt.max)}\\b`).test(flinch.said) && !flinch.problems.length,
+        `a bigger hit, a longer flinch: pain_time on, its lengths said by the runtime's sum (${JSON.stringify(flinch)})`)
   await page.evaluate(() => { delete window.__studio.module.mobs.mobs.ghost.swing; window.__studio.moduleChanged() })
   await page.evaluate(() => window.__studio.go('map'))
   const closed = await page.evaluate(() => document.querySelector('.sd-page').hidden && getComputedStyle(document.querySelector('.st-bar')).display !== 'none')
