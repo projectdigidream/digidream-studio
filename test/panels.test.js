@@ -19,11 +19,12 @@ import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   newPanel, addWidget, widgetsOf, contentOf, templateOf, withTemplates, panelProblems, migratePanels,
-  triggerPanels, graphPanels, panelsInGraph, panelUses, fromScript, cleanName, freeName
+  triggerPanels, graphPanels, panelsInGraph, panelUses, fromScript, cleanName, freeName,
+  panelNodeProblem, decorIdsOf, renameDecorRefs
 } from '../src/panels_emit.js'
 import { uiFiles } from '../src/ui_emit.js'
 import { emitMapLua } from '../src/lua_emit.js'
-import { emitGraph } from '../src/graphs_emit.js'
+import { emitGraph, graphProblems } from '../src/graphs_emit.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS } from '../src/module_emit.js'
 import { newDoc, addSector, addSpawn } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
@@ -236,6 +237,64 @@ else {
     check(withIt.ok, `in the game VM the shop is where ui_open looks for it, once the table is loaded:\n${withIt.out}`)
     check(!probe(false).ok, 'CONTROL: without the table it is not, so the table is what lets a game graph open the panel')
   }
+}
+
+// SHOWN AND HIDDEN (show_element / hide_element): a graph names a widget or a
+// decor element, exactly one; a widget may start hidden. The studio's problems
+// say what graphs.lua refuses, and only that.
+// ORACLE: graphs.lua loading the graph, under triggercheck.
+{
+  const p = structuredClone(shop)
+  p.widgets.find((w) => w.id === buy.id).hidden = true
+  const named = widgetsOf(p, { names: true })
+  check(named.find((w) => w.id === buy.id).hidden === true && named.filter((w) => w.hidden).length === 1, 'a widget that starts hidden says so in a graph\'s panel')
+  check(!widgetsOf(p).some((w) => 'hidden' in w), 'and not in a trigger table, whose ui_open has no such field')
+  check(decorIdsOf(p).join() === 'purse', `the decor a graph can name (${decorIdsOf(p).join()})`)
+  const panels = { shop: p }
+  const vocab = JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'graph_vocab.json'), 'utf8'))
+  const tv = JSON.parse(readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'trigger_vocab.json'), 'utf8'))
+  const graphOf = (hide, show) => ({ vars: {}, nodes: [
+    { id: 'came', type: 'when_player_arrives' }, { id: 'open', type: 'open_panel', panel: 'shop' },
+    { id: 'hide', type: 'hide_element', panel: 'shop', ...hide }, { id: 'show', type: 'show_element', panel: 'shop', ...show }],
+    links: [['came.then', 'open.in'], ['open.then', 'hide.in'], ['hide.then', 'show.in']] })
+  const cases = [
+    ['a widget, and a decor element', { widget: gold.name }, { decor: 'purse' }, true],
+    ['both', { widget: gold.name, decor: 'purse' }, { decor: 'purse' }, false],
+    ['neither', {}, { decor: 'purse' }, false],
+    ['a decor id of the wrong form', { widget: gold.name }, { decor: 'not ok!' }, false],
+    ['a widget the panel lacks', { widget: 'nope' }, { decor: 'purse' }, false]
+  ]
+  const own = (g) => graphProblems(g, vocab, tv, { panels })
+  for (const [what, hide, show, good] of cases) {
+    const said = own(graphOf(hide, show))
+    check(good ? said.length === 0 : said.length > 0, `the studio ${good ? 'says nothing about' : 'says what is wrong with'} ${what} (${said.join(' | ')})`)
+  }
+  // A decor id the template lacks: the engine only checks its form, the studio says more.
+  check(panelNodeProblem({ type: 'show_element', panel: 'shop', decor: 'mana' }, panels)?.includes('no decor element mana'), 'a decor element the panel has not is said')
+  check(panelNodeProblem({ type: 'show_element', panel: 'shop', decor: 'purse' }, panels) === null && panelNodeProblem({ type: 'open_panel', panel: 'gone' }, panels)?.includes('no panel'),
+        'CONTROL: one it has is not; a panel the module lacks is')
+  // Renamed, the nodes follow.
+  const owner = { graphs: { main: graphOf({ widget: gold.name }, { decor: 'purse' }) } }
+  renameDecorRefs(owner, 'shop', 'purse', 'wallet')
+  check(owner.graphs.main.nodes.find((n) => n.id === 'show').decor === 'wallet', 'a decor element renamed: the nodes naming it follow')
+
+  const TC = join(ROOT, 'engine', 'build', 'lua', 'triggercheck')
+  if (existsSync(TC)) {
+    const dir = mkdtempSync(join(tmpdir(), 'dnp-showhide-'))
+    const load = (name, g) => {
+      const f = join(dir, `${name}.lua`)
+      writeFileSync(f, ['dofile("maps/scripts/graph_vocab.lua")', 'dofile("maps/scripts/graphs.lua")',
+        'triggers.load{ name = "sh", triggers = { { name = "t", event = "on_interact", actions = { { a = "log", text = "x" } } } } }',
+        `local ok, problems = graphs.load(${toLua(emitGraph(g, 'sh', null, null, { panels: graphPanels(g, panels) }).json)}, "sh")`,
+        'if not ok then error(table.concat(problems or {}, "\\n")) end'].join('\n'))
+      const r = spawnSync(TC, ['.', f], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+      return { ok: r.status === 0, out: r.stderr + r.stdout }
+    }
+    cases.forEach(([what, hide, show, good], i) => {
+      const r = load(`case${i}`, graphOf(hide, show))
+      check(r.ok === good, `graphs.lua ${good ? 'loads' : 'refuses'} ${what}, as the studio says${r.ok === good ? '' : `:\n${r.out}`}`)
+    })
+  } else console.log('panels: triggercheck not built -- the show/hide load checks are skipped')
 }
 
 console.log(`panels: ${checks} checks, ${fails} failures`)

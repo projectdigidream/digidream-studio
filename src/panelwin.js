@@ -24,7 +24,7 @@ import { anchorFor } from './ui_emit.js'
 import { DEVICES } from './screens.js'
 import { withStyle } from './style_emit.js'
 import {
-  KINDS, MAX_WIDGETS, SLOT_H, NAME_RE, cleanName, freeName, newPanel, addWidget, widgetsOf, withTemplates,
+  DECOR_ID_RE, renameDecorRefs, KINDS, MAX_WIDGETS, SLOT_H, NAME_RE, cleanName, freeName, newPanel, addWidget, widgetsOf, withTemplates,
   panelProblems, panelUses, renamePanelRefs, renameWidgetRefs
 } from './panels_emit.js'
 import { newGraph, graphsOf, graphRoute, parseGraphRoute, MAP_GRAPH, GAME_NAME } from './graphs_emit.js'
@@ -359,8 +359,8 @@ class PanelWindow {
       if (!node) return
       const r = this.#rectOf(node)
       const on = this.sel.kind === 'widget' && this.sel.id === w.id
-      const box = this.#box(r, 'pw-slot', on, { 'data-widget': w.name, title: `${w.kind} · ${w.name}` })
-      box.appendChild(el('span', { class: 'pw-tag', text: `${ICON[w.kind]} ${w.name}` }))
+      const box = this.#box(r, 'pw-slot', on, { 'data-widget': w.name, 'data-hidden': w.hidden ? '1' : '0', title: `${w.kind} · ${w.name}${w.hidden ? ' · starts hidden' : ''}` })
+      box.appendChild(el('span', { class: 'pw-tag', text: `${ICON[w.kind]} ${w.name}${w.hidden ? ' · hidden' : ''}` }))
       this.#drag(box, node, (dx, dy, moved) => {
         if (!moved) return this.#pick({ kind: 'widget', id: w.id })
         w.slot.x = Math.max(0, snap((r.left - sr.left + dx) / s))
@@ -612,6 +612,11 @@ class PanelWindow {
       rows.push(text('options', (w.options ?? []).join(', '), (v) => { w.options = v.split(',').map((x) => x.trim()).filter(Boolean); if ((w.value ?? 0) >= w.options.length) w.value = 0; ch() }, { placeholder: 'red, green, blue' }),
         select('starts at', String(w.value ?? 0), (w.options ?? []).map((o, i) => [String(i), o]), (v) => { w.value = Number(v); ch() }))
     }
+    // Hidden until a graph's show_element shows it: a Sell button that appears
+    // once there is something to sell. Opened by a trigger card, it shows.
+    rows.push(toggle('starts hidden', !!w.hidden, (v) => { if (v) w.hidden = true; else delete w.hidden; ch() }),
+      muted(w.hidden ? 'Opened by a graph, it is not shown until a show_element shows it (hide_element hides it again; a toggle or slider keeps its value). A trigger card\'s ui_open shows it all the same.'
+        : 'A graph shows and hides it with show_element / hide_element; "starts hidden" opens the panel without it.'))
     rows.push(el('div', { class: 'st-section-head', text: 'place and look' }),
       el('div', { class: 'pw-xywh' }, [
         number('x', sl.x ?? 0, { min: 0, max: 2000, step: 1 }, (v) => { sl.x = v; ch() }),
@@ -634,7 +639,16 @@ class PanelWindow {
     const ch = () => this.changed()
     const set = (k) => (v) => { if (v === '' || v === undefined) delete e[k]; else e[k] = v; ch() }
     const st = (k) => (v) => { e.style ??= {}; if (v === '' || v === undefined) delete e.style[k]; else e.style[k] = v; if (!Object.keys(e.style).length) delete e.style; ch() }
-    const rows = [el('div', { class: 'st-section-head', text: `▸ decor · ${e.id}` })]
+    const rows = [el('div', { class: 'st-section-head', text: `▸ decor · ${e.id}` }),
+      // Its id: what show_element / hide_element say. Renamed, they follow.
+      text('id (graphs say it)', e.id ?? '', (v) => {
+        const n = String(v).trim()
+        if (!DECOR_ID_RE.test(n) || p.decor.some((x) => x !== e && x.id === n)) { this.S.status('an id is 1 to 32 letters, digits, _ or -, and not another element\'s', 'warn'); this.render(); return }
+        if (n === e.id) return
+        renameDecorRefs(this.S.module, this.name, e.id, n)
+        for (const d of Object.values(this.S.docs)) renameDecorRefs(d, this.name, e.id, n)
+        e.id = n; ch()
+      })]
     if (e.type === 'text') {
       rows.push(text('text', e.text ?? '', set('text'), { placeholder: 'Gold {hud.gold}' }),
         number('size', e.style?.size ?? 12, { min: 6, max: 96, step: 1 }, st('size')),
@@ -673,7 +687,7 @@ class PanelWindow {
     p.widgets.forEach((w, i) => {
       rows.push(el('div', { class: 'st-trow', 'data-wrow': w.name, 'data-on': this.sel.kind === 'widget' && this.sel.id === w.id ? '1' : '0', onclick: () => this.#pick({ kind: 'widget', id: w.id }) }, [
         el('span', { class: 'st-mark', text: ICON[w.kind] }),
-        el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: w.name }), el('div', { class: 'st-muted', text: `${w.kind} · ${w.label ?? ''}` })])
+        el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: w.name }), el('div', { class: 'st-muted', text: `${w.kind} · ${w.label ?? ''}${w.hidden ? ' · starts hidden' : ''}` })])
       ]))
     })
     for (const [i, d] of (p.decor ?? []).entries()) {
@@ -719,7 +733,7 @@ class PanelWindow {
     const p = this.panel
     const uses = panelUses(this.name, S.module, Object.values(S.docs))
     const rows = [el('div', { class: 'st-section-head', text: '◇ graphs' })]
-    const say = { opens: 'opens it', closes: 'closes it', sets: 'sets', answers: 'answers', closed: 'hears it closed', asks: 'asks if open', trigger: 'a card opens or closes it' }
+    const say = { opens: 'opens it', closes: 'closes it', sets: 'sets', answers: 'answers', closed: 'hears it closed', asks: 'asks if open', shows: 'shows', hides: 'hides', trigger: 'a card opens or closes it' }
     for (const u of uses) {
       const where = u.trigger ? `${u.graph}'s cards` : `${u.graph === 'game' ? 'the game' : u.graph} · ${u.gname}`
       rows.push(el('div', { class: 'st-trow', 'data-use': `${u.graph}:${u.gname ?? ''}:${u.node ?? u.trigger}`, onclick: () => this.#goTo(u) }, [
@@ -850,6 +864,7 @@ const STYLE = `
 .pw-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9fb0c8;font:600 14px ui-monospace,Menlo,monospace}
 .pw-hits{z-index:60}
 .pw-box{position:absolute;box-sizing:border-box;touch-action:none;cursor:grab}
+.pw-slot[data-hidden="1"]{background:repeating-linear-gradient(45deg,rgba(13,16,22,.55) 0 6px,rgba(13,16,22,.25) 6px 12px);outline-style:dashed}
 .pw-panel{outline:1px dashed rgba(255,224,102,.35)}
 .pw-panel[data-on="1"]{outline:2px solid #ffe066}
 .pw-slot{outline:1px dashed rgba(122,212,138,.55)}

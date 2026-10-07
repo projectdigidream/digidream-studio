@@ -183,9 +183,18 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
             ctx.editPanel ? button('✎', () => ctx.editPanel(cur)) : null))
           return
         }
+        // show_element / hide_element name a widget OR a decor element: choosing
+        // one clears the other, as the engine takes exactly one.
+        const showHide = owner === 'show_element' || owner === 'hide_element'
+        const other = (k) => { if (showHide && obj[k] !== undefined) delete obj[k] }
         if (a.type === 'string' && a.name === 'widget' && ctx.widgetsOf) {
           const names = ctx.widgetsOf(obj.panel)
-          rows.push(row(label, selectOf(cur ?? '', [['', a.optional ? '(any)' : '(choose)'], ...(cur && !names.includes(cur) ? [[cur, `${cur} -- not on that panel`]] : []), ...names.map((n) => [n, n])], (v) => set(v || undefined))))
+          rows.push(row(label, selectOf(cur ?? '', [['', showHide ? '(none -- a decor element)' : a.optional ? '(any)' : '(choose)'], ...(cur && !names.includes(cur) ? [[cur, `${cur} -- not on that panel`]] : []), ...names.map((n) => [n, n])], (v) => { if (v) other('decor'); set(v || undefined) })))
+          return
+        }
+        if (a.type === 'string' && a.name === 'decor' && ctx.decorOf) {
+          const ids = ctx.decorOf(obj.panel)
+          rows.push(row(label, selectOf(cur ?? '', [['', ids.length ? '(none -- a widget)' : '(the panel has no decor)'], ...(cur && !ids.includes(cur) ? [[cur, `${cur} -- not on that panel`]] : []), ...ids.map((n) => [n, n])], (v) => { if (v) other('widget'); set(v || undefined) })))
           return
         }
         // A COLOUR, as #rrggbb (set_sector_effect's color): picked; ✕ for the default.

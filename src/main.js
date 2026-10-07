@@ -36,6 +36,7 @@ import { fxSchema } from './fxlib.js'
 import { openScreens } from './screens.js'
 import { openGraph } from './graphwin.js'
 import { openPanels } from './panelwin.js'
+import { decorIdsOf } from './panels_emit.js'
 import { writeStudioLog, noteStudioLog, showPlayLog, lastPlay, readLogs, failures } from './playlog.js'
 import { graphProblems, graphsOf, liveGraphs, graphFile } from './graphs_emit.js'
 import { Core } from '/src/core.js'
@@ -654,6 +655,7 @@ S.ensureTag = (sectorId) => {
 S.panelCtx = () => ({
   panels: () => Object.keys(S.module.panels ?? {}),
   widgetsOf: (panel) => (S.module.panels?.[panel]?.widgets ?? []).map((w) => w.name),
+  decorOf: (panel) => decorIdsOf(S.module.panels?.[panel]),
   widgetIds: () => Object.entries(S.module.panels ?? {}).flatMap(([p, q]) => q.widgets.filter((w) => w.kind !== 'label').map((w) => [w.id, `${p} · ${w.name} (${w.id})`])),
   editPanel: (name) => S.go('panels', name || null)
 })
@@ -1102,12 +1104,12 @@ async function emitAll ({ forPlay = false } = {}) {
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
     for (const [name, g] of graphsOf(d)) {
-      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
+      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
       if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
-    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), game: true, maps: Object.keys(S.docs) }) : []
+    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, game: true, maps: Object.keys(S.docs) }) : []
     if (mg.length) { S.status(`the game's graph ${name}: ${mg.join('; ')}`, 'error'); return null }
   }
   const sizes = { ...S.textureSizes }

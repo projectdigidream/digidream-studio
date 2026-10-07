@@ -1546,6 +1546,39 @@ await page.keyboard.press('Escape')
           `"shop buy" finds the button's own entry, and Enter drops in the panel event and its widget, linked (${JSON.stringify(found)})`)
   }
   check(found.verbs > 30, `every trigger condition and action is in the menu by name (${found.verbs})`)
+  // SHOWN AND HIDDEN: show / hide entries for every widget (a label too) and
+  // every decor element; a decor entry drops in a node naming it, its form
+  // offers the panel's decor, and choosing a widget there clears the decor.
+  const shown = await page.evaluate(async () => {
+    const S = window.__studio
+    if (!S.vocab.graph.nodes.some((n) => n.name === 'show_element')) return null
+    S.module.panels = { shop: { title: 'Shop', widgets: [{ kind: 'label', id: 1, name: 'gold', label: 'Gold', slot: {} }, { kind: 'button', id: 2, name: 'sell', label: 'Sell', hidden: true, slot: {} }], decor: [{ id: 'purse', type: 'text', text: '{hud.gold}' }] } }
+    S.window.render()
+    const offered = S.window.menuItems().map((i) => i.value).filter((v) => /_element:/.test(v))
+    const had = S.doc.graphs.main.nodes.length
+    const id = S.window.addFrom('node:hide_element:shop:#purse')
+    const n = S.doc.graphs.main.nodes.find((x) => x.id === id)
+    const made = { type: n?.type, panel: n?.panel, decor: n?.decor, widget: n?.widget }
+    S.window.render()
+    await new Promise((r) => setTimeout(r, 100))
+    const sels = [...document.querySelectorAll('.gw select')]
+    const decorSel = sels.find((s) => [...s.options].some((o) => o.value === 'purse'))
+    const widgetSel = sels.find((s) => [...s.options].some((o) => o.value === 'sell'))
+    const formDecor = decorSel?.value
+    if (widgetSel) { widgetSel.value = 'sell'; widgetSel.dispatchEvent(new Event('change')) }
+    await new Promise((r) => setTimeout(r, 100))
+    const after = { widget: n?.widget, decor: n?.decor }
+    S.doc.graphs.main.nodes = S.doc.graphs.main.nodes.slice(0, had)
+    delete S.module.panels; S.commit(); S.window.render()
+    return { offered, made, formDecor, after }
+  })
+  if (shown) {
+    check(['node:show_element:shop:gold', 'node:hide_element:shop:sell', 'node:show_element:shop:#purse', 'node:hide_element:shop:#purse'].every((v) => shown.offered.includes(v)),
+          `the menu shows and hides every widget, a label too, and every decor element (${shown.offered.join(', ')})`)
+    check(shown.made.type === 'hide_element' && shown.made.decor === 'purse' && shown.made.widget === undefined && shown.formDecor === 'purse',
+          `a decor entry drops in a node naming it, and its form shows it (${JSON.stringify(shown)})`)
+    check(shown.after.widget === 'sell' && shown.after.decor === undefined, `choosing a widget clears the decor: the engine takes one (${JSON.stringify(shown.after)})`)
+  } else console.log('page: the engine has no show_element -- skipped')
   const ticked = await page.evaluate(() => {
     const w = window.__studio.window
     const items = w.menuItems()

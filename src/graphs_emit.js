@@ -24,6 +24,8 @@
 // dots and none can be `module` (module.lua is taken), so no two collide.
 //
 
+import { panelNodeProblem } from './panels_emit.js'
+
 export const GRAPH_EXT = '.graph.json'
 export const NAME_RE = /^[a-z0-9_]{1,32}$/
 /** The name a map's first graph is given, and a module's. */
@@ -241,7 +243,7 @@ export function varProblem (n, graph, props) {
   return null
 }
 
-export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null, buttons = null } = {}) {
+export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null, buttons = null, panels = null } = {}) {
   const problems = []
   if (!graph) return problems
   // A GAME graph (a module's, in the game VM) may use only what the game
@@ -292,6 +294,8 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
     if (buttons && spec.category === 'input' && typeof n.button === 'string' && n.button !== '' && !buttons.includes(n.button)) {
       problems.push(`${where}: no button or key called ${n.button} -- the engine's are ${buttons.slice(0, 10).join(', ')}, and the module's keys are in Controls`)
     }
+    // A panel node naming what the module's panels lack: refused at load.
+    if (panels) { const pp = panelNodeProblem(n, panels); if (pp) problems.push(`${where}: ${pp}`) }
     // A camera path the map lacks: the engine refuses the graph at load.
     if (paths && n.path !== undefined && (n.type === 'camera_flythrough' || n.type === 'camera_track') && !paths.has(n.path)) {
       problems.push(`${where}: no camera path with tag ${n.path} on this map (Camera → camera paths)`)

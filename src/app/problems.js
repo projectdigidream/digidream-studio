@@ -26,12 +26,12 @@ export function moduleProblems (S) {
     for (const p of climbProblems(d)) out.maps.push({ map: d.name, msg: `${p.sector}: ${p.msg}` })
     for (const [name, g] of graphsOf(d)) {
       if (!NAME_RE.test(name)) out.maps.push({ map: d.name, msg: `graph '${name}': a name is 1 to 32 of a-z, 0-9, _` })
-      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { buttons: buttonNames(S.module), maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
+      if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) })) out.maps.push({ map: d.name, msg: `graph ${name}: ${p}` })
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
     if (!NAME_RE.test(name)) out.graphs.push(`the game's graph '${name}': a name is 1 to 32 of a-z, 0-9, _`)
-    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { buttons: buttonNames(S.module), game: true, maps: Object.keys(S.docs) })) out.graphs.push(`the game's graph ${name}: ${p}`)
+    if (V.graph) for (const p of graphProblems(g, V.graph, V.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, game: true, maps: Object.keys(S.docs) })) out.graphs.push(`the game's graph ${name}: ${p}`)
   }
   for (const u of S.unansweredCalls?.() ?? []) out.graphs.push(`${u.graph} calls '${u.name}' (to ${u.to}), and nothing answers it`)
   // The skies: pictures missing or too few (docs/SKY.md).

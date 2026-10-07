@@ -84,6 +84,9 @@ export function widgetsOf (panel, { names = false } = {}) {
   return (panel.widgets ?? []).map((w) => {
     const out = { kind: w.kind, id: w.id, label: w.label ?? '' }
     if (names) out.name = w.name
+    // Opened by a graph's open_panel, it starts hidden until a show_element
+    // shows it. Only there: the trigger runtime's ui_open has no such field.
+    if (names && w.hidden) out.hidden = true
     if (w.kind === 'slider') { out.lo = w.lo ?? 0; out.hi = w.hi ?? 0 }
     if (w.kind === 'select') out.options = [...(w.options ?? [])]
     if (w.kind !== 'label' && w.kind !== 'button' && w.value !== undefined) out.value = w.value
@@ -157,7 +160,35 @@ export function panelProblems (name, panel) {
 
 // The node types and verbs that name a panel: the graph's own (docs/PANELS.md
 // 3) and the trigger vocabulary's.
-export const PANEL_NODES = ['open_panel', 'close_panel', 'set_widget', 'when_panel_used', 'when_panel_closed', 'panel_is_open']
+export const PANEL_NODES = ['open_panel', 'close_panel', 'set_widget', 'show_element', 'hide_element', 'when_panel_used', 'when_panel_closed', 'panel_is_open']
+
+// A decor element's id as show_element / hide_element name it (graphs.lua: 1..32
+// of letters, digits, _ and -).
+export const DECOR_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
+
+/** The decor ids of a panel a graph can show or hide. */
+export function decorIdsOf (panel) {
+  return (panel?.decor ?? []).map((d) => d.id).filter((id) => typeof id === 'string' && DECOR_ID_RE.test(id))
+}
+
+/**
+ * What the engine refuses in a graph's panel node, said before Play: a panel
+ * the module lacks, a widget it lacks, and for show_element / hide_element
+ * exactly one of a widget and a decor element (one the template has).
+ */
+export function panelNodeProblem (n, panels) {
+  if (!PANEL_NODES.includes(n.type) || typeof n.panel !== 'string' || !n.panel) return null
+  const p = panels?.[n.panel]
+  if (!p) return `no panel called ${n.panel} in the module (Panels)`
+  if (n.widget !== undefined && n.widget !== '' && !(p.widgets ?? []).some((w) => w.name === n.widget)) return `panel ${n.panel} has no widget ${n.widget}`
+  if (n.type !== 'show_element' && n.type !== 'hide_element') return null
+  const hasW = n.widget !== undefined && n.widget !== ''
+  const hasD = n.decor !== undefined && n.decor !== ''
+  if (hasW === hasD) return `name a widget or a decor element of ${n.panel} -- one of them, ${hasW ? 'not both' : 'it names neither'}`
+  if (hasD && !DECOR_ID_RE.test(String(n.decor))) return `\`decor\` is an element's id: 1 to 32 letters, digits, _ or -`
+  if (hasD && !decorIdsOf(p).includes(n.decor)) return `panel ${n.panel} has no decor element ${n.decor}`
+  return null
+}
 const PANEL_VERBS = ['ui_open', 'ui_close']
 
 /** The panel names a graph uses, by its nodes. */
@@ -200,13 +231,13 @@ export function graphPanels (graph, panels) {
  * 'trigger' for a trigger card.
  */
 export function panelUses (name, module, docs) {
-  const HOW = { open_panel: 'opens', close_panel: 'closes', set_widget: 'sets', when_panel_used: 'answers', when_panel_closed: 'closed', panel_is_open: 'asks' }
+  const HOW = { open_panel: 'opens', close_panel: 'closes', set_widget: 'sets', show_element: 'shows', hide_element: 'hides', when_panel_used: 'answers', when_panel_closed: 'closed', panel_is_open: 'asks' }
   const out = []
   const scan = (owner, label) => {
     for (const [gname, graph] of graphsOf(owner)) {
       for (const n of graph?.nodes ?? []) {
         if (n.panel !== name) continue
-        if (HOW[n.type]) out.push({ graph: label, gname, node: n.id, how: HOW[n.type], widget: n.widget })
+        if (HOW[n.type]) out.push({ graph: label, gname, node: n.id, how: HOW[n.type], widget: n.widget ?? n.decor })
         else if (n.type === 'action' && n.a === 'ui_open') out.push({ graph: label, gname, node: n.id, how: 'opens' })
         else if (n.type === 'action' && n.a === 'ui_close') out.push({ graph: label, gname, node: n.id, how: 'closes' })
       }
@@ -285,4 +316,9 @@ export function renamePanelRefs (doc, from, to) {
 /** A widget renamed: graph nodes naming it follow, in every graph of a map or the module. */
 export function renameWidgetRefs (owner, panel, from, to) {
   for (const g of graphsOf(owner).map(([, g]) => g)) for (const n of g?.nodes ?? []) if (n.panel === panel && n.widget === from) n.widget = to
+}
+
+/** A decor element's id renamed: show_element / hide_element nodes naming it follow. */
+export function renameDecorRefs (owner, panel, from, to) {
+  for (const g of graphsOf(owner).map(([, g]) => g)) for (const n of g?.nodes ?? []) if (n.panel === panel && n.decor === from) n.decor = to
 }

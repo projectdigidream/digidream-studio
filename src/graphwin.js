@@ -27,6 +27,7 @@
 import { buttonNames, ENGINE_BUTTON_NAMES, keyLabel } from './keys_emit.js'
 import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog, addHelp } from './ui.js'
 import { argFields } from './argform.js'
+import { decorIdsOf } from './panels_emit.js'
 import { playScene } from './scene.js'
 import { isStart } from './scene_plan.js'
 import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME, VAR_NODES, varChoices, propertiesOf, propertyFits, isVarRef, bindableArgs, numberSources } from './graphs_emit.js'
@@ -280,7 +281,7 @@ class GraphWindow {
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
-    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
       el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
@@ -375,10 +376,17 @@ class GraphWindow {
         if (node('when_panel_closed')) push(PANELS_GROUP, `node:when_panel_closed:${p}`, `when ${p} is closed`, node('when_panel_closed').doc)
         if (node('panel_is_open')) push(PANELS_GROUP, `node:panel_is_open:${p}`, `is ${p} open?`, node('panel_is_open').doc)
         for (const w of q.widgets ?? []) {
-          if (w.kind === 'label') continue
           const wn = w.name ?? w.label
-          if (node('when_panel_used')) push(PANELS_GROUP, `node:when_panel_used:${p}:${wn}`, `when ${p} › ${wn} is ${USED[w.kind] ?? 'used'}`, node('when_panel_used').doc)
-          if (node('set_widget') && w.kind !== 'button') push(PANELS_GROUP, `node:set_widget:${p}:${wn}`, `set ${p} › ${wn}`, node('set_widget').doc)
+          if (w.kind !== 'label') {
+            if (node('when_panel_used')) push(PANELS_GROUP, `node:when_panel_used:${p}:${wn}`, `when ${p} › ${wn} is ${USED[w.kind] ?? 'used'}`, node('when_panel_used').doc)
+            if (node('set_widget') && w.kind !== 'button') push(PANELS_GROUP, `node:set_widget:${p}:${wn}`, `set ${p} › ${wn}`, node('set_widget').doc)
+          }
+          // Any widget, a label too, can be shown and hidden.
+          for (const t of ['show_element', 'hide_element']) if (node(t)) push(PANELS_GROUP, `node:${t}:${p}:${wn}`, `${t === 'show_element' ? 'show' : 'hide'} ${p} › ${wn}`, node(t).doc)
+        }
+        // Its decor (a bar, a text, a picture), by id: `#` marks one in the entry.
+        for (const d of decorIdsOf(q)) {
+          for (const t of ['show_element', 'hide_element']) if (node(t)) push(PANELS_GROUP, `node:${t}:${p}:#${d}`, `${t === 'show_element' ? 'show' : 'hide'} ${p} › ${d} (decor)`, node(t).doc)
         }
       }
       return this.#menuRest(out, push, specs, taken)
@@ -496,7 +504,7 @@ class GraphWindow {
       return cond.id
     }
     const id = this.#newId(kind === 'event' ? name.replace(/^on_/, '')
-      : kind === 'node' ? (arg ? [name.replace(/^when_panel_/, '').replace(/_panel$/, ''), arg, arg2].filter(Boolean).join('_') : name.replace(/^when_/, ''))
+      : kind === 'node' ? (arg ? [name.replace(/^when_panel_/, '').replace(/_panel$/, '').replace(/_element$/, ''), arg, arg2?.replace(/^#/, '')].filter(Boolean).join('_').replace(/[^A-Za-z0-9_]/g, '_') : name.replace(/^when_/, ''))
         : kind === 'cond' ? (name ? `if_${name}` : 'if') : (arg ? `${name.replace(/^ui_/, '')}_${arg}` : name || 'do'))
     const n = { id, pos: { x: at.x, y: at.y } }
     if (kind === 'event') Object.assign(n, { type: 'event', event: name })
@@ -523,7 +531,8 @@ class GraphWindow {
     if ((kind === 'act' && (name === 'ui_open' || name === 'ui_close')) || (kind === 'node' && nodeSpecs(this.gv).get(name)?.args?.some((x) => x.name === 'panel'))) {
       const p = arg ?? Object.keys(this.S.module.panels ?? {})[0]
       if (p) n.panel = p
-      if (arg2) n.widget = arg2
+      if (arg2?.startsWith('#')) n.decor = arg2.slice(1)
+      else if (arg2) n.widget = arg2
     }
     g.nodes.push(n)
     this.picked = { kind: 'node', id }
@@ -622,7 +631,7 @@ class GraphWindow {
   #drawSide () {
     const side = this.root.querySelector('.wk-details')
     if (!side) return
-    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
     side.replaceChildren(...this.#sideRows(problems))
   }
 
