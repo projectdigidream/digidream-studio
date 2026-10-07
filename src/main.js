@@ -73,7 +73,18 @@ import { writePack, readPack } from './pack.js'
 const boot = document.getElementById('boot')
 const bootMsg = document.getElementById('bootmsg')
 const bootFill = document.getElementById('bootfill')
-const stage = (msg, frac) => { bootMsg.textContent = msg; bootFill.style.width = `${Math.round(frac * 100)}%` }
+// A stage: the line under the bar, and a step in the loading log (index.html).
+const bootLog = (line, kind) => globalThis.__bootLog?.(line, kind)
+let stageAt = performance.now()
+let stageName = null
+const stage = (msg, frac) => {
+  if (stageName) bootLog(`✓ ${stageName} (${Math.round(performance.now() - stageAt)} ms)`)
+  stageName = msg; stageAt = performance.now()
+  globalThis.__bootStage = msg
+  bootMsg.textContent = msg; bootFill.style.width = `${Math.round(frac * 100)}%`
+}
+/** A step inside a stage: logged, and remembered for the watchdog's "last step". */
+const bootStep = (line) => { globalThis.__bootStep = line; bootLog(`  ${line}`) }
 
 const fetchText = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${url}`); return r.text() }
 const fetchJson = async (url, fallback = null) => { const r = await fetch(url); if (!r.ok) return fallback; return r.json() }
@@ -106,6 +117,7 @@ const S = {
 }
 
 // --- boot ----------------------------------------------------------------------------
+bootLog(`studio ${STUDIO_VERSION} · ${hasShell() ? 'in the app' : 'in a browser'} · ${navigator.platform || 'unknown platform'} · ${location.origin}`)
 stage('loading the core', 0.05)
 S.core = await Core.load()
 stage('loading the map compiler', 0.2)
@@ -132,7 +144,9 @@ S.catalogue = [...S.kinds.values()].filter((k) => k.name).map((k) => k.name).sor
 S.servedSounds = await fetch('/sounds/bank.sfxproj').then((r) => (r.ok ? r.json() : null)).then(bankNames).catch(() => [])
 S.servedSprites = await fetch('/sprites/index.json').then((r) => (r.ok ? r.json() : {})).then((j) => Object.keys(j.sizes ?? {})).catch(() => [])
 stage('opening your work', 0.65)
+bootStep('opening the store (IndexedDB)')
 S.store = await Store.open()
+bootStep('the store is open')
 // Copies of a module to go back to (snapshots.js). Without them the studio
 // still works: a failure here is said, not fatal.
 S.snaps = await Snapshots.open().catch((e) => { console.warn('[studio] no snapshots:', e); return null })
@@ -148,8 +162,15 @@ S.snapshot = async (reason, { rec = S.rec, force = false } = {}) => {
     return snap
   } catch (e) { console.warn('[studio] snapshot failed:', e); return null }
 }
+bootStep(S.snaps ? 'snapshots are open' : 'no snapshots (the store has no room for them)')
 await seedFromShell()
-await openModule((await S.store.list())[0]?.id ?? null)
+{
+  const list = await S.store.list()
+  bootStep(`${list.length} module${list.length === 1 ? '' : 's'} in the store${list.length ? `: ${list.map((r) => r.id).join(', ')}` : ''}`)
+  bootStep(`opening ${list[0]?.id ?? 'a new module'}`)
+  await openModule(list[0]?.id ?? null)
+  bootStep(`opened ${S.module?.id}: ${Object.keys(S.docs ?? {}).length} map(s)`)
+}
 
 stage('the picture', 0.85)
 S.viewport = new Viewport(document.body)
@@ -330,7 +351,10 @@ S.shell.moduleName = S.module.name || S.module.id
  */
 // What emitModule writes into assets/ from the documents, and must not be read
 // back as if it were the module's own: the merged sound bank, the screens.
-const GENERATED = /^assets\/(sounds\/bank\.sfxproj|ui\/[^/]+\.json)$/
+// A function, not a const: seedFromShell runs it at boot, long before a
+// const this far down is initialised (a fresh store -- the desktop app's
+// first launch -- stopped the boot at "opening your work" on exactly that).
+function isGenerated (path) { return /^assets\/(sounds\/bank\.sfxproj|ui\/[^/]+\.json)$/.test(path) }
 
 function recordFromEntries (entries) {
   const dec = new TextDecoder()
@@ -342,7 +366,7 @@ function recordFromEntries (entries) {
   for (const e of entries) {
     const m = /^maps\/(.+)\.studio\.json$/.exec(e.path)
     if (m) docs[m[1]] = JSON.parse(dec.decode(e.bytes))
-    else if (e.path.startsWith('assets/') && !/(^|\/)(props\.txt|index\.json)$/.test(e.path) && !GENERATED.test(e.path)) assets[e.path.slice(7)] = new Blob([e.bytes])
+    else if (e.path.startsWith('assets/') && !/(^|\/)(props\.txt|index\.json)$/.test(e.path) && !isGenerated(e.path)) assets[e.path.slice(7)] = new Blob([e.bytes])
     // Sources (sound packs) are kept under their own path, as written.
     else if (e.path.startsWith('sources/')) assets[e.path] = new Blob([e.bytes])
   }
@@ -356,10 +380,13 @@ function recordFromEntries (entries) {
  */
 async function seedFromShell () {
   if (!hasShell()) return
+  bootStep('looking for the app\'s modules')
   const files = await shell.listFiles('modules')
   const ids = [...new Set(files.filter((f) => f.endsWith('/module.studio.json')).map((f) => f.split('/')[1]))]
+  bootStep(`the app has ${ids.length} studio module${ids.length === 1 ? '' : 's'}${ids.length ? `: ${ids.join(', ')}` : ''}`)
   for (const id of ids) {
     if (await S.store.load(id)) continue
+    bootStep(`bringing ${id} into the store`)
     const entries = []
     for (const f of files) {
       if (!f.startsWith(`modules/${id}/`)) continue
@@ -370,6 +397,7 @@ async function seedFromShell () {
     }
     const rec = recordFromEntries(entries)
     if (rec) await S.store.save(rec)
+    bootStep(rec ? `${id}: ${entries.length} file(s), ${Object.keys(rec.docs ?? {}).length} map(s)` : `${id}: nothing a studio can open`)
   }
 }
 
@@ -1224,6 +1252,7 @@ async function finishBoot () {
   }
   if (!S.router.current) await S.router.follow()
   addEventListener('hashchange', () => S.router.follow())
+  stage('ready', 1)
   boot.hidden = true
   // For the page test and for poking at a live session from the console.
   globalThis.__studio = S

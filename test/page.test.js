@@ -58,6 +58,10 @@ try {
 check(await page.evaluate(() => document.getElementById('boot')?.hidden === true), 'the studio boots')
 globalThis.__assetUrlSupported = await page.evaluate(async () => !!(await import('/src/render/layout.js')).UI_STYLES?.assetUrl).catch(() => false)
 check(errors.length === 0, `no page errors during boot (${errors.slice(0, 3).join(' | ')})`)
+// THE LOADING LOG: each step and its time, kept for "copy this" when one fails.
+const bootText = await page.evaluate(() => window.__bootText?.() ?? '')
+check(/studio \d+\.\d+\.\d+ · /.test(bootText) && /opening the store/.test(bootText) && /✓ opening your work \(\d+ ms\)/.test(bootText) && /opened \S+: \d+ map/.test(bootText),
+      `the loading screen logs its steps, with times (${bootText.split('\n').length} lines)`)
 
 // THE STUDIO OPENS ON THE MODULE: its home, with a rail of its sections; the
 // map editor is one of them, entered from a map.
