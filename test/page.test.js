@@ -1130,6 +1130,35 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(copy.base >= 1100 && copy.firstId === copy.base && copy.base2 > copy.base, `each copy gets its own prop id range (${copy.base}, ${copy.base2})`)
 }
 
+// THE STARTER TEMPLATE: a new module comes from the starter the studio shipped,
+// not from the store's 'starter' -- edited here, then deleted, and the new
+// module is the pristine one all the same. The template is never in the store.
+{
+  const made = await page.evaluate(async () => {
+    const S = window.__studio
+    const base = await S.store.load('starter')
+    base.module.about = 'TAMPERED'; base.module.props = []
+    await S.store.save(base)
+    const a = await S.newFromTemplate('fresh1', 'Fresh One')
+    await S.store.remove('starter')
+    const b = await S.newFromTemplate('fresh2', 'Fresh Two')
+    const ids = (await S.store.list()).map((r) => r.id)
+    const tpl = await S.templateRecord()
+    for (const id of ['fresh1', 'fresh2']) await S.store.remove(id)
+    const say = (r) => ({ id: r?.id, name: r?.module.name, about: r?.module.about, maps: Object.keys(r?.docs ?? {}), props: r?.module.props?.length,
+                          sheets: Object.keys(r?.module.sprites ?? {}), assets: Object.keys(r?.assets ?? {}).sort(), base: r?.module.propIdBase, firstId: r?.module.props?.[0]?.id })
+    return { a: say(a), b: say(b), tpl: say(tpl), ids }
+  })
+  const { a, b, tpl } = made
+  check(tpl.id === 'starter' && tpl.maps.includes('first') && tpl.props >= 1 && tpl.sheets.includes('SPIR') && tpl.assets.some((p) => p.endsWith('SPIR.png')) && tpl.assets.some((p) => p.endsWith('ROCKWALL1.png')),
+        `the template is the shipped starter: maps, props, sheet and textures (${JSON.stringify(tpl)})`)
+  check(a.id === 'fresh1' && a.name === 'Fresh One' && a.about === tpl.about && a.props === tpl.props && JSON.stringify(a.assets) === JSON.stringify(tpl.assets),
+        `an edited store starter does not reach a new module (${JSON.stringify(a)})`)
+  check(b.id === 'fresh2' && b.maps.includes('first') && b.props === tpl.props, `a deleted store starter does not either (${JSON.stringify(b)})`)
+  check(a.base >= 1100 && a.firstId === a.base, `a module from the template gets its own prop ids (${a.base})`)
+  check(!made.ids.includes('starter') && made.ids.includes('fresh1') && made.ids.includes('fresh2'), `the template is never in the store (${made.ids.join(', ')})`)
+}
+
 // SWITCHING MODULE: Home shows the module just opened -- its name and its
 // maps -- not the one before (the router does not move to the section already
 // showing, so opening a module redraws Home itself); from any other section

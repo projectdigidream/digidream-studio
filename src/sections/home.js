@@ -13,20 +13,23 @@ import { STUDIO_VERSION } from '../version.js'
 
 let S = null
 
-/** Make a module: a copy of the starter when the app has one, else a blank room. */
+/**
+ * Make a module: a copy of the starter template -- the starter as this studio
+ * version shipped it, which nothing can edit -- else a blank room.
+ */
 async function newModuleFlow () {
   const id = await ask('module id (letters, digits, dashes)', 'my-level')
   if (!id) return
   const clean = id.toLowerCase().replace(/[^a-z0-9_-]/g, '')
   if (!clean) return
   if (await S.store.load(clean)) { S.status(`a module called ${clean} already exists`, 'warn'); return }
-  const copied = await S.copyModule('starter', clean, id)
-  if (!copied) {
+  const made = await S.newFromTemplate(clean, id)
+  if (!made) {
     const rec = { id: clean, module: newModule(clean, id), docs: { first: S.starterDoc('first') }, assets: {} }
     await S.store.save(rec)
   }
   await S.openModule(clean)
-  S.status(copied ? `${clean}: a copy of the starter module (prop ids from ${copied.module.propIdBase})` : `${clean}: no starter module here, so a blank room`, 'ok')
+  S.status(made ? `${clean}: made from the starter template (prop ids from ${made.module.propIdBase})` : `${clean}: the starter template could not be read, so a blank room`, made ? 'ok' : 'warn')
 }
 
 /**

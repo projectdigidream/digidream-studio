@@ -401,9 +401,17 @@ async function seedFromShell () {
   }
 }
 
+/** The props of a copied record moved to an id range of their own (after every stored module's). */
+async function ownPropIds (rec) {
+  const bases = (await S.store.list()).filter((r) => r.id !== rec.id).map((r) => r.module?.propIdBase ?? 0)
+  const next = Math.max(999, ...bases) + 1 + 100 - ((Math.max(999, ...bases) + 1) % 100)
+  const shift = next - (rec.module.propIdBase ?? 1000)
+  rec.module.propIdBase = next
+  for (const p of rec.module.props ?? []) p.id += shift
+}
+
 /**
- * A new module as a COPY of another -- the starter, normally: its maps, its
- * monsters, its sheets and textures, under a new id. The copy's props get an
+ * A new module as a COPY of another, under a new id. The copy's props get an
  * id range of their own, because the shells load the bundled starter beside
  * the user's module on Play and the server refuses a colliding id.
  */
@@ -414,15 +422,44 @@ async function copyModule (baseId, id, name) {
   rec.id = id
   rec.module.id = id
   rec.module.name = name
-  const bases = (await S.store.list()).map((r) => r.module?.propIdBase ?? 0)
-  const next = Math.max(999, ...bases) + 1 + 100 - ((Math.max(999, ...bases) + 1) % 100)
-  const shift = next - (rec.module.propIdBase ?? 1000)
-  rec.module.propIdBase = next
-  for (const p of rec.module.props ?? []) p.id += shift
+  await ownPropIds(rec)
   await S.store.save(rec)
   return rec
 }
 S.copyModule = copyModule
+
+/**
+ * THE STARTER TEMPLATE: the starter module as this studio version shipped it,
+ * packed into its pages (src/templates/starter.zip, made by
+ * tools/make_template.mjs). A new module is a copy of it -- never of the
+ * store's 'starter', which is the user's to edit or delete. It is read, never
+ * listed, opened or saved as itself. Null when it cannot be read.
+ */
+const TEMPLATE_URL = new URL('./templates/starter.zip', import.meta.url)
+async function templateRecord () {
+  try {
+    const r = await fetch(TEMPLATE_URL)
+    if (!r.ok) throw new Error(`${r.status}`)
+    return recordFromEntries(await readPack(new Uint8Array(await r.arrayBuffer())))
+  } catch (e) {
+    console.warn('[studio] the starter template could not be read:', e?.message ?? e)
+    return null
+  }
+}
+S.templateRecord = templateRecord
+
+/** A new module from the starter template, saved under `id`. Null without the template. */
+async function newFromTemplate (id, name) {
+  const rec = await templateRecord()
+  if (!rec) return null
+  rec.id = id
+  rec.module.id = id
+  rec.module.name = name
+  await ownPropIds(rec)
+  await S.store.save(rec)
+  return rec
+}
+S.newFromTemplate = newFromTemplate
 
 /**
  * Open a module. Every section shows the module, so whatever was on screen
@@ -436,9 +473,14 @@ async function openModule (id, { show = true } = {}) {
   if (S.rec) await S.store.save(S.rec)
   let rec = id ? await S.store.load(id) : null
   if (!rec) {
-    const doc = starterDoc('first')
-    rec = { id: 'my-level', module: newModule('my-level', 'My Level'), docs: { first: doc }, assets: {} }
-    await S.store.save(rec)
+    // Nothing to open (an empty store, in a browser): a module made from the
+    // starter template, else a blank room.
+    bootStep('nothing stored: a module from the starter template')
+    rec = await newFromTemplate('my-level', 'My Level')
+    if (!rec) {
+      rec = { id: 'my-level', module: newModule('my-level', 'My Level'), docs: { first: starterDoc('first') }, assets: {} }
+      await S.store.save(rec)
+    }
   }
   S.rec = rec
   S.module = rec.module
