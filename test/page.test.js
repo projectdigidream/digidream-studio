@@ -62,6 +62,26 @@ check(errors.length === 0, `no page errors during boot (${errors.slice(0, 3).joi
 const bootText = await page.evaluate(() => window.__bootText?.() ?? '')
 check(/studio \d+\.\d+\.\d+ · /.test(bootText) && /opening the store/.test(bootText) && /✓ opening your work \(\d+ ms\)/.test(bootText) && /opened \S+: \d+ map/.test(bootText),
       `the loading screen logs its steps, with times (${bootText.split('\n').length} lines)`)
+// A FIRST BOOT (a fresh profile: an empty store) opens a module made from the
+// starter template -- its monster and sheet -- not a blank room. It once ran
+// before the template's address was initialised, and made the blank room.
+{
+  const first = await page.evaluate(() => ({ id: window.__studio.rec.id, props: window.__studio.module.props?.length ?? 0, sheets: Object.keys(window.__studio.module.sprites ?? {}), fromTemplate: /from the starter template/.test(window.__bootText?.() ?? '') }))
+  if (first.fromTemplate) check(first.id === 'my-level' && first.props >= 1 && first.sheets.includes('SPIR'), `a first boot opens a module made from the starter template (${JSON.stringify(first)})`)
+  else console.log('page: the store was not empty at boot -- the first-boot check is skipped')
+  // What every scenario below was written against: one room on its own, the
+  // module made fresh in place of the starter's copy.
+  await page.evaluate(async () => {
+    const S = window.__studio
+    const { newModule } = await import('/studio/src/module_emit.js')
+    const id = S.rec.id
+    await S.store.remove(id)
+    S.rec = null
+    await S.store.save({ id, module: newModule(id, 'My Level'), docs: { first: S.starterDoc('first') }, assets: {} })
+    await S.openModule(id)
+  })
+  await page.waitForFunction(() => window.__studio?.doc && Object.keys(window.__studio.docs ?? {}).length === 1, { timeout: 30000 })
+}
 
 // THE STUDIO OPENS ON THE MODULE: its home, with a rail of its sections; the
 // map editor is one of them, entered from a map.

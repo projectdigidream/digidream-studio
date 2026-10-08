@@ -1,0 +1,11 @@
+{
+  "plugins": [
+    "_echo",
+    "threesprite",
+    "sfx",
+    "qpainter",
+    "daw",
+    "packager",
+    "code"
+  ]
+}

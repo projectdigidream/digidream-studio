@@ -1,0 +1,14 @@
+{
+  "id": "daw",
+  "name": "DigidreamSynth",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "description": "The music editor: tracks, piano roll, the synth's own patches and mastering. Edits the module's music as projects; the suite bakes them into the tracks the game plays.",
+  "editors": [
+    { "id": "track", "entry": "app/tool/suite.html", "kinds": ["file:msproj"], "label": "DigidreamSynth", "priority": 10 }
+  ],
+  "bakers": [
+    { "id": "mstk", "entry": "bake.js", "version": "1", "kinds": ["file:msproj"] }
+  ]
+}

@@ -31,7 +31,12 @@ async function importTrack () {
   return name
 }
 
-function trackNames () { return [...S.trackUrls.keys()].sort() }
+/** Every track: baked ones, and projects (sources/music/*.msproj) that may not be baked yet. */
+function trackNames () {
+  const srcs = Object.keys(S.rec.assets ?? {}).filter((p) => /^sources\/music\/[^/]+\.msproj$/.test(p)).map((p) => p.slice(14, -7))
+  return [...new Set([...S.trackUrls.keys(), ...srcs])].sort()
+}
+const sourceOf = (t) => S.rec.assets?.[`sources/music/${t}.msproj`]
 
 /** Hear a track here, through the same synth the game uses. */
 async function listen (name) {
@@ -69,19 +74,33 @@ function showMusic () {
   const trackRows = tracks.map((t) => el('div', { class: 'st-trow', 'data-track': t }, [
     el('div', { class: 'st-trow-text' }, [
       el('div', { class: 'st-trow-name', text: t }),
-      el('div', { class: 'st-muted', text: `${(S.rec.assets[`music/${t}.mstk`].size / 1024).toFixed(0)} KB · in ${usedBy(t)} cue(s)` })
+      el('div', { class: 'st-muted', text: [
+        S.rec.assets[`music/${t}.mstk`] ? `${(S.rec.assets[`music/${t}.mstk`].size / 1024).toFixed(0)} KB` : 'not baked yet',
+        `in ${usedBy(t)} cue(s)`,
+        sourceOf(t) ? 'from its project' : null
+      ].filter(Boolean).join(' · ') })
     ]),
-    button(playing(t) ? '■' : '▶', () => (playing(t) ? stopListening() : listen(t))),
+    ...(sourceOf(t) ? S.editButtons?.('file:msproj', t) ?? [] : []),
+    sourceOf(t) ? button('bake now', async () => {
+      S.status(`baking ${t}…`, 'ok')
+      const r = await S.bakeSource('file:msproj', t)
+      if (!r.ok) { S.status(r.error, 'error'); return }
+      S.moduleChanged()
+      S.status(`${t} baked`, 'ok')
+      showMusic()
+    }) : null,
+    S.trackUrls.has(t) ? button(playing(t) ? '■' : '▶', () => (playing(t) ? stopListening() : listen(t))) : null,
     button('✕', async () => {
       const n = usedBy(t)
       if (!await confirmDialog(`delete track ${t}?${n ? ` ${n} cue(s) use it; they go too.` : ''}`)) return
       if (playing(t)) stopListening()
       delete S.rec.assets[`music/${t}.mstk`]
+      delete S.rec.assets[`sources/music/${t}.msproj`]
       URL.revokeObjectURL(S.trackUrls.get(t)); S.trackUrls.delete(t)
       for (const d of Object.values(S.docs)) for (const [cue, x] of Object.entries(d.music ?? {})) if (x === t) delete d.music[cue]
       S.commit(); S.moduleChanged(); showMusic()
     }, 'st-danger')
-  ]))
+  ].filter(Boolean)))
   S.ui.showSheet('Soundtrack', [
     el('div', { class: 'st-section-head', text: `♪ ${S.docName}: cues` }),
     ...cueRows,
@@ -97,6 +116,13 @@ function showMusic () {
     el('div', { class: 'st-section-head', text: '♫ tracks in the module' }),
     ...trackRows,
     trackRows.length ? null : muted('No tracks yet. Bake one in the synth project (midisynth/tool/daw.html, "Bake .mstk") and import it here.'),
+    S.plugins?.hasPluginEditor('file:msproj') ? button('+ new track', async () => {
+      const raw = await ask('the new track\'s name', 'theme')
+      const n = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_.-]/g, '').slice(0, 40)
+      if (!n) return
+      if (trackNames().includes(n)) { S.status(`there is a track called ${n} already`, 'warn'); return }
+      S.editInPlugin('file:msproj', n)
+    }) : null,
     button('+ import track (.mstk)', async () => {
       const n = await importTrack()
       if (!n) return

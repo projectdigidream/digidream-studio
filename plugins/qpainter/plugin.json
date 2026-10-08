@@ -1,0 +1,11 @@
+{
+  "id": "qpainter",
+  "name": "qPainter",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "description": "Pixel-art and painted textures with a live 3D preview. Edits the module's textures as qPainter projects; the suite bakes them into the pictures the game loads.",
+  "editors": [
+    { "id": "texture", "entry": "app/suite.html", "kinds": ["file:texture"], "label": "qPainter", "priority": 10 }
+  ]
+}

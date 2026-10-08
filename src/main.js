@@ -54,7 +54,7 @@ import { TextureCache } from './textures.js'
 import { SpriteLibrary } from './sprites.js'
 import { Gestures } from './gestures.js'
 import { History } from './history.js'
-import { Store, debounce } from './store.js'
+import { Store, debounce, importSuite } from './store.js'
 import { Snapshots, EVERY_MS, ON_OPEN_MS } from './snapshots.js'
 import { STUDIO_VERSION } from './version.js'
 import { parseAnimations } from '/src/render/animtex.js'
@@ -70,6 +70,14 @@ import { parseVfx } from '/src/render/vfx.js'
 import { vfxChoices } from './vfxlib.js'
 import * as tools from './tools.js'
 import { writePack, readPack } from './pack.js'
+import { BASE, RUNTIME, WASM, PLUGINS } from './base.js'
+import { PluginRegistry, loadBundled } from './plugins/registry.js'
+import { makeKinds, SUITE_KINDS } from './plugins/kinds.js'
+import { installEditors, installPluginSections } from './plugins/frame.js'
+import { install as installPluginsPage } from './sections/plugins.js'
+import { install as installSprites } from './sections/sprites.js'
+import { installBaking } from './bake/apply.js'
+import { ensureServiceWorker, loadInstalled } from './plugins/install.js'
 
 const boot = document.getElementById('boot')
 const bootMsg = document.getElementById('bootmsg')
@@ -122,14 +130,37 @@ bootLog(`studio ${STUDIO_VERSION} · ${hasShell() ? 'in the app' : 'in a browser
 stage('loading the core', 0.05)
 S.core = await Core.load()
 stage('loading the map compiler', 0.2)
-const mapcBinary = await loadMapcBinary('/studio/wasm/dist/mapc.wasm')
+const mapcBinary = await loadMapcBinary(`${WASM}mapc.wasm`)
 S.bake = (opts) => bakeWith({ ...opts, wasmBinary: mapcBinary })
 stage('loading the runtime', 0.35)
-for (const name of RUNTIME_SCRIPTS) S.runtime[name] = await fetchText(`/studio/runtime/${name}`)
-S.vocab = new Vocab(await fetchJson('/studio/runtime/trigger_vocab.json'), await fetchJson('/studio/runtime/mob_vocab.json'),
-                    await fetchJson('/studio/runtime/weapon_vocab.json').catch(() => null))
+for (const name of RUNTIME_SCRIPTS) S.runtime[name] = await fetchText(`${RUNTIME}${name}`)
+S.vocab = new Vocab(await fetchJson(`${RUNTIME}trigger_vocab.json`), await fetchJson(`${RUNTIME}mob_vocab.json`),
+                    await fetchJson(`${RUNTIME}weapon_vocab.json`).catch(() => null))
 // The graph nodes' types and pins (docs/GRAPHS.md), generated from graph_vocab.lua.
-S.vocab.graph = await fetchJson('/studio/runtime/graph_vocab.json').catch(() => null)
+S.vocab.graph = await fetchJson(`${RUNTIME}graph_vocab.json`).catch(() => null)
+// The plugins bundled with this build (plugins/index.json); installed ones join
+// them later. Which editor a kind opens in is remembered per device.
+stage('loading plugins', 0.45)
+const PREF = 'dnp.studio.'
+S.plugins = new PluginRegistry({
+  suiteVersion: STUDIO_VERSION,
+  knownKinds: SUITE_KINDS,
+  prefs: { get: (k) => { try { return localStorage.getItem(PREF + k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(PREF + k, v) } catch {} } }
+})
+bootStep(`${await loadBundled(S.plugins, { base: PLUGINS, fetchJson: (u) => fetchJson(u) })} bundled plugin(s)`)
+// Plugins installed later (plugins/install.js) are served by the studio's
+// service worker; where there is none, there are only the bundled ones.
+S.canInstall = await ensureServiceWorker(BASE)
+if (S.canInstall) bootStep(`${await loadInstalled(S.plugins, { base: BASE })} installed plugin(s)`)
+// Switched off on this device (the Plugins page).
+try { for (const id of JSON.parse(localStorage.getItem('dnp.studio.disabled') ?? '[]')) S.plugins.setEnabled(id, false) } catch {}
+S.savePluginState = () => { try { localStorage.setItem('dnp.studio.disabled', JSON.stringify(S.plugins.list().filter((p) => !p.enabled).map((p) => p.manifest.id))) } catch {} }
+for (const r of S.plugins.refused) console.warn('[studio] plugin refused:', r.id, r.errors.join('; '))
+// Hidden plugins (the test editor, examples) only when asked for, per device.
+S.plugins.showHidden = S.devPlugins = S.plugins.prefs.get('devPlugins') === '1'
+S.docKinds = makeKinds(S)
+// Sources baked into what the game loads (bake/): on an editor's save, and before Play and Export.
+installBaking(S, { parseAtlas })
 stage('reading the catalogue', 0.5)
 const texIndex = await fetchJson('/textures/index.json', { sizes: {} })
 S.textureSizes = texIndex.sizes ?? {}
@@ -147,6 +178,12 @@ S.servedSprites = await fetch('/sprites/index.json').then((r) => (r.ok ? r.json(
 stage('opening your work', 0.65)
 bootStep('opening the store (IndexedDB)')
 S.store = await Store.open()
+// Modules made in the suite (the studio's fork before 0.2.0), brought over once.
+try {
+  const KEY = 'dnp.studio.suiteImported'
+  const got = await importSuite(S.store, { done: () => { try { return !!localStorage.getItem(KEY) } catch { return false } }, mark: () => { try { localStorage.setItem(KEY, '1') } catch {} } })
+  if (got.length) bootStep(`brought over from the suite: ${got.join(', ')}`)
+} catch (e) { console.warn('[studio] the suite\'s modules could not be brought over:', e?.message ?? e) }
 bootStep('the store is open')
 // Copies of a module to go back to (snapshots.js). Without them the studio
 // still works: a failure here is said, not fatal.
@@ -309,6 +346,8 @@ pageSection('controls', 'Controls', '🎮', /^Controls$/, () => S.showControls()
 S.showScreensTouch = async () => { await S.go('screens'); if (S.window) { S.window.tab = 'touch'; S.window.picked = null; S.window.render() } }
 windowSection('weapons', 'Weapons', '🔫', (name) => openArsenal(S, name))
 pageSection('props', 'Props', '📦', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
+installSprites(S)
+pageSection('sprites', 'Sprites', '🎞', /^Sprites$/, (n) => S.showSprites(n))
 pageSection('particles', 'Particles', '✨', /^Particles/, (id) => S.showVfx(id ?? undefined))
 pageSection('textures', 'Textures', '🧱', /^Textures$/, (n) => S.showTextures(n))
 pageSection('music', 'Music', '♪', /^Soundtrack/, () => S.showMusic())
@@ -323,6 +362,46 @@ windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false
 pageSection('settings', 'Settings', '⚙', /^Module settings$/, () => S.showSettings())
 pageSection('snapshots', 'Snapshots', '🕘', /^Snapshots$/, () => S.showSnapshots(), { rail: false })
 pageSection('playlog', 'Play log', '📋', /^Play log$/, () => showPlayLog(S), { rail: false })
+// THE PLUGINS (docs/PLUGINS.md). The studio's own pages that already edit a kind
+// are its built-in editors: a plugin is offered beside them, never instead.
+S.plugins.addBuiltin({ key: 'scripts', label: 'the Scripts page', kinds: ['record:script'], open: (k) => S.go('scripts', k) })
+S.plugins.addBuiltin({ key: 'textures', label: 'the Textures page', kinds: ['file:texture'], open: (k) => S.go('textures', k) })
+S.plugins.addBuiltin({ key: 'sounds', label: 'the Sounds page', kinds: ['file:sfxproj'], open: () => S.go('sounds') })
+S.plugins.addBuiltin({ key: 'monsters', label: 'the Monsters workshop', kinds: ['record:mob'], open: (k) => S.go('monsters', k) })
+installEditors(S)
+installPluginsPage(S)
+pageSection('plugins', 'Plugins', '🧩', /^Plugins$/, () => S.showPlugins(), { rail: false })
+installPluginSections(S)
+
+/**
+ * What a plugin may ask about the module (an editor's `query`): read-only,
+ * and nothing the author could not see on a page. docs/PLUGINS.md, Queries.
+ */
+S.pluginQuery = async (what, arg) => {
+  switch (what) {
+    case 'module': return { id: S.module.id, name: S.module.name ?? S.module.id, version: STUDIO_VERSION }
+    case 'kinds': return Object.values(S.docKinds).map((k) => ({ id: k.id, label: k.label }))
+    case 'list': return S.docKinds[arg]?.list() ?? []
+    case 'read': {
+      const k = S.docKinds[arg?.kind]
+      if (!k || !k.has(arg.key)) throw new Error(`no ${arg?.kind} called ${arg?.key}`)
+      return (await k.read(arg.key)).payload
+    }
+    case 'textures': return Object.entries(S.module.textures ?? {}).map(([n, t]) => ({ name: n, w: t.w, h: t.h }))
+    case 'sprites': return Object.keys(S.module.sprites ?? {})
+    case 'sounds': return S.moduleSounds ?? []
+    case 'palette': {
+      const b = S.rec.assets?.['sources/palette.json']
+      return b ? JSON.parse(await b.text()) : null
+    }
+    case 'modulePack': {
+      const r = await emitAll()
+      if (!r) throw new Error('the module does not bake (the studio says why)')
+      return writePack(r.files.map((f) => ({ path: `${S.module.id}/${f.path}`, bytes: f.bytes })))
+    }
+    default: throw new Error(`no such question: ${what}`)
+  }
+}
 new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
   dragStart: (i) => tools.onDragStart(S, i),
@@ -436,10 +515,12 @@ S.copyModule = copyModule
  * store's 'starter', which is the user's to edit or delete. It is read, never
  * listed, opened or saved as itself. Null when it cannot be read.
  */
-const TEMPLATE_URL = new URL('./templates/starter.zip', import.meta.url)
+// Its address is worked out when asked, not held in a const: the boot opens a
+// module from it on an empty store, long before a const this far down is
+// initialised (a first launch made a blank room on exactly that).
 async function templateRecord () {
   try {
-    const r = await fetch(TEMPLATE_URL)
+    const r = await fetch(new URL('./templates/starter.zip', import.meta.url))
     if (!r.ok) throw new Error(`${r.status}`)
     return recordFromEntries(await readPack(new Uint8Array(await r.arrayBuffer())))
   } catch (e) {
@@ -468,6 +549,46 @@ S.newFromTemplate = newFromTemplate
  * which go on to a section of their own), it lands on the new module's Home,
  * drawn afresh -- the router does not move to the section already showing.
  */
+/**
+ * The blob URLs, sheets, packs and fonts made from a record's assets, made
+ * again: a module opened, or an undo that put back different assets (an
+ * editor's save is one undo step, pictures included).
+ */
+async function rebuildAssetCaches (rec) {
+  for (const [name, url] of S.imageUrls) { URL.revokeObjectURL(url); S.textures?.forget(name) }
+  S.imageUrls.clear()
+  for (const src of S.sheets.values()) URL.revokeObjectURL(src.imageUrl)
+  S.sheets.clear()
+  S.sprites?.forgetAll()
+  for (const url of S.spriteUrls.values()) URL.revokeObjectURL(url)
+  S.spriteUrls.clear()
+  S.music?.stop()
+  for (const url of S.trackUrls.values()) URL.revokeObjectURL(url)
+  S.trackUrls.clear()
+  S.moduleSounds = []
+  // The module's sound packs, read and merged (sections/sounds.js); at boot
+  // the section is installed after the first module opens and loads them then.
+  await S.loadPacks?.()
+  // The module's own fonts, so the Style section's samples and previews show them.
+  await S.loadStyleFonts?.()
+  for (const [path, blob] of Object.entries(rec.assets ?? {})) {
+    if (path.startsWith('textures/') && path.endsWith('.png')) S.imageUrls.set(path.slice(9, -4), URL.createObjectURL(blob))
+    if (path.startsWith('sprites/') && path.endsWith('.png')) S.spriteUrls.set(path.slice(8, -4), URL.createObjectURL(blob))
+    if (path.startsWith('music/') && path.endsWith('.mstk')) S.trackUrls.set(path.slice(6, -5), URL.createObjectURL(blob))
+  }
+  // The module's sheets: manifest parsed by the client's own parser, picture
+  // as a blob URL, so the viewport draws what the game will.
+  for (const [path, blob] of Object.entries(rec.assets ?? {})) {
+    const m = /^sprites\/([^/]+)\.json$/.exec(path)
+    if (!m) continue
+    try {
+      const json = JSON.parse(await blob.text())
+      const png = rec.assets[`sprites/${json.image}`]
+      if (png) S.sheets.set(m[1], { atlas: parseAtlas(json, m[1]), imageUrl: URL.createObjectURL(png) })
+    } catch (e) { console.warn('[studio] sheet', path, e.message) }
+  }
+}
+
 async function openModule (id, { show = true } = {}) {
   // The module being left is saved first: saving waits a moment after the
   // last change, and that save would otherwise write the NEW module.
@@ -501,41 +622,10 @@ async function openModule (id, { show = true } = {}) {
   // A snapshot on opening, unless one is recent: the state a session began from.
   S.lastSnapAt = (await S.snaps?.latestAt(rec.id).catch(() => 0)) ?? 0
   if (Date.now() - S.lastSnapAt > ON_OPEN_MS) await S.snapshot('opened')
-  S.moduleHistory = new History({ module: S.module, docs: S.docs })
+  S.moduleHistory = new History({ module: S.module, docs: S.docs, assets: rec.assets ?? {} })
   S.shell?.setHistory(false, false)
   if (S.shell) { S.shell.moduleName = S.module.name || S.module.id; S.shell.drawRail() }
-  for (const [name, url] of S.imageUrls) { URL.revokeObjectURL(url); S.textures?.forget(name) }
-  S.imageUrls.clear()
-  for (const src of S.sheets.values()) URL.revokeObjectURL(src.imageUrl)
-  S.sheets.clear()
-  S.sprites?.forgetAll()
-  for (const url of S.spriteUrls.values()) URL.revokeObjectURL(url)
-  S.spriteUrls.clear()
-  S.music?.stop()
-  for (const url of S.trackUrls.values()) URL.revokeObjectURL(url)
-  S.trackUrls.clear()
-  S.moduleSounds = []
-  // The module's sound packs, read and merged (sections/sounds.js); at boot
-  // the section is installed after the first module opens and loads them then.
-  await S.loadPacks?.()
-  // The module's own fonts, so the Style section's samples and previews show them.
-  await S.loadStyleFonts?.()
-  for (const [path, blob] of Object.entries(rec.assets ?? {})) {
-    if (path.startsWith('textures/') && path.endsWith('.png')) S.imageUrls.set(path.slice(9, -4), URL.createObjectURL(blob))
-    if (path.startsWith('sprites/') && path.endsWith('.png')) S.spriteUrls.set(path.slice(8, -4), URL.createObjectURL(blob))
-    if (path.startsWith('music/') && path.endsWith('.mstk')) S.trackUrls.set(path.slice(6, -5), URL.createObjectURL(blob))
-  }
-  // The module's sheets: manifest parsed by the client's own parser, picture
-  // as a blob URL, so the viewport draws what the game will.
-  for (const [path, blob] of Object.entries(rec.assets ?? {})) {
-    const m = /^sprites\/([^/]+)\.json$/.exec(path)
-    if (!m) continue
-    try {
-      const json = JSON.parse(await blob.text())
-      const png = rec.assets[`sprites/${json.image}`]
-      if (png) S.sheets.set(m[1], { atlas: parseAtlas(json, m[1]), imageUrl: URL.createObjectURL(png) })
-    } catch (e) { console.warn('[studio] sheet', path, e.message) }
-  }
+  await rebuildAssetCaches(rec)
   await openDoc(Object.keys(S.docs)[0])
   if (show && S.router?.current) {
     if (S.router.current.id === 'home') await S.router.remount()
@@ -676,7 +766,7 @@ S.moduleChanged = () => {
   save()
   previewNow()
   badgesSoon()
-  S.moduleHistory?.commit({ module: S.module, docs: S.docs })
+  S.moduleHistory?.commit({ module: S.module, docs: S.docs, assets: S.rec.assets ?? {} })
   S.shell?.setHistory(S.moduleHistory?.canUndo, S.moduleHistory?.canRedo)
 }
 
@@ -686,13 +776,15 @@ S.moduleChanged = () => {
  * surface that named it -- and restoring one without the other would leave a
  * map naming something the module no longer has.
  */
-function restoreModule (snap) {
+async function restoreModule (snap) {
   if (!snap) return
   const m = snap.module
   S.module = m
   S.rec.module = m
   S.docs = snap.docs
   S.rec.docs = snap.docs
+  // The pictures, packs and sources an edit replaced come back with it.
+  if (snap.assets) { S.rec.assets = snap.assets; await rebuildAssetCaches(S.rec) }
   if (!S.docs[S.docName]) S.docName = Object.keys(S.docs)[0]
   S.doc = S.docs[S.docName]
   S.history.commit(S.doc)
@@ -1098,6 +1190,11 @@ S.playDebug = () => { try { return localStorage.getItem(PLAY_DEBUG_KEY) ?? 'modu
 S.setPlayDebug = (v) => { try { localStorage.setItem(PLAY_DEBUG_KEY, v) } catch {} }
 
 async function emitAll ({ forPlay = false } = {}) {
+  // Every source baked first: what the module keeps is the sources, and what
+  // Play and Export write must be made from them as they are now.
+  const bk = await S.bakeAll()
+  if (!bk.ok) { S.status(bk.errors.join('\n'), 'error'); return null }
+  if (bk.baked) S.moduleChanged()
   const problems = validate(S.doc)
   if (problems.length) { S.status(problems.map((p) => (p.sector ? `${p.sector}: ` : '') + p.msg).join('\n'), 'error'); return null }
   // A graph the runtime would refuse does not load at all, so it is said here

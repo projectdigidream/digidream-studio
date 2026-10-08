@@ -1,0 +1,11 @@
+{
+  "id": "packager",
+  "name": "Packager",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "description": "The module as a game: an app for Android, Windows, macOS or Linux, built in the page from prebuilt engine kits.",
+  "sections": [
+    { "id": "package", "entry": "app/packager/suite.html", "label": "Package", "icon": "📦" }
+  ]
+}

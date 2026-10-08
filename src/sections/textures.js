@@ -183,7 +183,17 @@ function showTextures (open = null) {
     return t
   }
   const body = [
-    el('div', { class: 'st-row' }, [button('+ import texture (PNG)', () => importTexture())]),
+    el('div', { class: 'st-row' }, [
+      // A texture painted from nothing, in the texture editor when the studio has one (docs/PLUGINS.md).
+      ...(S.plugins?.hasPluginEditor('file:texture') ? [button('+ new texture', async () => {
+        const raw = await ask('the new texture\'s name (A-Z, 0-9, _; up to 24)', 'NEWTEX')
+        const n = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
+        if (!n) return
+        if (S.module.textures?.[n] || S.textureNames.includes(n)) { S.status(`${n} is taken`, 'warn'); return }
+        S.editInPlugin('file:texture', n)
+      })] : []),
+      button('+ import texture (PNG)', () => importTexture())
+    ]),
     el('div', { class: 'st-section-head', text: `🧱 the module's own (${own.length})` }),
     own.length ? el('div', { class: 'st-grid' }, own.map((n) => tile(n, true))) : muted('None yet. A PNG imported here is the module\'s, and ships in its pack.')
   ]
@@ -210,6 +220,7 @@ function showTextures (open = null) {
       ]),
       ...sheetProblems(open, meta.sheet, meta.w, meta.h).map((p) => el('div', { class: 'st-danger', text: p })),
       el('div', { class: 'st-row' }, [
+        ...(S.editButtons?.('file:texture', open) ?? []),
         button('rename', async () => {
           const raw = await ask('new name (A-Z, 0-9, _; up to 24)', open)
           const n = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)

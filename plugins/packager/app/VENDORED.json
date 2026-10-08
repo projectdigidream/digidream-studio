@@ -1,0 +1,10 @@
+{
+ "copy": [
+  "packager/index.html",
+  "packager/src",
+  "packager/VERSION"
+ ],
+ "base": "",
+ "tree": "15b70ff1f199e9ec70155e96d209fbfffdb3173e44b5bb1f0ba95441bd6867f9",
+ "files": 25
+}

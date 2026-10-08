@@ -1,0 +1,169 @@
+//
+// The plugin system without a browser: what a plugin.json may say, which
+// editor opens what, the protocol both ends speak, and undo that brings back
+// the module's files along with its documents (docs/PLUGINS.md).
+//
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { validateManifest, satisfies, compareVersions, safeEntry, PROTOCOL } from '../src/plugins/manifest.js'
+import { PluginRegistry, loadBundled } from '../src/plugins/registry.js'
+import { Port, handshake, sameBytes } from '../src/plugins/protocol.js'
+import { serveEditor } from '../src/plugins/sdk.js'
+import { SUITE_KINDS } from '../src/plugins/kinds.js'
+import { editArg, parseEditArg } from '../src/plugins/frame.js'
+import { History } from '../src/history.js'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+let checks = 0
+let fails = 0
+const check = (ok, label) => {
+  checks++
+  if (!ok) { fails++; console.log(`  FAIL ${label}`) }
+}
+
+// --- versions and paths -------------------------------------------------------------
+check(compareVersions('1.2.10', '1.2.9') > 0 && compareVersions('1.0.0', '1.0.0') === 0 && compareVersions('0.9.9', '1.0.0') < 0, 'versions compare numerically, not as text')
+check(satisfies('0.1.0', '>=0.1.0') && !satisfies('0.0.9', '>=0.1.0') && satisfies('1.4.0', '^1.2.0') && !satisfies('2.0.0', '^1.2.0') && satisfies('3.0.0', '*'), 'the ranges a plugin may ask for')
+check(!satisfies('1.0.0', '~1.0.0'), 'a range it cannot read is not satisfied (refused, not guessed)')
+check(safeEntry('host.html') && safeEntry('dist/index.html') && !safeEntry('../x.html') && !safeEntry('/abs.html') && !safeEntry('https://evil/x.js') && !safeEntry('a//b'), 'an entry stays inside the plugin')
+
+// --- manifests --------------------------------------------------------------------------
+const good = { id: 'sprite-ed', name: 'Sprites', version: '1.0.0', protocol: 1, suite: '>=0.1.0', editors: [{ entry: 'host.html', kinds: ['file:tsprite'] }] }
+const v = validateManifest(good, { suiteVersion: '0.1.0', knownKinds: SUITE_KINDS })
+check(v.ok && v.plugin.editors[0].id === 'editor0' && v.plugin.editors[0].priority === 0, 'a minimal plugin is accepted, with defaults filled in')
+const errs = (m, o = {}) => validateManifest(m, { suiteVersion: '0.1.0', knownKinds: SUITE_KINDS, ...o }).errors.join(' | ')
+check(/protocol 2/.test(errs({ ...good, protocol: 2 })), 'a plugin speaking a newer protocol is refused, saying so')
+check(/wants (suite|studio) >=9.0.0/.test(errs({ ...good, suite: '>=9.0.0' })), 'a plugin for a newer studio is refused, saying so')
+check(/neither the studio's nor declared/.test(errs({ ...good, editors: [{ entry: 'h.html', kinds: ['file:psd'] }] })), 'an editor for a kind nobody declared is refused')
+check(validateManifest({ ...good, kinds: [{ id: 'file:psd' }], editors: [{ entry: 'h.html', kinds: ['file:psd'] }] }, { suiteVersion: '0.1.0', knownKinds: SUITE_KINDS }).ok, 'a plugin may declare a kind of its own and edit it')
+check(/relative path/.test(errs({ ...good, editors: [{ entry: '../../studio/src/main.js', kinds: ['file:tsprite'] }] })), 'an entry outside the plugin is refused')
+check(/no editors, bakers or sections/.test(errs({ ...good, editors: [] })), 'a plugin that brings nothing is refused')
+check(/version/.test(errs({ ...good, bakers: [{ entry: 'b.js', kinds: ['file:tsprite'] }] })), 'a baker without a version is refused (the version keys the bake cache)')
+check(/twice/.test(errs({ ...good, editors: [{ id: 'a', entry: 'a.html', kinds: ['file:tsprite'] }, { id: 'a', entry: 'b.html', kinds: ['file:tsprite'] }] })), 'two editors with one id are refused')
+check(/lowercase/.test(errs({ ...good, id: 'Bad Id' })), 'an id is lowercase letters, digits, _ and -')
+
+// --- the registry -------------------------------------------------------------------------
+const store = new Map()
+const prefs = { get: (k) => store.get(k) ?? null, set: (k, val) => store.set(k, val) }
+const reg = new PluginRegistry({ suiteVersion: '0.1.0', knownKinds: SUITE_KINDS, prefs })
+reg.addBuiltin({ key: 'scripts', label: 'Scripts page', kinds: ['record:script'], open: () => 'builtin' })
+check(reg.add({ ...good, id: 'code', editors: [{ id: 'lua', entry: 'i.html', kinds: ['record:script'], priority: 5 }] }, { baseUrl: '/p/code/' }).ok, 'a plugin is added')
+reg.add({ ...good, id: 'other', editors: [{ id: 'x', entry: 'x.html', kinds: ['record:script'], priority: 9 }] }, { baseUrl: '/p/other/' })
+check(reg.editorsFor('record:script').map((e) => e.key).join() === 'builtin/scripts,other/x,code/lua', 'the studio\'s own editor first, then plugins by priority')
+reg.setDefaultEditor('record:script', 'code/lua')
+check(reg.editorsFor('record:script')[0].key === 'code/lua', 'the editor chosen for a kind comes first after that')
+check(reg.editor('code/lua').url === '/p/code/i.html' && reg.editor('builtin/scripts').builtin, 'an editor by its key, with the URL it is served at')
+reg.setEnabled('code', false)
+check(!reg.editor('code/lua') && reg.editorsFor('record:script').length === 2, 'a switched-off plugin edits nothing')
+reg.setEnabled('code', true)
+check(!reg.add({ ...good, id: 'code', version: '0.9.0', editors: [{ entry: 'i.html', kinds: ['record:script'] }] }, { baseUrl: '/i/code/', source: 'installed' }).ok, 'an older copy of a plugin already here is not taken')
+check(reg.add({ ...good, id: 'code', version: '2.0.0', editors: [{ id: 'lua', entry: 'i.html', kinds: ['record:script'] }] }, { baseUrl: '/i/code/', source: 'installed' }).ok && reg.editor('code/lua').url === '/i/code/i.html', 'a newer one replaces it (installed over bundled)')
+reg.add({ ...good, id: 'hid', hidden: true, editors: [{ id: 'h', entry: 'h.html', kinds: ['record:mob'] }] }, { baseUrl: '/p/hid/' })
+check(!reg.hasPluginEditor('record:mob') && !reg.editor('hid/h'), 'a hidden plugin (a test editor) is not offered')
+reg.showHidden = true
+check(reg.hasPluginEditor('record:mob') && reg.editor('hid/h'), '...unless asked for')
+reg.add({ ...good, id: 'pk', editors: [], sections: [{ id: 'package', entry: 'index.html', label: 'Package' }], bakers: [{ id: 't', entry: 'bake.js', version: '3', kinds: ['file:tsprite'] }] }, { baseUrl: '/p/pk/' })
+check(reg.sections().some((s) => s.section.id === 'package' && s.url === '/p/pk/index.html') && reg.bakersFor('file:tsprite')[0].baker.version === '3', 'sections and bakers are listed with their URLs')
+
+// The bundled index, read the way the studio reads it.
+const bundled = new PluginRegistry({ suiteVersion: JSON.parse(JSON.stringify(readFileSync(join(HERE, '..', 'VERSION'), 'utf8').trim())), knownKinds: SUITE_KINDS })
+const fetchJson = async (u) => JSON.parse(readFileSync(join(HERE, '..', u.replace(/^\/studio\//, '')), 'utf8'))
+const n = await loadBundled(bundled, { base: '/studio/plugins/', fetchJson })
+check(n >= 1 && bundled.plugins.has('_echo') && bundled.refused.length === 0, `every bundled plugin loads (${n}, refused: ${bundled.refused.map((r) => r.id + ': ' + r.errors).join('; ')})`)
+check(await loadBundled(new PluginRegistry(), { base: '/none/', fetchJson: async () => { throw new Error('404') } }) === 0, 'no index is no plugins, not an error')
+
+// --- the route ---------------------------------------------------------------------------------
+check(JSON.stringify(parseEditArg(editArg('code/lua', 'record:script', 'boss.lua'))) === '{"editorKey":"code/lua","kind":"record:script","key":"boss.lua"}', 'an edit route names the editor, the kind and the document')
+check(parseEditArg('nope') === null, 'anything else is no edit route')
+
+// --- the protocol, both ends --------------------------------------------------------------------
+{
+  const ch = new MessageChannel()
+  const host = new Port(ch.port1)
+  let doc = ''
+  const said = []
+  host.on('*', (m) => said.push(m.t))
+  const ready = new Promise((resolve) => host.on('ready', resolve))
+  const api = serveEditor(ch.port2, {
+    onInit: ({ payload }) => { doc = payload },
+    onSave: () => doc + ' edited'
+  })
+  const r = await ready
+  check(r.v === PROTOCOL && r.proto === PROTOCOL, 'the editor says ready, with the protocol it speaks')
+  host.send('init', { kind: 'record:script', key: 'a.lua', name: 'a.lua', payload: 'print(1)' })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check(doc === 'print(1)' && api.key === 'a.lua', 'init hands the editor its document')
+  const c = await host.request('request-save')
+  check(c.t === 'content' && c.payload === 'print(1) edited', 'request-save is answered with the document')
+  api.dirty(true)
+  api.edit('typed')
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check(said.includes('dirty') && said.includes('edit'), 'the editor tells the studio it changed')
+  host.on('query', (m) => host.send('query-result', { reqId: m.reqId, result: m.what === 'sounds' ? ['door'] : null }))
+  check(JSON.stringify(await api.query('sounds')) === '["door"]', 'the editor can ask the studio something, and is answered')
+  const bytes = new Uint8Array([1, 2, 3])
+  const api2Ch = new MessageChannel()
+  const host2 = new Port(api2Ch.port1)
+  const ready2 = new Promise((resolve) => host2.on('ready', resolve))
+  let got = null
+  serveEditor(api2Ch.port2, { onInit: ({ payload }) => { got = payload }, onSave: () => { throw new Error('the editor broke') } })
+  await ready2
+  host2.send('init', { payload: bytes })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check(got instanceof Uint8Array && sameBytes(got, bytes) && bytes.length === 3, 'bytes arrive as bytes, and the sender keeps its own copy')
+  const failed = await host2.request('request-save')
+  check(failed.error === 'the editor broke', 'an editor that fails to save says why, instead of handing back nothing')
+  host.close(); host2.close()
+}
+
+// The handshake: offers repeat until a ready comes back on one of them.
+{
+  let offers = 0
+  const target = {
+    postMessage (msg, origin, ports) {
+      offers++
+      if (offers === 3) serveEditor(ports[0], {})       // the page started listening late
+    }
+  }
+  const hs = handshake(target, { origin: 'x', every: 10, timeout: 2000 })
+  const { ready } = await hs.done
+  check(ready.t === 'ready' && offers >= 3, `an editor that starts late still gets a channel (offered ${offers} times)`)
+  const silent = handshake({ postMessage () {} }, { origin: 'x', every: 10, timeout: 60 })
+  let refused = null
+  try { await silent.done } catch (e) { refused = e.message }
+  check(refused === 'the editor did not start', 'an editor that never answers is given up on, saying so')
+}
+
+// --- every plugin's copy of the SDK is the studio's ---------------------------------------------
+{
+  const { readdirSync, existsSync } = await import('node:fs')
+  const sdk = readFileSync(join(HERE, '..', 'src', 'plugins', 'sdk.js'), 'utf8')
+  for (const id of readdirSync(join(HERE, '..', 'plugins'))) {
+    const copy = join(HERE, '..', 'plugins', id, 'suite-sdk.js')
+    if (existsSync(copy)) check(readFileSync(copy, 'utf8') === sdk, `plugins/${id}/suite-sdk.js is the suite's sdk.js (vendor_plugins.mjs copies it; copy it again)`)
+  }
+}
+
+// --- the Code plugin's block check ------------------------------------------------------------
+{
+  const { check: lua } = await import('../plugins/code/code.js')
+  check(lua('function f()\n  if x then print(1) end\nend\nfor i = 1, 3 do end\nrepeat until true\n').length === 0, 'Code: well-formed Lua has no problems')
+  check(lua('function f()\n  if x then\nend\n')[0]?.msg === '"function" is never closed', 'Code: a block left open is found, where it opened')
+  check(lua('x = "open\n')[0]?.msg === 'a string that never closes' && lua('end')[0]?.msg === '"end" with nothing open', 'Code: an open string, a stray end')
+  check(lua('--[[ a\nlong comment ]] local s = [==[ ]] ]==]').length === 0, 'Code: long comments and long strings are skipped whole')
+}
+
+// --- undo brings back the files --------------------------------------------------------------
+{
+  const before = new Blob(['old picture'])
+  const h = new History({ module: { id: 'm' }, docs: {}, assets: { 'textures/A.png': before } })
+  h.commit({ module: { id: 'm' }, docs: {}, assets: { 'textures/A.png': new Blob(['new picture']) } })
+  const back = h.undo()
+  check(back.assets['textures/A.png'] instanceof Blob && await back.assets['textures/A.png'].text() === 'old picture', 'an undo puts back the picture an editor replaced')
+  const fwd = h.redo()
+  check(await fwd.assets['textures/A.png'].text() === 'new picture', 'and a redo the new one')
+}
+
+console.log(`plugins: ${checks} checks, ${fails} failures`)
+process.exit(fails ? 1 : 0)

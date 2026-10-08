@@ -56,6 +56,7 @@ async function showHome () {
       el('div', { class: 'st-row' }, [button('▶ play', () => S.play()), button('⇪ export', () => S.exportPack()), button('⇩ import pack', () => S.importPack()),
         button('+ new module', () => newModuleFlow()),
         el('button', { 'data-section': 'snapshots', text: '🕘 snapshots', onclick: () => S.go('snapshots') }),
+        el('button', { 'data-section': 'plugins', text: `🧩 plugins (${S.plugins?.list().filter((p) => !p.manifest.hidden).length ?? 0})`, onclick: () => S.go('plugins') }),
         // What the last play-test left to read, when there was one.
         lastPlay() ? el('button', { 'data-section': 'playlog', text: `📋 play log (${String(lastPlay().map).replace(/\.dnpm$/, '')})`, onclick: () => S.go('playlog') }) : null].filter(Boolean))
     ]),

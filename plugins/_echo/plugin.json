@@ -1,0 +1,12 @@
+{
+  "id": "_echo",
+  "name": "Echo",
+  "version": "1.0.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "hidden": true,
+  "description": "The smallest editor the studio can open: a text box. For the studio's own tests, and as the example in docs/PLUGINS.md.",
+  "editors": [
+    { "id": "text", "entry": "index.html", "kinds": ["record:script", "record:mob", "file:sfxproj"], "label": "Echo" }
+  ]
+}

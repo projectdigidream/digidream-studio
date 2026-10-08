@@ -1,0 +1,16 @@
+{
+ "copy": [
+  "midisynth/tool/daw.html",
+  "midisynth/tool/daw",
+  "midisynth/tool/lib",
+  "midisynth/tool/dist",
+  "midisynth/tool/synth-worklet.js",
+  "midisynth/tool/render-worker.js",
+  "midisynth/tool/fit-worker.js",
+  "midisynth/content/patches/gm_bank.json",
+  "midisynth/content/drums/gm_kit.json"
+ ],
+ "base": "midisynth",
+ "tree": "1daedae2503f3170053e55fece13cbe574d852697a5fcb20c20346f2dc0188ce",
+ "files": 27
+}

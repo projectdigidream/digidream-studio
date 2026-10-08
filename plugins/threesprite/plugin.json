@@ -1,0 +1,11 @@
+{
+  "id": "threesprite",
+  "name": "ThreeSprite",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "description": "Animated billboard sprites: a 3D rig, 2D art, any number of views. Edits the module's sprite projects; the suite bakes them into the sheets the game draws.",
+  "editors": [
+    { "id": "main", "entry": "host.html", "kinds": ["file:tsprite"], "label": "ThreeSprite", "priority": 10 }
+  ]
+}

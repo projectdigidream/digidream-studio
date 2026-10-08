@@ -27,6 +27,7 @@ function showScripts (open = null) {
     area.value = S.module.scripts[open]
     area.addEventListener('change', () => { S.module.scripts[open] = area.value; S.moduleChanged() })
     body.push(el('div', { class: 'st-section-head', text: `📜 ${open}` }), area, el('div', { class: 'st-row' }, [
+      ...(S.editButtons?.('record:script', open) ?? []),
       button('rename', async () => {
         const raw = await ask('file name', open)
         const n = cleanName(raw)

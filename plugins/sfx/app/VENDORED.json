@@ -1,0 +1,14 @@
+{
+ "copy": [
+  "sound/tool/sfx.html",
+  "sound/tool/sfx",
+  "sound/tool/lib",
+  "sound/tool/dist",
+  "sound/tool/sfx-worklet.js",
+  "sound/tool/tool-worker.js",
+  "sound/content/banks/starter.sfxproj"
+ ],
+ "base": "sound",
+ "tree": "b0e3264858a7cfefc791ad7459bb3b3143bbf0b93eac26fe6d653b7230f6fdba",
+ "files": 27
+}

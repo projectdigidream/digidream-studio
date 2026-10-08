@@ -13,7 +13,7 @@ import { moduleProps, newProp, deleteProp, renameProp, placementsOf, propRows } 
 let S = null
 
 /** A monster's or prop's pictures: a .tsprite project, or an atlas .json and its .png. */
-async function importSheet () {
+export async function importSheet () {
   const f = await shell.importFile('.tsprite,.json,.png')
   if (!f) return null
   S.status('composing…', 'ok')
@@ -24,6 +24,18 @@ async function importSheet () {
       pickPng: async (image) => { S.status(`now pick ${image}`, 'ok'); return shell.importFile('.png') }
     })
   } catch (e) { S.status(String(e.message ?? e), 'error'); return null }
+  // A PROJECT is kept as the sheet's source (docs/PLUGINS.md, Bakers), so it can
+  // be opened in ThreeSprite again; the sheet is baked from it.
+  if (/\.tsprite$/i.test(f.name) && S.bakeSource) {
+    S.rec.assets ??= {}
+    S.rec.assets[`sources/sprites/${r.name}.tsprite`] = new Blob([f.bytes])
+    const b = await S.bakeSource('file:tsprite', r.name)
+    if (!b.ok) { delete S.rec.assets[`sources/sprites/${r.name}.tsprite`]; S.status(b.error, 'error'); return null }
+    S.moduleChanged()
+    S.redraw()
+    S.status(`sheet ${r.name} imported with its project: ${r.manifest.animations.length} animation(s)${r.warnings.length ? ' -- ' + r.warnings.join('; ') : ''}`, 'ok')
+    return r.name
+  }
   const json = new Blob([JSON.stringify(r.manifest)], { type: 'application/json' })
   const png = new Blob([r.png], { type: 'image/png' })
   S.rec.assets ??= {}

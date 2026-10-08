@@ -15,7 +15,7 @@ export const NATIVE_MAPC = [join(ROOT, 'engine', 'build', ARCH, 'mapc'), join(RO
   .find((p) => existsSync(p)) ?? null
 export const CORE_WASM = existsSync(join(ROOT, 'engine', 'client', 'wasm', 'dist', 'dnp_core.mjs'))
 
-/** Print the skip line the suite expects and leave, when an oracle is missing. */
+/** Print the skip line the test suite expects and leave, when an oracle is missing. */
 export function requireOracles (name, { mapc = true, core = true } = {}) {
   if (mapc && !NATIVE_MAPC) {
     console.log(`${name}: skipped (no native mapc -- run scripts/build_native.sh)`)

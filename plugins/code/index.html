@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Code</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0d12; --panel: #12161e; --line: #2a3446; --fg: #e8f0ff; --dim: #6f7e96;
+          --kw: #8fb8ff; --str: #a6e3a1; --com: #6f7e96; --num: #ffd27a; --bad: #ff8a8a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+  body { display: flex; flex-direction: column; font: 13px/20px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #head { display: flex; gap: 10px; align-items: center; padding: 6px 10px; color: var(--dim); border-bottom: 1px solid var(--line); }
+  #problems { color: var(--bad); flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  #wrap { position: relative; flex: 1 1 auto; display: flex; overflow: auto; background: var(--panel); }
+  #gutter { flex: 0 0 auto; padding: 8px 8px 8px 10px; text-align: right; color: var(--dim); user-select: none; white-space: pre; }
+  #gutter .bad { color: var(--bad); }
+  #area { position: relative; flex: 1 1 auto; min-width: 0; }
+  #hl, #text { margin: 0; padding: 8px; font: inherit; white-space: pre; tab-size: 2; min-height: 100%; box-sizing: border-box; }
+  #hl { position: absolute; inset: 0; pointer-events: none; color: var(--fg); }
+  #text { position: relative; width: 100%; border: 0; outline: none; resize: none; background: transparent; color: transparent; caret-color: var(--fg); overflow: hidden; }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; } .num { color: var(--num); }
+</style>
+<div id="head"><span id="name">not in the suite</span><span id="problems"></span></div>
+<div id="wrap"><div id="gutter">1</div><div id="area"><pre id="hl" aria-hidden="true"></pre><textarea id="text" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div></div>
+<script type="module" src="./code.js"></script>

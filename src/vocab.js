@@ -15,6 +15,8 @@
 // can prove wrong and lets the runtime rule on the rest.
 //
 
+import { RUNTIME } from './base.js'
+
 const isInt = (v) => Number.isInteger(v)
 const isFx = (v) => isInt(v) || (typeof v === 'string' && /^-?\d+(\.\d{1,9})?$/.test(v)) ||
                     (Array.isArray(v) && v.length === 2 && v.every(isInt) && v[1] !== 0)
@@ -312,7 +314,7 @@ export class Vocab {
 }
 
 /** Load both vocabularies from a base URL (the studio's runtime directory). */
-export async function loadVocab (baseUrl = '/studio/runtime') {
+export async function loadVocab (baseUrl = RUNTIME.replace(/\/$/, '')) {
   const [t, m, w] = await Promise.all([
     fetch(`${baseUrl}/trigger_vocab.json`).then((r) => r.json()),
     fetch(`${baseUrl}/mob_vocab.json`).then((r) => r.json()),

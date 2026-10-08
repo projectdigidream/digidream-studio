@@ -1,0 +1,83 @@
+{
+  "plugins": {
+    "threesprite": {
+      "git": "~/ThreeSprite",
+      "commit": "220e97c",
+      "install": "pnpm install --frozen-lockfile --prefer-offline",
+      "build": "pnpm build:web",
+      "out": "dist-web"
+    },
+    "sfx": {
+      "copy": [
+        "sound/tool/sfx.html",
+        "sound/tool/sfx",
+        "sound/tool/lib",
+        "sound/tool/dist",
+        "sound/tool/sfx-worklet.js",
+        "sound/tool/tool-worker.js",
+        "sound/content/banks/starter.sfxproj"
+      ],
+      "base": "sound",
+      "pages": [
+        {
+          "from": "tool/sfx.html",
+          "to": "tool/suite.html",
+          "head": "<script src=\"../../suite-shim.js\"></script>"
+        }
+      ]
+    },
+    "qpainter": {
+      "git": "~/textureeditor",
+      "commit": "a16fb2d",
+      "install": "npm ci --prefer-offline --no-audit --no-fund",
+      "build": "npm run build",
+      "out": "dist",
+      "drop": [
+        "sw.js"
+      ],
+      "pages": [
+        {
+          "from": "index.html",
+          "to": "suite.html",
+          "head": "<script src=\"../suite-shim.js\"></script>"
+        }
+      ]
+    },
+    "daw": {
+      "copy": [
+        "midisynth/tool/daw.html",
+        "midisynth/tool/daw",
+        "midisynth/tool/lib",
+        "midisynth/tool/dist",
+        "midisynth/tool/synth-worklet.js",
+        "midisynth/tool/render-worker.js",
+        "midisynth/tool/fit-worker.js",
+        "midisynth/content/patches/gm_bank.json",
+        "midisynth/content/drums/gm_kit.json"
+      ],
+      "base": "midisynth",
+      "pages": [
+        {
+          "from": "tool/daw.html",
+          "to": "tool/suite.html",
+          "head": "<script src=\"../../suite-shim.js\"></script>"
+        }
+      ]
+    },
+    "packager": {
+      "copy": [
+        "packager/index.html",
+        "packager/src",
+        "packager/VERSION"
+      ],
+      "base": "",
+      "pages": [
+        {
+          "from": "packager/index.html",
+          "to": "packager/suite.html",
+          "head": "<script src=\"../../suite-shim.js\"></script>"
+        }
+      ]
+    }
+  }
+}

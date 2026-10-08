@@ -1,0 +1,11 @@
+{
+  "id": "sfx",
+  "name": "DigidreamSound",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "description": "Sound effects as recipes, not recordings. Edits the module's sound packs; the game plays them as written.",
+  "editors": [
+    { "id": "bank", "entry": "app/tool/suite.html", "kinds": ["file:sfxproj"], "label": "DigidreamSound", "priority": 10 }
+  ]
+}

@@ -48,7 +48,7 @@
 <!-- The native shell's hook, exactly as client/index.html has it: a classic
      script, so `window.dnp` exists before the module below asks for it. -->
 <script src="/shell.js"></script>
-<script type="module" src="/studio/src/main.js"></script>
+<script type="module" src="./src/main.js"></script>
 </head>
 <body>
   <div id="boot"><div>Studio</div><div class="bar"><div class="fill" id="bootfill"></div></div><div id="bootmsg">starting</div>
@@ -107,7 +107,7 @@
     var t = 'Digidream Studio, loading\n' + navigator.userAgent + '\n' + location.href + '\n' + window.__bootText()
     if (navigator.clipboard) navigator.clipboard.writeText(t).then(function () { window.__bootLog('copied') }, function () { window.__bootLog('could not copy: select the text above instead') })
   }
-  document.getElementById('bootreload').onclick = function () { location.href = '/studio/' }
+  document.getElementById('bootreload').onclick = function () { location.href = './' }
 })()
 </script>
 </body>

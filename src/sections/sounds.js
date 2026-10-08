@@ -11,8 +11,9 @@
 // own loader on import, because JSON that parses is not a bank that plays.
 //
 import { shell } from '../bridge.js'
-import { el, button, muted, toggle, confirmDialog } from '../ui.js'
+import { el, button, muted, toggle, confirmDialog, ask } from '../ui.js'
 import { mergeBanks, bankNames, packId, packPath } from '../soundpacks.js'
+import { editArg } from '../plugins/frame.js'
 
 let S = null
 
@@ -133,7 +134,16 @@ function showSounds () {
   const known = new Set(S.soundNames())
   const changed = () => { remerge(); S.moduleChanged(); S.sfx?.setBank(bankUrl()); showSounds() }
   const body = []
-  body.push(el('div', { class: 'st-row' }, [button('+ import sound packs (.sfxproj)', importPacks)]))
+  const editor = S.plugins?.editorsFor('file:sfxproj').find((e) => !e.builtin)
+  body.push(el('div', { class: 'st-row' }, [
+    editor ? button('+ new sound pack', async () => {
+      const raw = await ask('the new pack\'s name', 'sounds')
+      const id = packId(`${raw ?? ''}.sfxproj`, packs.map((p) => p.id))
+      if (!raw || !id) return
+      S.go('edit', editArg(editor.key, 'file:sfxproj', id))
+    }) : null,
+    button('+ import sound packs (.sfxproj)', importPacks)
+  ].filter(Boolean)))
   body.push(el('div', { class: 'st-section-head', text: `🔊 packs, highest first (${packs.length})` }))
   packs.forEach((p, i) => {
     const json = S.packs?.get(p.id)
@@ -142,6 +152,7 @@ function showSounds () {
     body.push(el('div', { class: 'st-card', 'data-pack': p.id }, [
       el('div', { class: 'st-row' }, [
         el('span', { class: 'st-entry', text: p.name === p.id ? p.id : `${p.name} (${p.id})` }),
+        ...(S.editButtons?.('file:sfxproj', p.id) ?? []),
         i > 0 ? button('↑', () => { [packs[i - 1], packs[i]] = [packs[i], packs[i - 1]]; changed() }) : null,
         i < packs.length - 1 ? button('↓', () => { [packs[i + 1], packs[i]] = [packs[i], packs[i + 1]]; changed() }) : null,
         button('✕', async () => {
@@ -185,6 +196,10 @@ export function install (s) {
   S = s
   S.hear = hear
   S.loadPacks = loadPacks
+  // For the plugins (plugins/kinds.js): a pack an editor hands back is checked
+  // by the engine's own loader and merged like an imported one.
+  S.remergePacks = remerge
+  S.engineAcceptsBank = engineAccepts
   S.soundsUsed = soundsUsed
   S.soundsByPack = () => {
     const merged = S.merged ?? { origin: {} }

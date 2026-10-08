@@ -1,0 +1,11 @@
+{
+  "id": "code",
+  "name": "Code",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.1.0",
+  "description": "A Lua editor for the module's own scripts: line numbers, highlighting, and blocks checked as you type. An example of a record editor: the suite's Scripts page stays the default.",
+  "editors": [
+    { "id": "lua", "entry": "index.html", "kinds": ["record:script"], "label": "Code", "priority": 0 }
+  ]
+}
