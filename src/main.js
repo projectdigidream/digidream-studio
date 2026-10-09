@@ -394,6 +394,15 @@ S.pluginQuery = async (what, arg) => {
       const b = S.rec.assets?.['sources/palette.json']
       return b ? JSON.parse(await b.text()) : null
     }
+    // The one question that is not read-only: give the user a file a plugin
+    // made (the packager's APK or app). It goes where the studio's own Export
+    // goes -- the system's save dialog in the apps, a download in a browser --
+    // because a page in a frame cannot save on a phone. Nothing in the module
+    // changes. True when it was saved, false when the user cancelled.
+    case 'share': {
+      if (typeof arg?.name !== 'string' || !(arg.bytes instanceof Uint8Array)) throw new Error('share needs { name, bytes }')
+      return !!(await shell.share(arg.name.replace(/[\\/]/g, '_'), arg.bytes))
+    }
     case 'modulePack': {
       const r = await emitAll()
       if (!r) throw new Error('the module does not bake (the studio says why)')

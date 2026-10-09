@@ -7,8 +7,11 @@
 //   kitsBase    the engine kits, where the suite's server has them (in a
 //               checkout: packager/build/kits, served at /studio/packager-kits/)
 //
-// Saving stays the packager's own (a download): a page cannot write files
-// for the person, and the suite has nothing better to offer it yet.
+//   save()      the finished APK or app, handed to the studio (its `share`
+//               query), which saves it where its own Export does: the system's
+//               save dialog in the apps, a download in a browser. The
+//               packager's own fallback is a download link, which an Android
+//               WebView ignores -- the file went nowhere.
 //
 (function () {
   const here = document.currentScript.src
@@ -17,6 +20,12 @@
   window.packagerHost = {
     kind: 'suite',
     kitsBase: new URL('../../packager-kits/', here).href,
+    save: async (bytes, name) => {
+      const s = await suite
+      // Long: the user is choosing where it goes.
+      const ok = await s.query('share', { name, bytes }, { timeout: 30 * 60 * 1000 })
+      return ok ? name : 'nowhere (cancelled)'
+    },
     module: async () => {
       const s = await suite
       const zip = await s.query('modulePack', null, { timeout: 120000 })

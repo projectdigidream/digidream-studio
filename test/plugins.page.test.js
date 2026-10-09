@@ -287,6 +287,21 @@ if (await page.evaluate(() => window.__studio.plugins.plugins.has('packager'))) 
   const summary = await pk.evaluate(() => document.getElementById('mod-summary').textContent)
   const id = await page.evaluate(() => window.__studio.module.id)
   check(summary.includes(`(${id})`), `the Package page has the studio's module without picking it (${summary.trim()})`)
+  // ITS SAVE GOES THROUGH THE STUDIO (the `share` query), which saves where its
+  // own Export does -- here, a browser download. The packager's own fallback,
+  // a link in its frame, went nowhere in an Android WebView.
+  {
+    const { mkdtempSync, readdirSync, readFileSync: readF, existsSync: exists } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join: pjoin } = await import('node:path')
+    const dir = mkdtempSync(pjoin(tmpdir(), 'dnp-share-'))
+    const cdp = await page.target().createCDPSession()
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir })
+    const said = await pk.evaluate(() => window.packagerHost.save(new Uint8Array([80, 75, 3, 4, 42]), 'game-test.apk'))
+    let got = null
+    for (let i = 0; i < 40 && !got; i++) { await settle(250); if (exists(pjoin(dir, 'game-test.apk'))) got = readF(pjoin(dir, 'game-test.apk')) }
+    check(said === 'game-test.apk' && got && got.length === 5 && got[4] === 42, `the packager's save reaches the studio and the file is saved (${said}; ${readdirSync(dir).join(', ') || 'nothing'})`)
+  }
   await page.evaluate(() => window.__studio.go('home'))
 }
 
