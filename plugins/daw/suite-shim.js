@@ -12,6 +12,20 @@
 // Loaded first in a copy of the DAW's page (the vendor step puts it there).
 //
 (function () {
+  // A phone held sideways (the DAW's own short-screen layout, tightened under
+  // the studio's bar): the tabs thinner, the Track tab's tools one row that
+  // scrolls sideways (the touch hints at its end), and the piano roll the
+  // rest of the screen -- it ran under the log line before. The roll's canvas
+  // takes whatever height its CSS gives it. !important: the DAW's stylesheet
+  // comes after this one.
+  const css = document.createElement('style')
+  css.textContent = '@media (max-height:520px){' +
+    'nav.tabs{padding:2px 8px 0!important}nav.tabs button{padding:3px 12px!important}' +
+    '#tab-track>.toolbar{flex-wrap:nowrap!important;overflow-x:auto!important;scrollbar-width:none;gap:6px!important;margin-bottom:4px!important}' +
+    '#tab-track>.toolbar::-webkit-scrollbar{display:none}#tab-track>.toolbar>*{flex:none!important}' +
+    '#tab-track>.toolbar .touch-hint{order:99}' +
+    '#roll{height:calc(100vh - 118px)!important;min-height:140px}}'
+  document.head.appendChild(css)
   let suite = null
   let gotInit
   const init = new Promise((resolve) => { gotInit = resolve })
