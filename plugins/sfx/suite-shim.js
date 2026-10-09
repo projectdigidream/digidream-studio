@@ -27,7 +27,14 @@
   // help stay. (The game reads a pack as written, so no .sfxb export either.)
   if (new URLSearchParams(location.search).get('host') === 'suite') {
     const css = document.createElement('style')
-    css.textContent = ['open', 'save', 'save-as', 'new', 'load-starter', 'bake'].map((a) => `[data-act="${a}"]`).join(',') + '{display:none!important}'
+    css.textContent = ['open', 'save', 'save-as', 'new', 'load-starter', 'bake'].map((a) => `[data-act="${a}"]`).join(',') + '{display:none!important}' +
+      // A phone held sideways: the header is one slim line under the studio's
+      // own bar, which already names the tool.
+      // (!important: the tool's own stylesheet comes after this one.)
+      '@media (max-height:520px){#top{padding:2px 8px!important;gap:6px!important}#brand{display:none!important}' +
+      '#play{width:26px!important;height:26px!important;min-height:26px!important;font-size:11px!important}' +
+      '#top button{min-height:24px!important;padding-top:2px!important;padding-bottom:2px!important}' +
+      '.seg>button{min-height:22px!important;padding:2px 9px!important}}'
     document.head.appendChild(css)
   }
 

@@ -233,7 +233,7 @@ async function boot(client, setStage = () => {}) {
   // Phone layout: header and log start collapsed to one line each and expand
   // on tap. Desktop ignores both classes -- the CSS only acts under 700px --
   // so the same markup serves both without a second code path.
-  const PHONE = window.matchMedia('(max-width: 700px)');
+  const PHONE = window.matchMedia('(max-width: 700px), (max-height: 520px)');
   const setCollapsed = (el, on) => el.classList.toggle('collapsed', on);
   const applyPhoneDefaults = () => {
     setCollapsed(document.querySelector('header'), PHONE.matches && store.p.view.hdrOpen !== true);

@@ -47,6 +47,14 @@
   // scripts do the same): exposed only when the suite's dev switch is on.
   try { if (localStorage.getItem('dnp.studio.devPlugins') === '1') window.__THREESPRITE_TEST__ = true } catch {}
 
+  // A phone held sideways: ThreeSprite's toolbar is a slimmer line under the
+  // studio's own bar (its height is a variable of its stylesheet).
+  {
+    const css = document.createElement('style')
+    css.textContent = '@media (max-height:520px){:root{--toolbar-h:32px!important}}'
+    document.head.appendChild(css)
+  }
+
   // What ThreeSprite says to "VS Code".
   window.acquireVsCodeApi = () => ({
     getState: () => null,

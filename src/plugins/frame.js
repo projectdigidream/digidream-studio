@@ -77,10 +77,10 @@ class EditorSession {
     this.iframe = el('iframe', { class: 'sx-frame', title: this.editor.label, allow: 'autoplay; clipboard-read; clipboard-write; fullscreen' })
     this.root = el('div', { class: 'sx-editor', 'data-editor': this.editor.key, 'data-kind': this.kindId }, [
       el('div', { class: 'sx-bar' }, [
-        el('button', { class: 'sx-back', 'data-action': 'editor-back', text: '← back to studio', onclick: () => this.finish(true) }),
+        el('button', { class: 'sx-back', 'data-action': 'editor-back', text: '← studio', title: 'back to the studio, saving', onclick: () => this.finish(true) }),
         el('span', { class: 'sx-title', text: `${this.editor.label} · ${this.kind.label} ${name}` }),
         this.statusEl,
-        el('button', { class: 'st-danger', 'data-action': 'editor-discard', text: 'discard', onclick: () => this.finish(false) })
+        el('button', { class: 'st-danger sx-discard', 'data-action': 'editor-discard', text: '✕', title: 'discard: back without saving', onclick: () => this.finish(false) })
       ]),
       this.iframe
     ])
@@ -243,8 +243,12 @@ export function installPluginSections (S) {
  */
 const CSS = `
 .sx-editor{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;background:#0b0d12}
-.sx-bar{display:flex;align-items:center;gap:8px;padding:6px 8px;padding-top:max(6px,env(safe-area-inset-top));border-bottom:1px solid #2a3446;background:#12161e;flex:0 0 auto}
-.sx-bar button{height:34px;padding:0 12px;border-radius:8px;background:#1b2230;color:#cfe3ff;border:1px solid #2a3446;font:600 13px ui-monospace,Menlo,monospace}
+/* One slim line: the editor's own header sits under it, and on a phone held
+   sideways every row of chrome is a slice of the editor. */
+.sx-bar{display:flex;align-items:center;gap:8px;padding:3px 6px;padding-top:max(3px,env(safe-area-inset-top));border-bottom:1px solid #2a3446;background:#12161e;flex:0 0 auto;white-space:nowrap;font-size:12px}
+.sx-bar button{height:26px;padding:0 10px;border-radius:6px;background:#1b2230;color:#cfe3ff;border:1px solid #2a3446;font:600 12px ui-monospace,Menlo,monospace;flex:none}
+.sx-bar .sx-discard{padding:0 9px}
+@media (max-height:520px){.sx-bar{padding-top:max(2px,env(safe-area-inset-top));padding-bottom:2px}.sx-bar button{height:22px;padding:0 8px;font-size:11px}.sx-title{font-size:11px}}
 .sx-bar .sx-back{background:#22406b;border-color:#3b6aa8;color:#fff}
 .sx-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e8f0ff}
 .sx-status{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8fa3c0;font-size:12px}

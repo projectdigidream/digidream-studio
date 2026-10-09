@@ -9,6 +9,12 @@
 //   an edit               -> dirty, and a draft at most every 2.5 s
 //
 (function () {
+  // A phone held sideways: qPainter's top row is a slimmer line under the
+  // studio's own bar (!important: its stylesheet comes after this one).
+  const css = document.createElement('style')
+  css.textContent = '@media (max-height:520px){#top{padding:2px 6px!important;gap:4px!important}' +
+    '#top button,#top select{padding-top:1px!important;padding-bottom:1px!important}}'
+  document.head.appendChild(css)
   const embed = () => new Promise((resolve) => {
     if (window.qpainterEmbed) return resolve(window.qpainterEmbed)
     window.addEventListener('qpainter-embed', () => resolve(window.qpainterEmbed), { once: true })

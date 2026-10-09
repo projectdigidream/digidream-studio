@@ -275,11 +275,34 @@ export function initPianoRoll(root, ctx) {
   const defaultVel = () => +$('roll-vel').value || 100;
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  // Live touch points, for the two-finger gestures below.
+  const touches = new Map();
+  let gesture = null, holdTimer = null;
+
+  const gestureState = () => {
+    const [a, b] = [...touches.values()];
+    return {
+      cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2,
+      spread: Math.hypot(a.x - b.x, a.y - b.y),
+    };
+  };
+
   canvas.addEventListener('pointerdown', (e) => {
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     const x = (e.clientX - rect.left) * dpr, y = (e.clientY - rect.top) * dpr;
     const G = geo(canvas.width, canvas.height, dpr);
+    if (e.pointerType === 'touch') {
+      touches.set(e.pointerId, { x, y });
+      if (touches.size === 2) {
+        // Second finger down: abandon whatever the first one started and pan
+        // instead. Nothing is committed until pointerup, so nothing is lost.
+        drag = null;
+        gesture = { ...gestureState(), scrollTick, topNote, pxPerBeat };
+        return;
+      }
+      if (touches.size > 2) return;
+    }
     canvas.setPointerCapture(e.pointerId);
     const t = track();
     if (!t) return;
@@ -318,6 +341,17 @@ export function initPianoRoll(root, ctx) {
     }
     if (idx >= 0) {
       const n = t.notes[idx];
+      if (e.pointerType === 'touch') {
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(() => {
+          if (!drag || drag.moved) return;          // a drag became a move
+          commit('erase note', (tr) => tr.notes.splice(idx, 1));
+          selection.clear();
+          client.noteOff(channel, n.note);
+          drag = null;
+          holdTimer = null;
+        }, 450);
+      }
       const xEnd = xOfTick(n.tick + n.dur, dpr);
       if (!e.shiftKey && !selection.has(idx)) selection = new Set([idx]);
       else if (e.shiftKey) selection.add(idx);
@@ -343,7 +377,23 @@ export function initPianoRoll(root, ctx) {
     const dpr = window.devicePixelRatio || 1;
     const x = (e.clientX - rect.left) * dpr, y = (e.clientY - rect.top) * dpr;
     hoverX = x; hoverY = y;
+    if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+      touches.set(e.pointerId, { x, y });
+      if (gesture && touches.size === 2) {
+        const now = gestureState();
+        // Horizontal drag scrolls time, vertical drag scrolls pitch, and the
+        // spread between the fingers zooms -- all from the gesture's start,
+        // so it never accumulates drift.
+        pxPerBeat = clamp(gesture.pxPerBeat * (now.spread / Math.max(1, gesture.spread)), 4, 400);
+        scrollTick = Math.max(0, gesture.scrollTick -
+          ((now.cx - gesture.cx) / (pxPerBeat * dpr)) * store.p.ppq);
+        const G = geo(canvas.width, canvas.height, dpr);
+        topNote = clamp(Math.round(gesture.topNote - (now.cy - gesture.cy) / G.nh), 12, 127);
+        return;
+      }
+    }
     if (!drag) return;
+    if (holdTimer && (drag.moved || drag.kind === 'new')) { clearTimeout(holdTimer); holdTimer = null; }
     const G = geo(canvas.width, canvas.height, dpr);
     const tick = Math.max(0, tickOfX(x, dpr));
     switch (drag.kind) {
@@ -386,7 +436,16 @@ export function initPianoRoll(root, ctx) {
       default: break;
     }
   });
-  canvas.addEventListener('pointerup', () => {
+  const endTouch = (e) => {
+    if (e.pointerType !== 'touch') return;
+    touches.delete(e.pointerId);
+    if (touches.size < 2) gesture = null;
+  };
+  canvas.addEventListener('pointercancel', (e) => { endTouch(e); drag = null; });
+
+  canvas.addEventListener('pointerup', (e) => {
+    endTouch(e);
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
     if (!drag) return;
     const d = drag;
     drag = null;
