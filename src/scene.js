@@ -159,16 +159,16 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
 
 const STYLE = `
 body[data-scene="1"] .sd-rail,body[data-scene="1"] .st-layer{display:none}
-.sc-scene{position:fixed;inset:0;z-index:95;pointer-events:none;font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e8f0ff}
-.sc-bar{position:absolute;left:0;right:0;height:0;background:#000}
+.sc-scene{position:fixed;inset:0;z-index:95;pointer-events:none;font:13px/1.4 var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
+.sc-bar{position:absolute;left:0;right:0;height:0;background:#000} /* the game's letterbox: content, not the skin */
 .sc-bar-top{top:0}.sc-bar-bottom{bottom:0}
-.sc-fade{position:absolute;inset:0;background:#000;opacity:0}
+.sc-fade{position:absolute;inset:0;background:#000;opacity:0} /* the game's fade: content */
 .sc-hud{position:absolute;inset:0}
 .sc-strip{position:absolute;top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));display:flex;gap:6px;align-items:center;pointer-events:auto;
-  background:rgba(11,13,18,.85);border:1px solid #2a3446;border-radius:10px;padding:4px 6px 4px 10px;z-index:3}
-.sc-strip button{min-width:40px;height:36px;border-radius:8px;background:rgba(27,34,48,.95);color:#cfe3ff;border:1px solid rgba(207,227,255,.22);font:600 15px/1 ui-monospace,Menlo,monospace;cursor:pointer}
+  background:color-mix(in srgb,var(--dnp-color-bg-app) 85%,transparent);border:1px solid var(--dnp-color-line-main);border-radius:10px;padding:4px 6px 4px 10px;z-index:3}
+.sc-strip button{min-width:40px;height:36px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 15px/1 var(--dnp-font-ui);cursor:pointer}
 .sc-title{font-weight:700}
-.sc-clock{color:#9fb0c8;min-width:7em;text-align:right}
-.sc-log{position:absolute;left:calc(8px + env(safe-area-inset-left));top:calc(8px + env(safe-area-inset-top));max-width:55%;background:rgba(11,13,18,.75);border-radius:8px;padding:4px 10px;color:#ffd27a;z-index:3}
+.sc-clock{color:var(--dnp-color-text-secondary);min-width:7em;text-align:right}
+.sc-log{position:absolute;left:calc(8px + env(safe-area-inset-left));top:calc(8px + env(safe-area-inset-top));max-width:55%;background:color-mix(in srgb,var(--dnp-color-bg-app) 75%,transparent);border-radius:8px;padding:4px 10px;color:var(--dnp-color-warn);z-index:3}
 .sc-log:empty{display:none}
 `

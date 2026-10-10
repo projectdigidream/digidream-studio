@@ -242,18 +242,18 @@ export function installPluginSections (S) {
  * (kinds.js), S.openWith, the 'edit' route, and the plugins' rail sections.
  */
 const CSS = `
-.sx-editor{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;background:#0b0d12}
+.sx-editor{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;background:var(--dnp-color-bg-app)}
 /* One slim line: the editor's own header sits under it, and on a phone held
    sideways every row of chrome is a slice of the editor. */
-.sx-bar{display:flex;align-items:center;gap:8px;padding:3px 6px;padding-top:max(3px,env(safe-area-inset-top));border-bottom:1px solid #2a3446;background:#12161e;flex:0 0 auto;white-space:nowrap;font-size:12px}
-.sx-bar button{height:26px;padding:0 10px;border-radius:6px;background:#1b2230;color:#cfe3ff;border:1px solid #2a3446;font:600 12px ui-monospace,Menlo,monospace;flex:none}
+.sx-bar{display:flex;align-items:center;gap:8px;padding:3px 6px;padding-top:max(3px,env(safe-area-inset-top));border-bottom:1px solid var(--dnp-color-line-main);background:var(--dnp-color-bg-panel);flex:0 0 auto;white-space:nowrap;font-size:12px}
+.sx-bar button{height:26px;padding:0 10px;border-radius:6px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-main);font:600 12px var(--dnp-font-ui);flex:none}
 .sx-bar .sx-discard{padding:0 9px}
 @media (max-height:520px){.sx-bar{padding-top:max(2px,env(safe-area-inset-top));padding-bottom:2px}.sx-bar button{height:22px;padding:0 8px;font-size:11px}.sx-title{font-size:11px}}
-.sx-bar .sx-back{background:#22406b;border-color:#3b6aa8;color:#fff}
-.sx-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e8f0ff}
-.sx-status{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8fa3c0;font-size:12px}
-.sx-status[data-tone=error]{color:#ff8a8a}.sx-status[data-tone=warn]{color:#ffd27a}
-.sx-frame{flex:1 1 auto;width:100%;border:0;background:#0b0d12;display:block}
+.sx-bar .sx-back{background:var(--dnp-color-accent);border-color:var(--dnp-color-accentHover);color:var(--dnp-color-accentInk)}
+.sx-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dnp-color-text-primary)}
+.sx-status{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dnp-color-text-secondary);font-size:12px}
+.sx-status[data-tone=error]{color:var(--dnp-color-error)}.sx-status[data-tone=warn]{color:var(--dnp-color-warn)}
+.sx-frame{flex:1 1 auto;width:100%;border:0;background:var(--dnp-color-bg-app);display:block}
 .sx-section{height:100%}
 .sx-choose .st-actions{flex-wrap:wrap}
 `

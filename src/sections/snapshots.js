@@ -104,6 +104,6 @@ export function install (s) {
 }
 
 document.head.appendChild(Object.assign(document.createElement('style'), { textContent: `
-.sd-snap[data-on="1"]{border-color:#5b8fd6}
-.sd-snap-maps{display:flex;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid #2a3446}
+.sd-snap[data-on="1"]{border-color:var(--dnp-color-accent)}
+.sd-snap-maps{display:flex;flex-direction:column;gap:4px;margin-top:6px;padding-top:6px;border-top:1px solid var(--dnp-color-line-main)}
 ` }))

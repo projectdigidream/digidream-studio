@@ -133,7 +133,7 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 .sd-key-touch{flex:0 1 120px;min-width:90px}
 .sd-key-tl{opacity:.7}
 .sd-key-card .sd-key,.sd-key-card .sd-key-wait{min-width:72px;font-weight:700}
-.sd-key-wait{border-color:#ffe066 !important;color:#ffe066 !important;animation:sd-key-blink 1s steps(2) infinite}
+.sd-key-wait{border-color:var(--dnp-color-select) !important;color:var(--dnp-color-select) !important;animation:sd-key-blink 1s steps(2) infinite}
 @keyframes sd-key-blink{50%{opacity:.55}}
-.sd-key-warn{color:#ffa94d;font-size:12px}
+.sd-key-warn{color:var(--dnp-color-warn);font-size:12px}
 ` }))

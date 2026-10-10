@@ -1838,9 +1838,11 @@ await page.keyboard.press('Escape')
   })
   await page.mouse.move(lit.x, lit.y); await page.mouse.down(); await page.mouse.move(lit.x + 40, lit.y + 30, { steps: 3 })
   const during = await page.evaluate(() => ({ linking: document.querySelector('.gw .wk-world').dataset.linking,
-    glow: getComputedStyle(document.querySelector('.gw [data-pin="wait.in"][data-dir="in"] .gw-dot')).backgroundColor }))
+    glow: getComputedStyle(document.querySelector('.gw [data-pin="wait.in"][data-dir="in"] .gw-dot')).backgroundColor,
+    // the skin's colour for a pin a link may end on
+    want: (() => { const d = document.createElement('div'); d.style.color = window.__studio.skin.canvas('graph', 'pin.valid').color; document.body.append(d); const v = getComputedStyle(d).color; d.remove(); return v })() }))
   await page.mouse.up()
-  check(during.linking === 'exec' && /102, 255, 153/.test(during.glow), `while a link is dragged the inputs it can reach light up (${JSON.stringify(during)})`)
+  check(during.linking === 'exec' && during.glow === during.want, `while a link is dragged the inputs it can reach light up (${JSON.stringify(during)})`)
   // Picks on the map, from the nodes: the board steps aside, the tap fills the fields.
   const tapWorld = async (x, y, z = 0) => { const p = await page.evaluate(([x, y, z]) => window.__studio.viewport.toScreen(x, y, z), [x, y, z]); await page.mouse.click(p.x, p.y); await new Promise((r) => setTimeout(r, 150)) }
   const clickIn = (id, text) => page.evaluate(([id, text]) => [...document.querySelectorAll(`.gw [data-node="${id}"] button`)].find((b) => b.textContent.includes(text)).click(), [id, text])

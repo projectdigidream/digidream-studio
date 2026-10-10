@@ -369,11 +369,11 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 .sd-font-sample{font-size:20px;padding:4px 0 8px}
 .sd-sub{display:flex;flex-direction:column;gap:10px}
 .sd-pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
-.sd-pic{display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid #2a3446;border-radius:8px;padding:6px}
-.sd-pic img{max-width:100%;max-height:80px;image-rendering:pixelated;background:repeating-conic-gradient(#1b2230 0 25%,#12161e 0 50%) 0 0/12px 12px}
+.sd-pic{display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid var(--dnp-color-line-main);border-radius:8px;padding:6px}
+.sd-pic img{max-width:100%;max-height:80px;image-rendering:pixelated;background:repeating-conic-gradient(var(--dnp-color-bg-raised) 0 25%,var(--dnp-color-bg-panel) 0 50%) 0 0/12px 12px}
 .sd-slice-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
-.sd-slice{border:1px solid #2a3446;background:repeating-conic-gradient(#1b2230 0 25%,#12161e 0 50%) 0 0/12px 12px;image-rendering:pixelated}
+.sd-slice{border:1px solid var(--dnp-color-line-main);background:repeating-conic-gradient(var(--dnp-color-bg-raised) 0 25%,var(--dnp-color-bg-panel) 0 50%) 0 0/12px 12px;image-rendering:pixelated}
 .sd-slice-nums{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;flex:1 1 200px}
-.sd-style-preview{position:relative;height:210px;max-width:320px;border:1px dashed #3a4256;border-radius:8px;overflow:hidden;background:linear-gradient(160deg,#1a2230,#0e1219)}
-.sd-sub-preview{position:relative;height:200px;max-width:640px;border:1px dashed #3a4256;border-radius:8px;overflow:hidden;background:linear-gradient(160deg,#3a4a5e,#11161f)}
+.sd-style-preview{position:relative;height:210px;max-width:320px;border:1px dashed var(--dnp-color-line-strong);border-radius:8px;overflow:hidden;background:linear-gradient(160deg,var(--dnp-color-bg-hover),var(--dnp-color-bg-sunken))}
+.sd-sub-preview{position:relative;height:200px;max-width:640px;border:1px dashed var(--dnp-color-line-strong);border-radius:8px;overflow:hidden;background:linear-gradient(160deg,var(--dnp-color-line-strong),var(--dnp-color-bg-panel))}
 ` }))
