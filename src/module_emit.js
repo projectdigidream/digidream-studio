@@ -27,6 +27,8 @@
 // map's own file. The runtime scripts are declared by the repository-relative
 // path a checkout has them at, so the same .map bakes with desktop mapc.
 //
+import { weaponsJson, spriteIndexJson, viewPictures, pngSize, expandSheetViews } from './viewmodel_emit.js'
+import { decodePng, encodePng } from './bake/png.js'
 import { swingsJson } from './swings_emit.js'
 import { normalize, derive } from './topology.js'
 import { emitMap } from './mapfmt.js'
@@ -516,11 +518,48 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   if (merged.bank) files.push({ path: 'assets/sounds/bank.sfxproj', bytes: JSON.stringify(merged.bank) })
   for (const c of merged.collisions) problems.push({ map: 'sounds', errors: [], warnings: [{ sector: 'sounds', msg: `${c.name} is in ${c.kept} and ${c.dropped.join(', ')}; ${c.kept}'s is kept` }] })
   // How swings look in the game (docs/SWINGS.md): only when the module says.
+  // The weapon in first person (viewmodel_emit.js): its frames, and the
+  // index of the pictures' sizes and offsets the client places them by.
+  // A weapon drawn from a sprite sheet (a ThreeSprite project) is cut into a
+  // picture per frame here, placed where it sits on the sheet's canvas.
+  const bytesOf = async (b) => (typeof b?.arrayBuffer === 'function' ? new Uint8Array(await b.arrayBuffer()) : typeof b === 'string' ? new TextEncoder().encode(b) : b)
+  const manifests = {}
+  for (const v of Object.values(module.viewmodels?.weapons ?? {})) {
+    const n = v.sheet?.name
+    if (n && !(n in manifests)) {
+      try { manifests[n] = assets[`sprites/${n}.json`] ? JSON.parse(new TextDecoder().decode(await bytesOf(assets[`sprites/${n}.json`]))) : null } catch { manifests[n] = null }
+      if (!manifests[n]) problems.push({ map: 'weapons', errors: [], warnings: [{ sector: 'first person', msg: `no sprite sheet ${n} in this module: the first-person view has nothing to draw` }] })
+    }
+  }
+  const expanded = expandSheetViews(module, (n) => manifests[n])
+  const views = weaponsJson(expanded.module)
+  if (views) {
+    files.push({ path: 'assets/sprites/weapons.json', bytes: views })
+    const pics = Object.keys(assets).filter((p) => /^sprites\/[^/]+\.png$/.test(p) && !assets[p.replace(/\.png$/, '.json')])
+    const sizes = {}
+    for (const p of pics) sizes[p.slice(8, -4)] = pngSize(await bytesOf(assets[p]))
+    const index = JSON.parse(spriteIndexJson(expanded.module, Object.keys(sizes), (n) => sizes[n]) ?? '{"sizes":{},"offsets":{}}')
+    const sheets = {}
+    for (const pic of expanded.pictures) {
+      try {
+        sheets[pic.sheet] ??= decodePng(await bytesOf(assets[`sprites/${pic.sheet}.png`]))
+        const src = sheets[pic.sheet]; const { x, y, w, h } = pic.rect
+        const out = new Uint8Array(w * h * 4)
+        for (let r = 0; r < h; r++) out.set(src.rgba.subarray(((y + r) * src.w + x) * 4, ((y + r) * src.w + x + w) * 4), r * w * 4)
+        files.push({ path: `assets/sprites/${pic.name}.png`, bytes: encodePng(w, h, out) })
+        index.sizes[pic.name] = pic.size
+        index.offsets[pic.name] = pic.offset
+      } catch (e) { problems.push({ map: 'weapons', errors: [], warnings: [{ sector: 'first person', msg: `${pic.name}: the frame could not be cut from ${pic.sheet} (${e.message})` }] }) }
+    }
+    files.push({ path: 'assets/sprites/index.json', bytes: JSON.stringify(index, null, 1) })
+    for (const n of viewPictures(module)) if (!sizes[n]) problems.push({ map: 'weapons', errors: [], warnings: [{ sector: 'first person', msg: `${n} is not a picture of this module: the first-person view does not draw it` }] })
+  }
   const swings = swingsJson(module)
   if (swings) files.push({ path: 'assets/sprites/swings.json', bytes: swings })
   for (const [path, bytes] of Object.entries(assets)) {
     if (path.startsWith('sources/')) files.push({ path, bytes })
     else if (swings && path === 'sprites/swings.json') continue
+    else if (views && (path === 'sprites/weapons.json' || path === 'sprites/index.json')) continue
     else if (!(merged.bank && path === 'sounds/bank.sfxproj')) files.push({ path: `assets/${path}`, bytes })
   }
   return { ok, files, problems }

@@ -98,6 +98,9 @@ const STYLE = `
 .st-chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;cursor:pointer;font-size:12px}
 
 .st-chips{display:flex;flex-wrap:wrap;gap:6px}
+/* The first-person preview: the 320x200 screen the weapon is drawn on. */
+.st-view-canvas{width:100%;max-width:400px;aspect-ratio:320/200;align-self:center;background:var(--cv-common-stage);border:1px solid var(--dnp-color-line-main);border-radius:var(--dnp-radius-control);image-rendering:pixelated}
+.st-view-tics{flex:0 0 4.5em!important;min-width:0}
 .st-chips-wrap{display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-width:0}
 .st-chips-find{width:100%;box-sizing:border-box}
 .st-chips-long{max-height:11.5em;overflow-y:auto;overscroll-behavior:contain;align-content:flex-start;padding:4px;
@@ -187,6 +190,9 @@ const STYLE = `
 .wk-top{grid-area:top;display:flex;gap:8px;align-items:center;height:auto;padding:8px 12px;flex-wrap:wrap}
 .wk-top button:where(:not(.ui-switch):not(.ui-help)),.wk-bar button:where(:not(.ui-switch):not(.ui-help)),.wk-details button:where(:not(.ui-switch):not(.ui-help)),.wk-preview button:where(:not(.ui-switch):not(.ui-help)){min-width:44px;height:40px;font-size:12px;line-height:1;cursor:pointer;padding:0 12px}
 .wk-tabs{display:flex;gap:4px}
+/* The details pane's tabs wrap rather than crowd into each other (a weapon has seven). */
+.wk-details .wk-tabs{flex-wrap:wrap;row-gap:2px}
+.wk-details .wk-tabs>*{flex:0 0 auto}
 
 .wk-preview{grid-area:preview;border-right:1px solid var(--dnp-color-line-main);padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
 .wk-title{font-weight:700}

@@ -26,6 +26,7 @@ import { newMonster, deleteMonster, bodyRows, brainRows, varsRows, stateRows, mi
 import { newWeapon, deleteWeapon, newArsenal } from './weapons_emit.js'
 import { swingRows, newSwing, SwingPreview } from './swing.js'
 import { slashRows } from './slashform.js'
+import { viewRows } from './viewform.js'
 import { avatarRows, weaponRows, arsenalRows } from './arms.js'
 import { bodyRows as playerBodyRows, moveRows, kitRows, newPlayer, soundRows as playerSoundRows } from './player.js'
 
@@ -90,7 +91,7 @@ const SPECS = {
     remove: (S, name) => deleteWeapon(S.module, name),
     // A weapon is held by the PLAYER, so the preview shows the player's art.
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['node', '', 'workshop.state'], ['weapon', 'weapon', 'workshop.weapon'], ['swing', 'swing', 'workshop.swing'], ['slash', 'slash', 'sfx.whoosh'], ['vars', 'vars', 'workshop.vars'], ['arsenal', 'arsenal', 'workshop.arsenal']]
+    tabs: [['node', '', 'workshop.state'], ['weapon', 'weapon', 'workshop.weapon'], ['swing', 'swing', 'workshop.swing'], ['slash', 'slash', 'sfx.whoosh'], ['view', 'first person', 'workshop.preview'], ['vars', 'vars', 'workshop.vars'], ['arsenal', 'arsenal', 'workshop.arsenal']]
   },
   // The player, who has no graph: nothing about them is a state machine, so
   // the window is its preview and its forms.
@@ -667,6 +668,9 @@ class Workshop {
     else if (this.tab === 'swing') {
       body.push(...this.#swingSection(m, `every ${sp.node}`, ctx))
       body.push(muted('How the swing is drawn in the game -- its slash streak -- is in the slash tab.'))
+    } else if (this.tab === 'view') {
+      // How the weapon is drawn over the view in first person (viewform.js).
+      if (this.mob) body.push(...viewRows(S, this.mob, changed))
     } else if (this.tab === 'slash') {
       // How the swing is drawn in the game: the slash streak (docs/SWINGS.md),
       // this monster's or weapon's own, or the player's default for every swing.
