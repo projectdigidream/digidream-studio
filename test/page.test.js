@@ -1110,6 +1110,34 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return { n: p.points.length, at: p.points.indexOf(p.points.find((q) => q.id === S.pathPointSel)), pts: p.points.map((q) => `${q.x},${q.y}`) }
   })
   check(inserted.n === reordered.length + 1 && inserted.at === 1, `a new waypoint goes between the picked one and the next (${inserted.pts.join(' → ')})`)
+  // A TAP ON A WAYPOINT'S NUMBER picks it (the number is what a finger aims
+  // at; the handle under it is a few pixels wide) rather than adding one.
+  const badge = await page.evaluate(() => {
+    const S = window.__studio
+    S.pathPointSel = null; S.redraw()
+    const q = S.doc.paths[0].points[2]
+    const at = S.viewport.toScreen(q.x, q.y, q.z + 0.6 + S.viewport.viewHeight / 44)
+    return { x: at.x, y: at.y, id: q.id, n: S.doc.paths[0].points.length }
+  })
+  await page.mouse.click(badge.x, badge.y); await new Promise((r) => setTimeout(r, 250))
+  const tappedBadge = await page.evaluate(() => ({ sel: window.__studio.pathPointSel, n: window.__studio.doc.paths[0].points.length }))
+  check(tappedBadge.sel === badge.id && tappedBadge.n === badge.n, `a tap on a waypoint's number picks it, adding nothing (${JSON.stringify({ ...tappedBadge, want: badge.id })})`)
+  // THE ORDER AS A LIST: a row's down arrow moves that waypoint one later;
+  // "reverse the order" turns the path round.
+  const listed = await page.evaluate(() => {
+    const S = window.__studio
+    const p = S.doc.paths[0]
+    const was = p.points.map((q) => q.id)
+    const rows = [...document.querySelectorAll('.st-sheet [data-path-point]')]
+    rows[0].querySelector('[data-icon="action.down"]').closest('button').click()
+    const moved = S.doc.paths[0].points.map((q) => q.id)
+    ;[...document.querySelectorAll('.st-sheet button')].find((b) => /reverse the order/.test(b.textContent)).click()
+    const back = S.doc.paths[0].points.map((q) => q.id)
+    return { rows: rows.length, was, moved, back, sel: S.pathPointSel }
+  })
+  check(listed.rows === listed.was.length && listed.moved[1] === listed.was[0] && listed.moved[0] === listed.was[1] && listed.sel === listed.was[0],
+        `the waypoints are listed in order, and a row's arrow moves it along (${JSON.stringify({ rows: listed.rows, was: listed.was, moved: listed.moved })})`)
+  check(listed.back.join() === [...listed.moved].reverse().join(), 'and the whole order reverses at once')
   // The order is on the map, or moving one has no visible effect.
   const numbered = await page.evaluate(() => {
     const S = window.__studio

@@ -169,17 +169,34 @@ function roomTap (S, info) {
  * the carpet. The height comes from the path's last point, so a path stays at
  * the height it was started at.
  */
+/**
+ * THE WAYPOINT UNDER A FINGER: the nearest of the edited path's points within
+ * reach on screen -- its handle, or the number drawn above it, which is what a
+ * person actually aims at. The handle alone is a box a few pixels wide, and a
+ * tap that missed it used to drop a new waypoint on top of the old one.
+ */
+const PATH_REACH_PX = 30
+export function pathPointAt (S, info) {
+  const p = S.editedPath?.()
+  if (!p) return null
+  const lift = 0.6 + S.viewport.viewHeight / 44          // the number's badge: z + 0.6, half its height up
+  let best = null; let bestD = PATH_REACH_PX
+  for (const pt of p.points) {
+    const d = Math.min(S.viewport.screenDistance(info.x, info.y, pt.x, pt.y, pt.z),
+                       S.viewport.screenDistance(info.x, info.y, pt.x, pt.y, pt.z + lift))
+    if (d < bestD) { bestD = d; best = pt }
+  }
+  return best
+}
+
 function pathTap (S, info) {
   const p = S.editedPath()
   if (!p) { S.status('no camera path being edited', 'warn'); return }
   // A TAP ON A POINT PICKS IT rather than dropping a second one on top of it,
   // which is what a tap there used to do -- and the height of the one you
   // picked is what the sheet then edits.
-  const f = S.viewport.pickFurniture(info.x, info.y)
-  if (f?.kind === 'pathpoint' && p.points.some((q) => q.id === f.id)) {
-    S.selectPathPoint(f.id)
-    return
-  }
+  const hit = pathPointAt(S, info)
+  if (hit) { S.selectPathPoint(hit.id); return }
   // At the height of the point last worked on, or of the last one placed: a
   // camera path is usually above head height, and a point dropped on the floor
   // of the room below is a shot through the carpet.
@@ -245,9 +262,7 @@ export function onDragStart (S, info) {
   // A path point is dragged with the path tool, where a tap would otherwise
   // add a point on top of it.
   if (S.tool === 'path') {
-    const f = S.viewport.pickFurniture(info.x, info.y)
-    const p = S.editedPath()
-    const pt = f?.kind === 'pathpoint' && p ? p.points.find((x) => x.id === f.id) : null
+    const pt = pathPointAt(S, info)
     if (pt) { S.selectPathPoint(pt.id, { quiet: true }); S.drag = { kind: 'pathpoint', pt, start: { x: pt.x, y: pt.y }, from: groundAt(S, info, pt.z) } }
     else S.drag = { kind: 'pan', last: { x: info.x, y: info.y } }
     return
@@ -342,11 +357,11 @@ export function onDragEnd (S, info, cancelled) {
 export function onLongPress (S, info) {
   // A path's point is removed by holding it, the way a sector's corner is.
   if (S.tool === 'path') {
-    const f = S.viewport.pickFurniture(info.x, info.y)
+    const pt = pathPointAt(S, info)
     const p = S.editedPath()
-    if (f?.kind === 'pathpoint' && p) {
-      p.points = p.points.filter((x) => x.id !== f.id)
-      if (S.pathPointSel === f.id) S.pathPointSel = null
+    if (pt && p) {
+      p.points = p.points.filter((x) => x !== pt)
+      if (S.pathPointSel === pt.id) S.pathPointSel = null
       S.commit()
     }
     return

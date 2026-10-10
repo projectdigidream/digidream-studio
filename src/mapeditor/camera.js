@@ -64,13 +64,21 @@ function editPath (id) {
 /** Move the picked waypoint one place along the curve. */
 function movePoint (delta) {
   const p = S.editedPath()
-  const i = p ? p.points.findIndex((q) => q.id === S.pathPointSel) : -1
+  movePointAt(p ? p.points.findIndex((q) => q.id === S.pathPointSel) : -1, delta)
+}
+
+/** Move waypoint `i` one place along the curve (it stays picked). */
+function movePointAt (i, delta) {
+  const p = S.editedPath()
   const j = i + delta
-  if (i < 0 || j < 0 || j >= p.points.length) return
+  if (!p || i < 0 || j < 0 || j >= p.points.length) return
   const [q] = p.points.splice(i, 1)
   p.points.splice(j, 0, q)
+  S.pathPointSel = q.id
   S.commit(); showPathSheet(); S.redraw()
 }
+
+const fmt = (v) => String(Math.round((v ?? 0) * 100) / 100)
 
 /**
  * A new waypoint between the picked one and the next, ready to drag.
@@ -121,7 +129,17 @@ function showPathSheet () {
             button('+ after this', () => insertAfter())
           ])
         ])
-      : muted('No waypoint picked. Tap one to set its height.'),
+      : muted('No waypoint picked. Tap one (or its number) to set its height.'),
+    // THE ORDER, as a list: the curve runs through the waypoints in this
+    // order. Tap a row to pick that waypoint; the arrows move it along.
+    el('div', { class: 'st-section-head', text: 'the order' }),
+    ...p.points.map((q, n) => el('div', { class: 'st-row st-path-point', 'data-path-point': q.id, 'data-on': q.id === S.pathPointSel ? '1' : '0' }, [
+      button(`${n + 1}`, () => S.selectPathPoint(q.id), 'st-path-n'),
+      el('span', { class: 'st-entry', text: `${fmt(q.x)}, ${fmt(q.y)} · height ${fmt(q.z)}`, onclick: () => S.selectPathPoint(q.id) }),
+      button(withIcon('action.up'), () => movePointAt(n, -1), n === 0 ? 'st-dim' : ''),
+      button(withIcon('action.down'), () => movePointAt(n, 1), n === p.points.length - 1 ? 'st-dim' : '')
+    ])),
+    p.points.length > 1 ? button(withIcon('action.swap', 'reverse the order'), () => { p.points.reverse(); S.commit(); showPathSheet(); S.redraw() }) : null,
     slider('height for every waypoint', p.points[0]?.z ?? 2, { min: -32, max: 64, step: 0.25 }, (v, done) => {
       for (const q of p.points) q.z = v
       S.redraw()
