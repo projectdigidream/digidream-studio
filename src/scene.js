@@ -12,6 +12,7 @@
 //
 // Esc or ■ ends it; ↻ plays it again.
 //
+import { Typewriter } from '/src/render/typewriter.js'
 import { el, withIcon, icon } from './ui.js'
 import { planScene, cameraPose } from './scene_plan.js'
 import { buildSpline } from '/src/spline.js'
@@ -75,10 +76,10 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
   const own = (S.module.ui?.hud ?? []).find((e) => e.id === 'subtitle')
   if (own) hud.setLayout(parseLayout({ ...(S.module.ui), hud: [own] }).layout)
 
-  let t0 = 0; let applied = 0; let line = 0; let cam = null; let shake = null; let raf = 0; let done = false
+  let t0 = 0; let applied = 0; let line = 0; let cam = null; let shake = null; let typer = null; let raf = 0; let done = false
   const say = (text) => { log.textContent = text; log.dataset.on = '1' }
   const reset = () => {
-    applied = 0; line = 0; cam = null; shake = null
+    applied = 0; line = 0; cam = null; shake = null; typer = null
     top.style.transition = bottom.style.transition = fade.style.transition = 'none'
     top.style.height = bottom.style.height = '0'
     fade.style.opacity = '0'
@@ -99,9 +100,11 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
       fade.style.transition = `opacity ${ev.seconds}s linear`; fade.style.opacity = String(ev.to)
     } else if (ev.kind === 'subtitle') {
       line = ev.line
-      hud.update({ 'hud.subtitle': ev.text, 'hud.subtitle_speaker': ev.speaker ?? undefined })
+      // Typed: the client's own typewriter shows it a step at a time (frame()).
+      typer = ev.typing ? { tw: new Typewriter({ text: ev.text, speed: ev.typing.speed, pack: ev.typing.pack, startedAt: ev.t }), sound: ev.typing.sound } : null
+      hud.update({ 'hud.subtitle': typer ? typer.tw.shownAt(ev.t) : ev.text, 'hud.subtitle_speaker': ev.speaker ?? undefined })
     } else if (ev.kind === 'clear_subtitle') {
-      if (ev.line === undefined || ev.line === line) hud.update({ 'hud.subtitle': undefined, 'hud.subtitle_speaker': undefined })
+      if (ev.line === undefined || ev.line === line) { typer = null; hud.update({ 'hud.subtitle': undefined, 'hud.subtitle_speaker': undefined }) }
     } else if (ev.kind === 'camera') {
       cam = ev.mode === 'follow' ? null : { ev, from: poseNow(), sp: spline(ev.path) }
       if (!cam) S.viewport.setPose(null)
@@ -114,6 +117,12 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
     if (done) return
     const t = (performance.now() - t0) / 1000
     while (applied < plan.events.length && plan.events[applied].t <= t) apply(plan.events[applied++])
+    if (typer && !typer.done) {
+      hud.update({ 'hud.subtitle': typer.tw.shownAt(t) })
+      // At most one sound a frame, as the client plays them.
+      if (typer.tw.takeSounds(t).length && typer.sound) S.hear?.(typer.sound)
+      typer.done = typer.tw.doneAt(t)
+    }
     if (cam?.sp) {
       const u = t - cam.ev.t
       let pose = cameraPose(cam.ev, u, cam.sp, subject)

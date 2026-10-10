@@ -9,7 +9,7 @@
 //
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { planScene, cameraPose, subtitleSeconds, isStart } from '../src/scene_plan.js'
+import { planScene, cameraPose, subtitleSeconds, subtitleTyping, isStart } from '../src/scene_plan.js'
 import { buildSpline } from '../../engine/client/src/spline.js'
 import { ROOT } from './oracle.js'
 
@@ -23,8 +23,12 @@ const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e
 
 // The engine's own numbers, read from its source so the plan cannot drift from them.
 const lua = readFileSync(join(ROOT, 'engine', 'maps', 'scripts', 'graphs.lua'), 'utf8')
-check(/n\.seconds or math\.min\(8, 1\.5 \+ #text \* 0\.05\)/.test(lua) && subtitleSeconds('x'.repeat(40)) === 3.5 && subtitleSeconds('x'.repeat(400)) === 8,
+check(/n\.seconds or \(\(typed and #text \/ speed or 0\) \+ math\.min\(8, 1\.5 \+ #text \* 0\.05\)\)/.test(lua) && subtitleSeconds('x'.repeat(40)) === 3.5 && subtitleSeconds('x'.repeat(400)) === 8,
       'a subtitle stays min(8, 1.5 + 0.05 a letter), as graphs.lua says')
+// TYPED: typed first (letters / speed, 30 a second by default), then read; 2 letters a step.
+check(/math\.max\(1, n\.speed or 30\)/.test(lua) && /math\.floor\(n\.pack or 2\)/.test(lua) &&
+      subtitleSeconds('x'.repeat(60), { typed: true, speed: 30 }) === 2 + 4.5 && JSON.stringify(subtitleTyping({ mode: 'typed', sound: 'blip' })) === '{"speed":30,"pack":2,"sound":"blip"}' && subtitleTyping({}) === null,
+      'a typed subtitle is typed at 30 a second, 2 letters a step, then read, as graphs.lua says')
 check(/n\.letterbox or 0\.12/.test(lua) && /n\.seconds or 0\.5/.test(lua) && /local secs = n\.seconds or 1/.test(lua), 'the bars default to 0.12 over 0.5 s and a fade to 1 s, as graphs.lua says')
 check(/unfx\(len\) \/ speed \* 60/.test(lua) && /local speed = n\.speed or 6/.test(lua), 'a flythrough is done after length / speed, 6 units a second by default, as graphs.lua says')
 

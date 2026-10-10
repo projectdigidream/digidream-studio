@@ -4,7 +4,8 @@
 // it over the map before anyone presses Play.
 //
 // The engine's own rules, kept here:
-//   subtitle      `then` at once; `done` after `seconds`, else min(8, 1.5 +
+//   subtitle      `then` at once; `done` after `seconds`, else (typed: letters /
+//                 speed, plus) min(8, 1.5 +
 //                 0.05 a letter) -- long enough to read it;
 //   fade          `then` at once; `done` after `seconds` (1);
 //   flythrough    `then` at once; `done` after the path's length / speed;
@@ -23,7 +24,16 @@ const MAX_STEPS = 256
 const MAX_SECONDS = 120
 const LOOKAHEAD = 8                       // the client's FLY_LOOKAHEAD
 
-export const subtitleSeconds = (text) => Math.min(8, 1.5 + String(text ?? '').length * 0.05)
+export const subtitleSeconds = (text, { typed = false, speed = 30 } = {}) => {
+  const n = String(text ?? '').length
+  // TYPED: long enough to type it first (graphs.lua: #text / speed), then to read it.
+  return (typed ? n / Math.max(1, speed) : 0) + Math.min(8, 1.5 + n * 0.05)
+}
+
+/** A subtitle node's typing, as graphs.lua sends it: null for a plain line. */
+export const subtitleTyping = (n) => (n.mode === 'typed'
+  ? { speed: Math.max(1, n.speed ?? 30), pack: Math.max(1, Math.floor(n.pack ?? 2)), sound: n.sound ?? null }
+  : null)
 
 /** A node a run starts from: an event, an on_call, a `when_…`, every, after. */
 export const isStart = (n) => ['event', 'on_call', 'every', 'after'].includes(n?.type) || /^when_/.test(n?.type ?? '')
@@ -86,9 +96,10 @@ export function planScene (graph, startId, { pathLength = () => null } = {}) {
         go(id, 'then', t); go(id, 'done', t + secs); break
       }
       case 'subtitle': {
-        const secs = n.seconds ?? subtitleSeconds(n.text)
+        const typing = subtitleTyping(n)
+        const secs = n.seconds ?? subtitleSeconds(n.text, { typed: !!typing, speed: typing?.speed })
         const line = ++subtitleSeq
-        events.push({ t, kind: 'subtitle', text: n.text ?? '', speaker: n.speaker ?? null, line })
+        events.push({ t, kind: 'subtitle', text: n.text ?? '', speaker: n.speaker ?? null, line, typing })
         // Taken off only if it is still this line (a newer one replaced it).
         events.push({ t: t + secs, kind: 'clear_subtitle', line })
         go(id, 'then', t); go(id, 'done', t + secs); break
