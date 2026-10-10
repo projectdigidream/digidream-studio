@@ -11,7 +11,10 @@
 import { el, button, muted, ask } from '../ui.js'
 import { sheetName } from '../sheets.js'
 import { importSheet } from './props.js'
-import { frameKey } from '/src/render/atlas.js'
+import { frameKey, parseAtlas } from '/src/render/atlas.js'
+import { withIcon } from '../ui.js'
+import { duplicateSprite } from '../assetcopy.js'
+import { exportButtons, askCopyName } from './assetbuttons.js'
 
 let S = null
 
@@ -54,7 +57,23 @@ function showSprites (open = null) {
       muted(`${(rec.animations ?? []).length} animation(s): ${(rec.animations ?? []).join(', ') || '—'}`),
       muted(users.length ? `drawn by ${users.join(', ')}` : 'no prop draws it yet'),
       muted(sourceOf(open) ? `baked from its ThreeSprite project${baked ? ` (baker ${baked.baker} ${baked.version})` : ''}` : 'imported as a finished sheet: no project to edit (import its .tsprite to have one)'),
-      el('div', { class: 'st-row' }, sourceOf(open) ? (S.editButtons?.('file:tsprite', open) ?? []) : [])
+      el('div', { class: 'st-row' }, [
+        ...(sourceOf(open) ? (S.editButtons?.('file:tsprite', open) ?? []) : []),
+        // A copy: the sheet and its ThreeSprite project under a new name, a variant to change.
+        button(withIcon('action.duplicate', 'duplicate'), async () => {
+          const to = await askCopyName(S, open, (n) => !!S.module.sprites?.[n] || !!S.rec.assets?.[`sources/sprites/${n}.tsprite`])
+          if (!to) return
+          const json = S.rec.assets[`sprites/${open}.json`]
+          const text = duplicateSprite(S.rec, open, to, typeof json === 'string' ? json : await json?.text?.())
+          if (!text) { S.status(`${open} could not be copied`, 'error'); return }
+          S.rec.assets[`sprites/${to}.json`] = new Blob([text], { type: 'application/json' })
+          S.sheets.set(to, { atlas: parseAtlas(JSON.parse(text), to), imageUrl: URL.createObjectURL(S.rec.assets[`sprites/${to}.png`]) })
+          S.moduleChanged()
+          S.status(`${to}: a copy of ${open}`, 'ok')
+          showSprites(to)
+        }),
+        ...exportButtons(S, 'sprite', open)
+      ])
     ]))
   }
   S.ui.showSheet('Sprites', body)

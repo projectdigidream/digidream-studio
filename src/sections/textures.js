@@ -11,6 +11,8 @@ import { useStroke } from '../../vendor/uikit/runtime.js'
 import { shell } from '../bridge.js'
 import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, pictureBackground, withIcon, icon } from '../ui.js'
 import { guessSheet, frameRect, frameSize, sheetProblems, MAX_FRAMES, DEFAULT_FPS } from '../texsheet.js'
+import { duplicateTexture } from '../assetcopy.js'
+import { exportButtons, askCopyName } from './assetbuttons.js'
 
 let S = null
 
@@ -222,6 +224,16 @@ function showTextures (open = null) {
       ...sheetProblems(open, meta.sheet, meta.w, meta.h).map((p) => el('div', { class: 'st-danger', text: p })),
       el('div', { class: 'st-row' }, [
         ...(S.editButtons?.('file:texture', open) ?? []),
+        // A copy: the picture and its qPainter project under a new name, a variant to change.
+        button(withIcon('action.duplicate', 'duplicate'), async () => {
+          const to = await askCopyName(S, open, (n) => !valid(n) || !!S.module.textures[n] || S.textureNames.includes(n))
+          if (!to || !duplicateTexture(S.rec, open, to)) return
+          S.imageUrls.set(to, URL.createObjectURL(S.rec.assets[`textures/${to}.png`]))
+          S.moduleChanged()
+          S.status(`${to}: a copy of ${open}`, 'ok')
+          showTextures(to)
+        }),
+        ...exportButtons(S, 'texture', open),
         button('rename', async () => {
           const raw = await ask('new name (A-Z, 0-9, _; up to 24)', open)
           const n = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)

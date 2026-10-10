@@ -3212,6 +3212,36 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
         `Gem Hollow opens from Home as the user's own module, clean, and a fresh copy beside it (${JSON.stringify(got)})`)
 }
 
+// DUPLICATE AND EXPORT: in the example project, a texture and a sprite are
+// duplicated (the dialog's name taken as offered), the copies are there to
+// draw, and each offers its files to take out of the studio.
+{
+  const got = await page.evaluate(async () => {
+    const S = window.__studio
+    const was = S.rec.id
+    await S.openExample('gemhollow'); await new Promise((r) => setTimeout(r, 1500))
+    const okDialog = async () => { for (let i = 0; i < 30; i++) { const d = document.querySelector('dialog[open]'); if (d) { d.querySelector('button[type=submit]').click(); return true } await new Promise((r) => setTimeout(r, 100)) } return false }
+    const tex = Object.keys(S.module.textures)[0]
+    await S.go('textures', tex); await new Promise((r) => setTimeout(r, 400))
+    S.showTextures(tex); await new Promise((r) => setTimeout(r, 300))
+    const texCard = document.querySelector(`[data-open-texture="${tex}"]`)
+    const texExports = [...texCard.querySelectorAll('button')].map((b) => b.textContent.trim()).filter((t) => /export/.test(t))
+    ;[...texCard.querySelectorAll('button')].find((b) => /duplicate/.test(b.textContent)).click(); await okDialog(); await new Promise((r) => setTimeout(r, 400))
+    const texCopy = `${tex}_2`
+    const texOk = !!S.module.textures[texCopy] && !!S.rec.assets[`textures/${texCopy}.png`] && !!S.imageUrls.get(texCopy)
+    await S.go('sprites'); await new Promise((r) => setTimeout(r, 400))
+    S.showSprites('HERO'); await new Promise((r) => setTimeout(r, 300))
+    const sprCard = document.querySelector('[data-open-sprite="HERO"]')
+    const sprExports = [...sprCard.querySelectorAll('button')].map((b) => b.textContent.trim()).filter((t) => /export/.test(t))
+    ;[...sprCard.querySelectorAll('button')].find((b) => /duplicate/.test(b.textContent)).click(); await okDialog(); await new Promise((r) => setTimeout(r, 400))
+    const sprOk = !!S.module.sprites.HERO_2 && !!S.sheets.get('HERO_2')?.atlas && !!S.rec.assets['sources/sprites/HERO_2.tsprite'] && JSON.parse(await S.rec.assets['sprites/HERO_2.json'].text()).sprite === 'HERO_2'
+    await S.store.remove('gemhollow'); await S.openModule(was); await S.go('map')
+    return { tex, texOk, texExports, sprOk, sprExports }
+  })
+  check(got.texOk && got.sprOk, `a texture and a sprite duplicate, picture, sheet and project, under the new name (${JSON.stringify(got)})`)
+  check(got.texExports.some((t) => /PNG/.test(t)) && got.sprExports.some((t) => /tsprite/.test(t)) && got.sprExports.some((t) => /sheet/.test(t)), 'and each offers its files to take out of the studio')
+}
+
 // A STYLE FROM OUTSIDE: uikit's sample skin, baked as a tool would get it,
 // imported through the studio (skin.js importSkin, what Home's "import a
 // style…" calls), worn, listed on Home, then forgotten.
