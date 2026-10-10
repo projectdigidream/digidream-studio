@@ -7,6 +7,7 @@
 // The workshop (workshop.js) composes these into its windows; nothing here
 // knows about a window.
 //
+import { tidySwings } from './swings_emit.js'
 import { el, row, text, toggle, select, button, chips, card, muted, number, ask, withIcon, icon } from './ui.js'
 import { nextPropId } from './props_emit.js'
 import { argFields } from './argform.js'
@@ -52,6 +53,8 @@ export function deleteMonster (S, name) {
   delete module.mobs.mobs[name]
   module.props = (module.props ?? []).filter((p) => p.name !== name)
   if (module.layouts) delete module.layouts[name]
+  // Its look in the game goes with it (swings_emit.js).
+  if (module.swings?.monsters) { delete module.swings.monsters[name]; tidySwings(module) }
 }
 
 /** The body: size, speed, and which sheet draws it in which states. */

@@ -12,6 +12,7 @@
 // The table is written exactly as the module document keeps it, so there is no
 // translation to get wrong -- only the number rule lua.js enforces.
 //
+import { tidySwings } from './swings_emit.js'
 import { toLua, block } from './lua.js'
 
 /**
@@ -88,4 +89,6 @@ export function deleteWeapon (module, name) {
     if (p.weapon === name) delete module.weapons.pickups[pname]
   }
   if (module.layouts) delete module.layouts[`weapon:${name}`]
+  // Its look in the game goes with it (swings_emit.js).
+  if (module.swings?.weapons) { delete module.swings.weapons[name]; tidySwings(module) }
 }

@@ -43,7 +43,7 @@ const STYLE = `
 .sd-body{position:relative;flex:1 1 auto;min-height:0;overflow:auto}
 /* A section that was a sheet: its rows as a page, a readable column. */
 .sd-body.st-page{padding:12px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;max-width:980px}
-.sd-body.st-page button:where(:not(.ui-switch)){min-width:44px;height:40px;
+.sd-body.st-page button:where(:not(.ui-switch):not(.ui-help)){min-width:44px;height:40px;
   font-size:13px;line-height:1;cursor:pointer;padding:0 12px}
 /* A section that was a window fills the page. */
 .sd-body > .wk{position:absolute;inset:0;padding-top:0;z-index:auto}

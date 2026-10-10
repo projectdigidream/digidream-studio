@@ -3108,6 +3108,34 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   await page.evaluate(() => { localStorage.removeItem('dnp.studio.skin'); localStorage.removeItem('dnp.studio.skin.mode') })
 }
 
+// HOW A SWING LOOKS IN THE GAME (docs/SWINGS.md): the monster's swing tab and
+// the player's slash tab carry the slash fields; an edit lands in the module
+// and in the assets/sprites/swings.json the next Play writes.
+{
+  const got = await page.evaluate(async () => {
+    const S = window.__studio
+    const mob = Object.keys(S.module.mobs?.mobs ?? {})[0]
+    await S.go('monsters', mob); await new Promise((r) => setTimeout(r, 400))
+    const tab = (t) => [...document.querySelectorAll('.wk-details .wk-tabs button')].find((b) => b.textContent.trim().endsWith(t))
+    tab('swing')?.click(); await new Promise((r) => setTimeout(r, 300))
+    const rows = [...document.querySelectorAll('.wk-details .st-row label')].map((l) => l.textContent)
+    const blend = [...document.querySelectorAll('.wk-details .st-row')].find((r) => /^blend/.test(r.querySelector('label')?.textContent ?? ''))?.querySelector('select')
+    if (blend) { blend.value = 'normal'; blend.dispatchEvent(new Event('change')) }
+    await new Promise((r) => setTimeout(r, 300))
+    const own = S.module.swings?.monsters?.[mob]
+    await S.go('player'); await new Promise((r) => setTimeout(r, 400))
+    tab('slash')?.click(); await new Promise((r) => setTimeout(r, 300))
+    const playerRows = [...document.querySelectorAll('.wk-details .st-row label')].map((l) => l.textContent)
+    const { swingsJson } = await import('/studio/src/swings_emit.js')
+    const file = JSON.parse(swingsJson(S.module) ?? '{}')
+    delete S.module.swings; S.moduleChanged()
+    await S.go('map')
+    return { mob, monsterFields: ['show', 'color', 'opacity', 'fade', 'width', 'blend', 'texture'].every((f) => rows.some((r) => r.startsWith(f))), own, playerFields: playerRows.some((r) => r.startsWith('blend')), file }
+  })
+  check(got.monsterFields && got.own?.blend === 'normal' && got.playerFields && got.file.monsters?.[got.mob]?.blend === 'normal',
+        `a monster's swing look and the default look are set in the workshops, and written to swings.json (${JSON.stringify(got)})`)
+}
+
 // A STYLE FROM OUTSIDE: uikit's sample skin, baked as a tool would get it,
 // imported through the studio (skin.js importSkin, what Home's "import a
 // style…" calls), worn, listed on Home, then forgotten.

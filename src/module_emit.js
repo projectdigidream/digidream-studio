@@ -27,6 +27,7 @@
 // map's own file. The runtime scripts are declared by the repository-relative
 // path a checkout has them at, so the same .map bakes with desktop mapc.
 //
+import { swingsJson } from './swings_emit.js'
 import { normalize, derive } from './topology.js'
 import { emitMap } from './mapfmt.js'
 import { emitMapLua, makeResolver } from './lua_emit.js'
@@ -514,8 +515,12 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   const merged = mergeBanks(packs)
   if (merged.bank) files.push({ path: 'assets/sounds/bank.sfxproj', bytes: JSON.stringify(merged.bank) })
   for (const c of merged.collisions) problems.push({ map: 'sounds', errors: [], warnings: [{ sector: 'sounds', msg: `${c.name} is in ${c.kept} and ${c.dropped.join(', ')}; ${c.kept}'s is kept` }] })
+  // How swings look in the game (docs/SWINGS.md): only when the module says.
+  const swings = swingsJson(module)
+  if (swings) files.push({ path: 'assets/sprites/swings.json', bytes: swings })
   for (const [path, bytes] of Object.entries(assets)) {
     if (path.startsWith('sources/')) files.push({ path, bytes })
+    else if (swings && path === 'sprites/swings.json') continue
     else if (!(merged.bank && path === 'sounds/bank.sfxproj')) files.push({ path: `assets/${path}`, bytes })
   }
   return { ok, files, problems }

@@ -25,6 +25,7 @@ import { edgesOf, autoLayout, problemsByState, NODE_W, NODE_H, MOB_SHAPE, WEAPON
 import { newMonster, deleteMonster, bodyRows, brainRows, varsRows, stateRows, missilesSection, STATE_NAMES } from './brain.js'
 import { newWeapon, deleteWeapon, newArsenal } from './weapons_emit.js'
 import { swingRows, newSwing, SwingPreview } from './swing.js'
+import { slashRows } from './slashform.js'
 import { avatarRows, weaponRows, arsenalRows } from './arms.js'
 import { bodyRows as playerBodyRows, moveRows, kitRows, newPlayer, soundRows as playerSoundRows } from './player.js'
 
@@ -111,7 +112,7 @@ const SPECS = {
     make: () => null,
     remove: () => {},
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds']]
+    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds'], ['slash', 'slash', 'workshop.swing']]
   }
 }
 
@@ -665,7 +666,11 @@ class Workshop {
       }
     } else if (this.tab === 'brain') body.push(...brainRows(S, m, ctx))
     else if (this.tab === 'weapon') body.push(...weaponRows(S, this.mob, m, ctx))
-    else if (this.tab === 'swing') body.push(...this.#swingSection(m, `every ${sp.node}`, ctx))
+    else if (this.tab === 'swing') {
+      body.push(...this.#swingSection(m, `every ${sp.node}`, ctx))
+      // And how it is drawn in the game: the slash streak (docs/SWINGS.md).
+      if (this.mob) body.push(...slashRows(S, weapon ? 'weapon' : 'monster', this.mob, changed))
+    } else if (this.tab === 'slash') body.push(...slashRows(S, 'default', null, changed))
     else if (this.tab === 'body') body.push(...(weapon ? avatarRows(S, { changed }) : bodyRows(S, this.prop, changed)))
     else if (this.tab === 'vars') body.push(...varsRows(m, changed))
     else if (this.tab === 'missiles') body.push(...missilesSection(S, changed))

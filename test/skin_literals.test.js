@@ -24,7 +24,8 @@ import { fileURLToPath } from 'node:url'
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
 // Files whose every colour is the module's: they write the module's files.
-const CONTENT = new Set(['style_emit.js', 'props_emit.js'])
+// (swings_emit.js: the game's slash look, the engine's default colour included.)
+const CONTENT = new Set(['style_emit.js', 'props_emit.js', 'swings_emit.js'])
 // Not yet migrated (later phases of the brief): shrink as each lands.
 const NOT_YET = new Set([])
 

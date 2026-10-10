@@ -43,7 +43,7 @@ const STYLE = `
   font-size:12px;white-space:pre-wrap;max-height:30vh;overflow:auto;min-height:20px}
 
 .st-side{display:flex;gap:6px;pointer-events:auto}
-.st-side button,.st-sheet button:where(:not(.ui-switch)),.st-row button:where(:not(.ui-switch)){min-width:44px;height:44px;
+.st-side button,.st-sheet button:where(:not(.ui-switch):not(.ui-help)),.st-row button:where(:not(.ui-switch):not(.ui-help)){min-width:44px;height:44px;
   font-size:13px;line-height:1;cursor:pointer;padding:0 12px}
 
 .st-sheet{position:absolute;left:0;right:0;bottom:0;max-height:62vh;display:flex;flex-direction:column;
@@ -140,7 +140,7 @@ const STYLE = `
 .st-sheet .st-row textarea{min-height:64px;font-size:12px}
 .st-sheet .st-row input[type=range]{height:30px}
 .st-sheet .st-slide{height:30px}
-.st-sheet button:where(:not(.ui-switch)),.st-sheet .st-row button:where(:not(.ui-switch)){min-width:34px;height:32px;padding:0 10px;font-size:12px}
+.st-sheet button:where(:not(.ui-switch):not(.ui-help)),.st-sheet .st-row button:where(:not(.ui-switch):not(.ui-help)){min-width:34px;height:32px;padding:0 10px;font-size:12px}
 .st-sheet .st-chip{height:28px;padding:0 9px;font-size:11px}
 .st-sheet .st-tile{height:56px}
 .st-sheet .st-card{padding:6px 8px;gap:5px}
@@ -172,7 +172,7 @@ const STYLE = `
   font-size:14px;line-height:1.4;font-family:var(--dnp-font-ui);padding-top:env(safe-area-inset-top)}
 .wk[hidden]{display:none}
 .wk-top{grid-area:top;display:flex;gap:8px;align-items:center;height:auto;padding:8px 12px;flex-wrap:wrap}
-.wk-top button:where(:not(.ui-switch)),.wk-bar button:where(:not(.ui-switch)),.wk-details button:where(:not(.ui-switch)),.wk-preview button:where(:not(.ui-switch)){min-width:44px;height:40px;font-size:12px;line-height:1;cursor:pointer;padding:0 12px}
+.wk-top button:where(:not(.ui-switch):not(.ui-help)),.wk-bar button:where(:not(.ui-switch):not(.ui-help)),.wk-details button:where(:not(.ui-switch):not(.ui-help)),.wk-preview button:where(:not(.ui-switch):not(.ui-help)){min-width:44px;height:40px;font-size:12px;line-height:1;cursor:pointer;padding:0 12px}
 .wk-tabs{display:flex;gap:4px}
 
 .wk-preview{grid-area:preview;border-right:1px solid var(--dnp-color-line-main);padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
