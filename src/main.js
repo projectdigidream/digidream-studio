@@ -616,6 +616,8 @@ async function openModule (id, { show = true } = {}) {
   S.rec = rec
   S.module = rec.module
   S.docs = rec.docs
+  // The shell serves this module's files and the engine's, no other module's.
+  shell.useModule(rec.id).catch(() => {})
   // Maps written when the player's size was each map's own: the module takes
   // the common size, a map that differs keeps its own as an override.
   // Documents from earlier studios, brought up to date (migrate.js).

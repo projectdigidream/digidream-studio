@@ -24,6 +24,13 @@ export const shell = {
   /** Restart the server on a module and load the game page. Never resolves on success: the page changes. */
   launch: (opts) => native()?.launch(opts) ?? Promise.reject(new Error('Play needs the app: in a browser, export a pack and run it with the engine')),
 
+  /**
+   * Say which module is open: the shell serves the page the engine's files
+   * and that module's only -- modules do not share. A shell without it (an
+   * older one, a browser) serves what it always did.
+   */
+  useModule: (id) => native()?.useModule?.(id) ?? Promise.resolve(false),
+
   /** Give the user a file. In a browser: a download. */
   share: async (name, bytes) => {
     const n = native()
