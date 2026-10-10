@@ -553,13 +553,13 @@ S.copyModule = copyModule
 // Its address is worked out when asked, not held in a const: the boot opens a
 // module from it on an empty store, long before a const this far down is
 // initialised (a first launch made a blank room on exactly that).
-async function templateRecord () {
+async function templateRecord (template = 'starter') {
   try {
-    const r = await fetch(new URL('./templates/starter.zip', import.meta.url))
+    const r = await fetch(new URL(`./templates/${template}.zip`, import.meta.url))
     if (!r.ok) throw new Error(`${r.status}`)
     return recordFromEntries(await readPack(new Uint8Array(await r.arrayBuffer())))
   } catch (e) {
-    console.warn('[studio] the starter template could not be read:', e?.message ?? e)
+    console.warn(`[studio] the ${template} template could not be read:`, e?.message ?? e)
     return null
   }
 }
@@ -577,6 +577,37 @@ async function newFromTemplate (id, name) {
   return rec
 }
 S.newFromTemplate = newFromTemplate
+
+/**
+ * THE EXAMPLE PROJECTS, packed into the studio like the starter
+ * (tools/make_template.mjs): opened as a module of the user's own, made from
+ * the example the first time and theirs to change after. "Fresh" makes it
+ * again from the example, under a new id, keeping the one they changed.
+ */
+const EXAMPLES = [
+  { id: 'gemhollow', name: 'Gem Hollow', about: 'A small platformer: a title screen, one big level in four zones, levers, gates, keys, gems, monsters and cutscenes.' }
+]
+S.examples = EXAMPLES
+S.openExample = async (id, { fresh = false } = {}) => {
+  const ex = EXAMPLES.find((e) => e.id === id)
+  if (!ex) return null
+  let at = id
+  if (await S.store.load(id)) {
+    if (!fresh) { await openModule(id); return id }
+    let n = 2
+    while (await S.store.load(`${id}-${n}`)) n++
+    at = `${id}-${n}`
+  }
+  const rec = await templateRecord(id)
+  if (!rec) { S.status(`the example ${ex.name} could not be read`, 'error'); return null }
+  rec.id = at
+  rec.module.id = at
+  await ownPropIds(rec)
+  await S.store.save(rec)
+  await openModule(at)
+  S.status(`${ex.name}: the example, as a module of your own (${at})`, 'ok')
+  return at
+}
 
 /**
  * Open a module. Every section shows the module, so whatever was on screen

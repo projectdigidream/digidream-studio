@@ -3137,6 +3137,30 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
         `a monster's swing look and the default look are set in the workshops, and written to swings.json (${JSON.stringify(got)})`)
 }
 
+// THE EXAMPLE PROJECT: Gem Hollow, packed into the studio
+// (src/templates/gemhollow.zip), opens from Home as a module of the user's
+// own, with nothing wrong; asked again it opens that one; a fresh copy is a
+// second module beside it.
+{
+  const got = await page.evaluate(async () => {
+    const S = window.__studio
+    const was = S.rec.id
+    await S.go('home')
+    let offered = false
+    for (let i = 0; i < 30 && !offered; i++) { await new Promise((r) => setTimeout(r, 100)); offered = !!document.querySelector('[data-example="gemhollow"] button') }
+    await S.openExample('gemhollow'); await new Promise((r) => setTimeout(r, 1500))
+    const r = { offered, id: S.rec.id, maps: Object.keys(S.docs).sort().join(','), mobs: Object.keys(S.module.mobs?.mobs ?? {}).length,
+      problems: document.querySelectorAll('.sd-problem').length, clean: !!document.querySelector('[data-problems="0"]') }
+    r.again = await S.openExample('gemhollow')
+    r.fresh = await S.openExample('gemhollow', { fresh: true })
+    for (const id of ['gemhollow', r.fresh]) await S.store.remove(id)
+    await S.openModule(was); await S.go('map')
+    return r
+  })
+  check(got.offered && got.id === 'gemhollow' && got.maps === 'menu,world' && got.mobs === 3 && got.clean && got.again === 'gemhollow' && got.fresh === 'gemhollow-2',
+        `Gem Hollow opens from Home as the user's own module, clean, and a fresh copy beside it (${JSON.stringify(got)})`)
+}
+
 // A STYLE FROM OUTSIDE: uikit's sample skin, baked as a tool would get it,
 // imported through the studio (skin.js importSkin, what Home's "import a
 // style…" calls), worn, listed on Home, then forgotten.

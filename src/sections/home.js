@@ -82,6 +82,13 @@ async function showHome () {
       tile('scripts', 'Scripts', `${Object.keys(m.scripts ?? {}).length}`),
       tile('settings', 'Settings', m.controls ?? 'platformer')
     ]),
+    // The example projects, each opened as a module of the user's own.
+    el('div', { class: 'st-section-head' }, withIcon('section.home', 'examples')),
+    ...S.examples.map((ex) => el('div', { class: 'st-row', 'data-example': ex.id }, [
+      button(withIcon('action.open', ex.name), () => S.openExample(ex.id)),
+      list.some((r) => r.id === ex.id) ? button('a fresh copy', () => S.openExample(ex.id, { fresh: true })) : null,
+      muted(ex.about)
+    ].filter(Boolean))),
     // The style the studio wears, chosen (or brought in) here as well as in Settings.
     lookCard(S, showHome, { title: 'Style', about: false }),
     list.length > 1 ? el('div', { class: 'st-section-head' }, withIcon('action.swap', 'other modules')) : null,
