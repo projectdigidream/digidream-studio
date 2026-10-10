@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { newDoc, addSector, addSpawn, addEntity, addTrigger, validate } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
-import { emitMapLua } from '../src/lua_emit.js'
+import { emitMapLua, facingBrad } from '../src/lua_emit.js'
 import { Vocab } from '../src/vocab.js'
 import { door, lift, switchFor, teleport, ambush, exit, crusher, slider, turntable } from '../src/presets.js'
 import { ROOT } from './oracle.js'
@@ -186,6 +186,42 @@ if (!existsSync(TRIGGERCHECK)) {
   check(p.some((m) => /unknown action "nothing"/.test(m)), 'an unknown action is named')
   check(p.some((m) => /unknown field `speed`/.test(m)), 'a stray field is named')
   check(vocab.validateTriggers(doc).length === 0, 'CONTROL: the good document still validates clean')
+}
+
+// START FACING: a placed prop or monster's angle (degrees, 0 = +x, counter-
+// clockwise) is written in brads (a full turn 2^32). A prop is turned with
+// set_facing once spawned; a monster is given it as the `facing` spawn option.
+// ORACLE: the emitted entities block run under LuaJIT, with a dnp and a mob
+// runtime that record what they are handed. CONTROL: a thing without an angle
+// is turned by nothing.
+{
+  check(facingBrad(90) === 1073741824 && facingBrad(180) === 2147483648 && facingBrad(360) === 0 && facingBrad(-90) === 3221225472, 'degrees become brads (90, 180, 360, -90)')
+  const fd = structuredClone(doc)
+  fd.entities = []
+  addEntity(fd, 'prop', 'barrel', 4, 4, 0, { angle: 90 })
+  addEntity(fd, 'prop', 'crate', 6, 4)
+  addEntity(fd, 'mob', 'spirit', 8, 4, 0, { angle: 180 })
+  const text = emitMapLua(fd, emitted, { guards: false }).text
+  const LUAJIT = join(ROOT, 'engine', 'third_party', 'luajit', 'src', 'luajit')
+  if (!existsSync(LUAJIT)) console.log('lua_emit: no luajit -- the facing run is skipped')
+  else {
+    const body = text.slice(text.indexOf('if dnp ~= nil and fx ~= nil'), text.lastIndexOf('end') + 3)
+    const f = join(mkdtempSync(join(tmpdir(), 'dnp-facing-')), 'f.lua')
+    writeFileSync(f, [
+      'local said = {}',
+      'fx = { frac = function (n, d) return n / d end }',
+      'vec3 = { new = function (x, y, z) return { x = x, y = y, z = z } end }',
+      'dnp = { spawn_prop = function (name) return { set_facing = function (_, a) said[#said + 1] = name .. "=" .. string.format("%.0f", a) end } end }',
+      'mobs = { spawn = function (name, _, o) said[#said + 1] = name .. ":" .. (o.facing and string.format("%.0f", o.facing) or "none"); return {} end }',
+      'print = function () end',
+      body,
+      'io.write(table.concat(said, " "))'
+    ].join('\n'))
+    const r = spawnSync(LUAJIT, [f], { encoding: 'utf8' })
+    const out = (r.stdout || '').trim()
+    check(r.status === 0 && out === 'barrel=1073741824 spirit:2147483648', `the prop is turned and the monster told its facing (${out || r.stderr})`)
+    check(!/crate/.test(out), 'CONTROL: the crate, with no angle, is turned by nothing')
+  }
 }
 
 console.log(`\nlua_emit: ${checks} checks, ${fails} failures`)

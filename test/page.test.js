@@ -238,6 +238,26 @@ await new Promise((r) => setTimeout(r, 250))
 await tapAt(16, 0)
 s = await state()
 check(s.entities === 1, `placing from the palette adds an entity (${s.entities})`)
+// ITS START FACING: set in its form, drawn as an arrow at its foot that a tap
+// never picks; the slider at 0 leaves no angle in the document.
+{
+  const faced = await page.evaluate(async () => {
+    const S = window.__studio
+    const e = S.doc.entities[0]
+    S.select({ kind: 'entity', id: e.id })
+    await new Promise((r) => setTimeout(r, 200))
+    const input = [...document.querySelectorAll('.st-sheet label, .st-sheet .st-row')].find((n) => /facing/.test(n.textContent))?.querySelector('input[type=range]')
+    if (input) { input.value = '90'; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('change')) }
+    await new Promise((r) => setTimeout(r, 200))
+    const arrows = S.viewport.markers.children.filter((m) => m.userData.kind === 'heading').length
+    const angle = e.angle
+    if (input) { input.value = '0'; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('change')) }
+    await new Promise((r) => setTimeout(r, 100))
+    return { slider: !!input, angle, arrows, cleared: !('angle' in e) }
+  })
+  check(faced.slider && faced.angle === 90 && faced.arrows >= 1 && faced.cleared, `a placed thing's facing is set in its form and drawn as an arrow (${JSON.stringify(faced)})`)
+  await page.evaluate(() => window.__studio.ui.hideSheet())
+}
 
 // The placed barrel is drawn as its own picture once the catalogue's frame has
 // loaded: a textured sprite standing on the floor, not a badge.

@@ -230,6 +230,13 @@ function entityForm (e, doc, ctx) {
     select('kind', e.kind, [['mob', 'monster'], ['prop', 'prop']], (v) => { e.kind = v; ctx.commit() }),
     e.kind === 'mob' ? toggle('dormant', e.dormant, (v) => { e.dormant = v; ctx.commit() }) : null,
     number('height', e.z, { min: -32, max: 64, step: 0.25 }, (v) => { e.z = v; ctx.commit() }),
+    // Which way it faces when the level starts: 0 is +x (east), counter-
+    // clockwise; drawn as the arrow at its foot.
+    slider('facing (°)', e.angle ?? 0, { min: 0, max: 355, step: 5 }, (v, done) => {
+      if (v) e.angle = v; else delete e.angle
+      done ? ctx.commit() : ctx.preview()
+    }),
+    e.kind === 'mob' ? muted('A monster turns to this when the engine places it facing (on its way); a prop takes it now.') : null,
     e.kind === 'prop' && ctx.editProp ? button('edit this prop…', () => ctx.editProp(e.name)) : null,
     button('delete', () => { doc.entities = doc.entities.filter((x) => x.id !== e.id); ctx.select(null); ctx.commit() }, 'st-danger')
   ]

@@ -1079,7 +1079,7 @@ function redraw () {
   const markers = []
   for (const p of d.spawns) markers.push({ id: p.id, kind: 'spawn', x: p.x, y: p.y, z: p.z, label: `⚑ ${p.tag}`, color: COLORS.spawn })
   for (const l of d.lights) markers.push({ id: l.id, kind: 'light', x: l.x, y: l.y, z: l.z, label: '☀ light', color: COLORS.light })
-  for (const e of d.entities) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, color: e.kind === 'mob' ? COLORS.mob : COLORS.prop, icon: S.sprites?.iconFor(e.name) })
+  for (const e of d.entities) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, color: e.kind === 'mob' ? COLORS.mob : COLORS.prop, icon: S.sprites?.iconFor(e.name), heading: e.angle ?? 0 })
   badges.forEach((b, i) => markers.push({ id: `badge${i}`, kind: 'badge', x: b.x, y: b.y, z: b.z + 0.6, label: b.label, color: b.color }))
   S.viewport.setMarkers(markers)
 }

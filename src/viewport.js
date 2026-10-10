@@ -206,7 +206,7 @@ export class Viewport {
     this.#place()
     const ndc = new THREE.Vector2((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1)
     this.raycaster.setFromCamera(ndc, this.camera)
-    const hits = this.raycaster.intersectObjects([...this.handles.children, ...this.markers.children.filter((m) => m.userData.kind !== 'badge')], false)
+    const hits = this.raycaster.intersectObjects([...this.handles.children, ...this.markers.children.filter((m) => m.userData.kind !== 'badge' && m.userData.kind !== 'heading')], false)
     return hits.length ? hits[0].object.userData : null
   }
 
@@ -352,6 +352,20 @@ export class Viewport {
       }
       sprite.renderOrder = 11
       this.markers.add(sprite)
+      // WHICH WAY IT FACES: a short arrow on the ground from its foot, in its
+      // colour (0° is +x, counter-clockwise, as the engine's angles). Never
+      // picked: a tap on it is a tap on nothing, not on the thing.
+      if (typeof m.heading === 'number') {
+        const a = (m.heading * Math.PI) / 180
+        const L = Math.max(0.6, h * 1.4)
+        const tip = { x: m.x + Math.cos(a) * L, y: m.y + Math.sin(a) * L }
+        const side = (s) => ({ x: tip.x - Math.cos(a + s) * L * 0.35, y: tip.y - Math.sin(a + s) * L * 0.35 })
+        const pts = [m, tip, tip, side(0.5), tip, side(-0.5)].map((p) => new THREE.Vector3(toThreeX(p.x), toThreeY(m.z) + 0.05, toThreeZ(p.y)))
+        const arrow = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: m.color, depthTest: false, transparent: true }))
+        arrow.renderOrder = 12
+        arrow.userData = { kind: 'heading', own: true }
+        this.markers.add(arrow)
+      }
     }
     this.dirty = true
   }

@@ -33,6 +33,12 @@ const ENTITIES_HEADER = `-- Placed props and monsters. Positions are eighths of 
  * @param guards    TEST ONLY: false leaves the staleness guards out
  * @returns { text, problems }   problems are references that did not resolve
  */
+/** Degrees (0 is +x, counter-clockwise) as the engine's angle: brads, a full turn 2^32. */
+export function facingBrad (deg) {
+  const d = ((Number(deg) % 360) + 360) % 360
+  return Math.round((d / 360) * 4294967296) % 4294967296
+}
+
 export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?? null } = {}) {
   const problems = []
   const L = []
@@ -75,8 +81,9 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   const props = doc.entities.filter((e) => e.kind === 'prop')
   const mobs = doc.entities.filter((e) => e.kind === 'mob')
   if (props.length || mobs.length) {
+    // a: the start facing in brads (a full turn is 2^32; 0 is +x), when set.
     const P = (e) => `{name=${luaString(e.name)}, x=${Math.round(e.x * RES)}, y=${Math.round(e.y * RES)}, z=${Math.round(e.z * RES)}` +
-                     (e.dormant ? ', dormant=true}' : '}')
+                     (e.angle ? `, a=${facingBrad(e.angle)}` : '') + (e.dormant ? ', dormant=true}' : '}')
     const body = [
       ENTITIES_HEADER,
       'if dnp ~= nil and fx ~= nil and vec3 ~= nil then',
@@ -84,7 +91,10 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
       '  -- props',
       '  for _, p in ipairs({',
       ...props.map((e) => `    ${P(e)},`),
-      '  }) do dnp.spawn_prop(p.name, vec3.new(du(p.x), du(p.y), du(p.z))) end',
+      '  }) do',
+      '    local o = dnp.spawn_prop(p.name, vec3.new(du(p.x), du(p.y), du(p.z)))',
+      '    if o ~= nil and p.a ~= nil and o.set_facing ~= nil then o:set_facing(p.a) end',
+      '  end',
       '  -- end props',
       '  -- monsters',
       '  local M = {',
@@ -94,7 +104,7 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
       '  if #M > 0 and mobs ~= nil then',
       '    local placed, unknown = 0, {}',
       '    for _, e in ipairs(M) do',
-      '      local m = mobs.spawn(e.name, vec3.new(du(e.x), du(e.y), du(e.z)), { dormant = e.dormant == true })',
+      '      local m = mobs.spawn(e.name, vec3.new(du(e.x), du(e.y), du(e.z)), { dormant = e.dormant == true, facing = e.a })',
       '      if m ~= nil then placed = placed + 1 else unknown[#unknown + 1] = e.name end',
       '    end',
       '    print(("[studio] %d monster(s) placed%s"):format(placed,',
