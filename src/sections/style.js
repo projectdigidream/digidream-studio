@@ -16,7 +16,7 @@
 //
 import { shell } from '../bridge.js'
 import { useStroke } from '../../vendor/uikit/runtime.js'
-import { el, row, text, number, select, toggle, button, muted, ask, confirmDialog } from '../ui.js'
+import { el, row, text, number, select, toggle, button, muted, ask, confirmDialog, withIcon, icon } from '../ui.js'
 import {
   newStyle, fontFromFile, families, fontList, withStyle, panelStyleRef, styleProblems, SHADOWS, SUBTITLE_DEFAULTS, STYLE_NAME_RE, FONT_EXTS
 } from '../style_emit.js'
@@ -157,7 +157,7 @@ function showStyle (open = null) {
       }),
       select('weight', String(f.weight ?? 400), ['300', '400', '500', '600', '700', '800', '900'].map((w) => [w, w]), (v) => { f.weight = Number(v); loaded.delete(`ui/${f.file}`); loadStyleFonts().then(() => changed()) }),
       toggle('italic', !!f.italic, (v) => { if (v) f.italic = true; else delete f.italic; changed() }),
-      el('div', { class: 'st-row' }, [el('span', { class: 'st-muted', text: f.file }), button('✕', async () => {
+      el('div', { class: 'st-row' }, [el('span', { class: 'st-muted', text: f.file }), button(withIcon('action.close'), async () => {
         if (!await confirmDialog(`remove the font ${f.family} (${f.file})?`)) return
         styleOf().fonts = styleOf().fonts.filter((x) => x !== f); delete S.rec.assets[`ui/${f.file}`]; changed()
       }, 'st-danger')])
@@ -168,7 +168,7 @@ function showStyle (open = null) {
   // THEME
   const fams = families(style)
   const famOpts = [['', '(the engine\'s monospace)'], ...fams.map((f) => [f, f])]
-  rows.push(el('div', { class: 'st-section-head', text: '🎨 the whole UI' }),
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('section.style', 'the whole UI')),
     select('font', style.theme?.font ?? '', famOpts, (v) => { styleOf().theme ??= {}; if (v) styleOf().theme.font = v; else delete styleOf().theme.font; changed() }),
     colorRow('text', style.theme?.text ?? '#cfe3ff', (v) => { styleOf().theme ??= {}; styleOf().theme.text = v; changed() }),
     colorRow('accent', style.theme?.accent ?? '#5b8fd6', (v) => { styleOf().theme ??= {}; styleOf().theme.accent = v; changed() }),
@@ -180,7 +180,7 @@ function showStyle (open = null) {
   rows.push(el('div', { class: 'sd-pics' }, pics.map((p) => el('div', { class: 'sd-pic', 'data-picture': p }, [
     el('img', { src: pictureUrl(p), alt: p }),
     el('span', { class: 'st-muted', text: p.replace(/^skins\//, '') }),
-    button('✕', async () => {
+    button(withIcon('action.close'), async () => {
       if (!await confirmDialog(`remove the picture ${p}?`)) return
       delete S.rec.assets[`ui/${p}`]; urls.delete(`ui/${p}`); changed()
     }, 'st-danger')
@@ -190,13 +190,13 @@ function showStyle (open = null) {
 
   // PANEL STYLES
   const styles = style.styles ?? {}
-  rows.push(el('div', { class: 'st-section-head', text: `▢ panel styles (${Object.keys(styles).length})` }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('section.panels', `panel styles (${Object.keys(styles).length})`)))
   for (const [name, st] of Object.entries(styles)) {
     const users = Object.entries(S.module.panels ?? {}).filter(([, p]) => p.look?.styleName === name).map(([n]) => n)
     const on = open === name
     rows.push(el('div', { class: 'st-card', 'data-style': name }, [
-      el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: `▢ ${name}` }), el('span', { class: 'st-muted', text: users.length ? `used by ${users.join(', ')}` : 'not used yet' }),
-        button(on ? '▾' : '▸', () => showStyle(on ? null : name))]),
+      el('div', { class: 'st-row' }, [el('span', { class: 'st-entry' }, withIcon('section.panels', `${name}`)), el('span', { class: 'st-muted', text: users.length ? `used by ${users.join(', ')}` : 'not used yet' }),
+        button(withIcon(on ? 'action.collapse' : 'action.expand'), () => showStyle(on ? null : name))]),
       stylePreview(name, st),
       ...(on ? styleRows(name, st, fams, pics) : [])
     ]))

@@ -19,7 +19,7 @@
 // graph vocabulary has them, else the trigger words a map's graph already
 // understands (ui_open, on_ui_event + widget_is).
 //
-import { el, row, number, text, select, toggle, button, muted, ask, confirmDialog } from './ui.js'
+import { el, row, number, text, select, toggle, button, muted, ask, confirmDialog, withIcon, icon, glyphOf } from './ui.js'
 import { anchorFor } from './ui_emit.js'
 import { DEVICES } from './screens.js'
 import { withStyle } from './style_emit.js'
@@ -33,7 +33,8 @@ import { UiView } from '/src/render/ui.js'
 import { UI_KIND } from '/src/proto.js'
 
 const WIRE = { label: UI_KIND.LABEL, button: UI_KIND.BUTTON, slider: UI_KIND.SLIDER, select: UI_KIND.SELECT, toggle: UI_KIND.TOGGLE }
-const ICON = { label: 'T', button: '▭', toggle: '◐', slider: '⇿', select: '☰' }
+// Each widget kind's icon (catalog widget.<kind>); its glyph where only text goes.
+const ICON_ID = (kind) => `widget.${kind}`
 const GRID = 2                       // UI units a drag snaps to
 
 let win = null
@@ -91,16 +92,16 @@ class PanelWindow {
     const dev = DEVICES[this.device]
     const p = this.panel
     const top = el('div', { class: 'wk-top' }, [
-      el('span', { class: 'wk-title', text: '▢ panels' }),
+      el('span', { class: 'wk-title' }, withIcon('section.panels', 'panels')),
       select('', this.name ?? '', [...Object.keys(this.panels).map((n) => [n, n]), ['\u0000new', '+ new panel…']], (v) => {
         if (v === '\u0000new') this.#newPanel(); else { this.name = v; this.sel = { kind: 'panel' }; this.heard = []; this.render() }
       }).lastChild,
       select('', this.device, Object.keys(DEVICES), (v) => { this.device = v; this.render() }).lastChild,
-      el('div', { class: 'wk-tabs pw-modes' }, [['edit', '✎ edit'], ['try', '▶ try']].map(([v, l]) =>
-        el('button', { text: l, 'data-on': this.mode === v ? '1' : '0', 'data-mode': v, onclick: () => { this.mode = v; this.heard = []; this.render() } }))),
+      el('div', { class: 'wk-tabs pw-modes' }, [['edit', 'edit', 'action.edit'], ['try', 'try', 'transport.play']].map(([v, l, i]) =>
+        el('button', { 'data-on': this.mode === v ? '1' : '0', 'data-mode': v, onclick: () => { this.mode = v; this.heard = []; this.render() } }, withIcon(i, l)))),
       p && this.mode === 'edit' ? this.#palette() : null,
       el('span', { style: 'flex:1' }),
-      button('‹ back', () => (S.leave ? S.leave() : this.close()), 'wk-back')
+      button(withIcon('action.back', 'back'), () => (S.leave ? S.leave() : this.close()), 'wk-back')
     ].filter(Boolean))
 
     // The frame and the client's views in it live as long as the device does:
@@ -256,11 +257,11 @@ class PanelWindow {
     this.zoomLabel = el('span', { class: 'pw-zoom-pct', text: '100%' })
     const mid = () => [stage.clientWidth / 2, stage.clientHeight / 2]
     stage.appendChild(el('div', { class: 'pw-zoom' }, [
-      el('button', { text: '−', title: 'zoom out', 'data-zoom': 'out', onclick: () => this.zoomAt(1 / 1.4, ...mid()) }),
+      el('button', { title: 'zoom out', 'data-zoom': 'out', onclick: () => this.zoomAt(1 / 1.4, ...mid()) }, withIcon('action.zoomout')),
       this.zoomLabel,
       el('button', { text: '+', title: 'zoom in', 'data-zoom': 'in', onclick: () => this.zoomAt(1.4, ...mid()) }),
-      el('button', { text: '▢', title: 'zoom to the panel', 'data-zoom': 'panel', onclick: () => this.zoomToPanel() }),
-      el('button', { text: '⤢', title: 'the whole screen', 'data-zoom': 'fit', onclick: () => this.zoomFit() })
+      el('button', { title: 'zoom to the panel', 'data-zoom': 'panel', onclick: () => this.zoomToPanel() }, withIcon('section.panels')),
+      el('button', { title: 'the whole screen', 'data-zoom': 'fit', onclick: () => this.zoomFit() }, withIcon('action.fit'))
     ]))
   }
 
@@ -360,7 +361,7 @@ class PanelWindow {
       const r = this.#rectOf(node)
       const on = this.sel.kind === 'widget' && this.sel.id === w.id
       const box = this.#box(r, 'pw-slot', on, { 'data-widget': w.name, 'data-hidden': w.hidden ? '1' : '0', title: `${w.kind} · ${w.name}${w.hidden ? ' · starts hidden' : ''}` })
-      box.appendChild(el('span', { class: 'pw-tag', text: `${ICON[w.kind]} ${w.name}${w.hidden ? ' · hidden' : ''}` }))
+      box.appendChild(el('span', { class: 'pw-tag', text: `${glyphOf(ICON_ID(w.kind))} ${w.name}${w.hidden ? ' · hidden' : ''}` }))
       this.#drag(box, node, (dx, dy, moved) => {
         if (!moved) return this.#pick({ kind: 'widget', id: w.id })
         w.slot.x = Math.max(0, snap((r.left - sr.left + dx) / s))
@@ -464,8 +465,8 @@ class PanelWindow {
 
   #palette () {
     const s = el('select', { class: 'pw-palette' }, [el('option', { value: '', text: '+ add…' }),
-      el('optgroup', { label: 'widgets' }, KINDS.map((k) => el('option', { value: `w:${k}`, text: `${ICON[k]} ${k}` }))),
-      el('optgroup', { label: 'decor, behind the widgets' }, [el('option', { value: 'd:text', text: 'T text (may show {hud.name})' }), el('option', { value: 'd:bar', text: '▬ bar (a value, as health is drawn)' }), el('option', { value: 'd:image', text: '▣ picture' })])])
+      el('optgroup', { label: 'widgets' }, KINDS.map((k) => el('option', { value: `w:${k}`, text: `${glyphOf(ICON_ID(k))} ${k}` }))),
+      el('optgroup', { label: 'decor, behind the widgets' }, [el('option', { value: 'd:text', text: 'T text (may show {hud.name})' }), el('option', { value: 'd:bar' }, withIcon('widget.bar', 'bar (a value, as health is drawn)')), el('option', { value: 'd:image' }, withIcon('section.screens', 'picture'))])])
     s.addEventListener('change', () => {
       const [what, kind] = s.value.split(':')
       if (!what) return
@@ -524,7 +525,7 @@ class PanelWindow {
     for (const [n, q] of Object.entries(this.panels)) {
       const uses = panelUses(n, this.S.module, Object.values(this.S.docs))
       rows.push(el('div', { class: 'st-trow', 'data-panel': n, 'data-on': n === this.name ? '1' : '0', onclick: () => { this.name = n; this.sel = { kind: 'panel' }; this.heard = []; this.render() } }, [
-        el('span', { class: 'st-mark', text: '▢' }),
+        el('span', { class: 'st-mark' }, withIcon('section.panels')),
         el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: n }),
           el('div', { class: 'st-muted', text: `${q.widgets.length} widget${q.widgets.length === 1 ? '' : 's'} · ${uses.length ? `used ${uses.length}×` : 'not used yet'}` })])
       ]))
@@ -549,7 +550,7 @@ class PanelWindow {
     const L = p.look
     const ch = () => this.changed()
     const st = (k) => (v) => { L.style ??= {}; if (v === '' || v === undefined) delete L.style[k]; else L.style[k] = v; if (!Object.keys(L.style).length) delete L.style; ch() }
-    return [el('div', { class: 'st-section-head', text: `▸ ${this.name}` }),
+    return [el('div', { class: 'st-section-head' }, withIcon('action.expand', `${this.name}`)),
       text('name', this.name, (v) => this.#rename(v)),
       text('title', p.title ?? '', (v) => { p.title = v; ch() }),
       // A named style of the module's (the Style section): the whole look, shared.
@@ -561,7 +562,7 @@ class PanelWindow {
           sel.addEventListener('change', () => { if (sel.value) L.styleName = sel.value; else delete L.styleName; ch() })
           return sel
         })(),
-        button('🎨', () => this.S.go('style', L.styleName || null))]),
+        button(withIcon('section.style'), () => this.S.go('style', L.styleName || null))]),
       toggle('title bar', L.showTitle !== false, (v) => { L.showTitle = v; ch() }),
       toggle('the player can close it (×)', L.closeable !== false, (v) => { L.closeable = v; ch() }),
       toggle('modal: dims the game, takes the touch input', !!L.modal, (v) => { L.modal = v; ch() }),
@@ -592,7 +593,7 @@ class PanelWindow {
     const set = (k) => (v) => { if (v === '' || v === undefined || v === null) delete w[k]; else w[k] = v; ch() }
     const sl = w.slot
     const ss = (k) => (v) => { sl.style ??= {}; if (v === '' || v === undefined) delete sl.style[k]; else sl.style[k] = v; if (!Object.keys(sl.style).length) delete sl.style; ch() }
-    const rows = [el('div', { class: 'st-section-head', text: `▸ ${ICON[w.kind]} ${w.kind} · ${w.name}` }),
+    const rows = [el('div', { class: 'st-section-head' }, [icon('action.expand'), ...withIcon(ICON_ID(w.kind), `${w.kind} · ${w.name}`)]),
       text('name (graphs say it)', w.name, (v) => {
         const n = cleanName(v)
         if (!n || this.panel.widgets.some((x) => x !== w && x.name === n)) { this.S.status('that name is empty or taken on this panel', 'warn'); this.render(); return }
@@ -624,8 +625,8 @@ class PanelWindow {
         number('w', sl.w ?? 120, { min: 20, max: 2000, step: 1 }, (v) => { sl.w = v; ch() }),
         number('h', sl.h ?? SLOT_H, { min: 16, max: 2000, step: 1 }, (v) => { sl.h = v; ch() })]),
       button('full width', () => { sl.x = 12; sl.w = Math.max(20, (this.panel.look.w ?? 320) - 24); ch() }),
-      row('background', el('input', { type: 'color', value: sl.style?.bg ?? '#1b2230', onchange: (e) => ss('bg')(e.target.value) }), button('✕', () => ss('bg')(''))),
-      row('text', el('input', { type: 'color', value: sl.style?.color ?? '#e8e8ea', onchange: (e) => ss('color')(e.target.value) }), button('✕', () => ss('color')(''))),
+      row('background', el('input', { type: 'color', value: sl.style?.bg ?? '#1b2230', onchange: (e) => ss('bg')(e.target.value) }), button(withIcon('action.close'), () => ss('bg')(''))),
+      row('text', el('input', { type: 'color', value: sl.style?.color ?? '#e8e8ea', onchange: (e) => ss('color')(e.target.value) }), button(withIcon('action.close'), () => ss('color')(''))),
       number('text size', sl.style?.size ?? 12, { min: 6, max: 72, step: 1 }, ss('size')),
       select('weight', String(sl.style?.weight ?? 400), [['400', 'normal'], ['600', 'bold']], (v) => ss('weight')(Number(v))),
       number('corners', sl.style?.radius ?? 0, { min: 0, max: 40, step: 1 }, ss('radius')),
@@ -639,7 +640,7 @@ class PanelWindow {
     const ch = () => this.changed()
     const set = (k) => (v) => { if (v === '' || v === undefined) delete e[k]; else e[k] = v; ch() }
     const st = (k) => (v) => { e.style ??= {}; if (v === '' || v === undefined) delete e.style[k]; else e.style[k] = v; if (!Object.keys(e.style).length) delete e.style; ch() }
-    const rows = [el('div', { class: 'st-section-head', text: `▸ decor · ${e.id}` }),
+    const rows = [el('div', { class: 'st-section-head' }, withIcon('action.expand', `decor · ${e.id}`)),
       // Its id: what show_element / hide_element say. Renamed, they follow.
       text('id (graphs say it)', e.id ?? '', (v) => {
         const n = String(v).trim()
@@ -686,13 +687,13 @@ class PanelWindow {
     const rows = [el('div', { class: 'st-section-head', text: `widgets (${p.widgets.length} of ${MAX_WIDGETS})` })]
     p.widgets.forEach((w, i) => {
       rows.push(el('div', { class: 'st-trow', 'data-wrow': w.name, 'data-on': this.sel.kind === 'widget' && this.sel.id === w.id ? '1' : '0', onclick: () => this.#pick({ kind: 'widget', id: w.id }) }, [
-        el('span', { class: 'st-mark', text: ICON[w.kind] }),
+        icon(ICON_ID(w.kind), 'st-mark'),
         el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: w.name }), el('div', { class: 'st-muted', text: `${w.kind} · ${w.label ?? ''}${w.hidden ? ' · starts hidden' : ''}` })])
       ]))
     })
     for (const [i, d] of (p.decor ?? []).entries()) {
       rows.push(el('div', { class: 'st-trow', 'data-drow': String(i), 'data-on': this.sel.kind === 'decor' && this.sel.i === i ? '1' : '0', onclick: () => this.#pick({ kind: 'decor', i }) }, [
-        el('span', { class: 'st-mark', text: d.type === 'text' ? '“' : d.type === 'bar' ? '▬' : '▣' }),
+        icon(d.type === 'text' ? 'widget.text' : d.type === 'bar' ? 'widget.bar' : 'widget.picture', 'st-mark'),
         el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: d.id }), el('div', { class: 'st-muted', text: `decor · ${d.type === 'text' ? d.text : d.type === 'bar' ? `bar of ${d.bind} out of ${d.max ?? '?'}` : d.frame}` })])
       ]))
     }
@@ -718,7 +719,7 @@ class PanelWindow {
   }
 
   #tryRows () {
-    return [el('div', { class: 'st-section-head', text: '▶ try it' }),
+    return [el('div', { class: 'st-section-head' }, withIcon('transport.play', 'try it')),
       el('div', { class: 'pw-heard' }, this.#heardRows()),
       button('open it again', () => { this.heard = []; this.render() })]
   }
@@ -732,15 +733,15 @@ class PanelWindow {
     const S = this.S
     const p = this.panel
     const uses = panelUses(this.name, S.module, Object.values(S.docs))
-    const rows = [el('div', { class: 'st-section-head', text: '◇ graphs' })]
+    const rows = [el('div', { class: 'st-section-head' }, withIcon('section.graphs', 'graphs'))]
     const say = { opens: 'opens it', closes: 'closes it', sets: 'sets', answers: 'answers', closed: 'hears it closed', asks: 'asks if open', shows: 'shows', hides: 'hides', trigger: 'a card opens or closes it' }
     for (const u of uses) {
       const where = u.trigger ? `${u.graph}'s cards` : `${u.graph === 'game' ? 'the game' : u.graph} · ${u.gname}`
       rows.push(el('div', { class: 'st-trow', 'data-use': `${u.graph}:${u.gname ?? ''}:${u.node ?? u.trigger}`, onclick: () => this.#goTo(u) }, [
-        el('span', { class: 'st-mark', text: u.graph === 'game' ? '🌐' : '🗺' }),
+        icon(u.graph === 'game' ? 'action.scopegame' : 'action.scopemap', 'st-mark'),
         el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: `${where} · ${u.node ?? u.trigger}` }),
           el('div', { class: 'st-muted', text: `${say[u.how]}${u.widget ? ` ${u.widget}` : ''}` })]),
-        el('span', { class: 'st-muted', text: '›' })
+        el('span', { class: 'st-muted' }, withIcon('action.next'))
       ]))
     }
     if (!uses.length) rows.push(muted('Nothing opens it yet.'))
@@ -752,10 +753,10 @@ class PanelWindow {
     // The game's graphs open panels too: with the panel nodes when the engine
     // has them, else with ui_open, whose panels the studio writes into the
     // game VM's own trigger table (module_emit.js, module_panels.lua).
-    const targets = [...scopeTargets(S.module, 'game', null, GAME_NAME, '🌐', 'the game'),
-      ...Object.keys(S.docs).sort().flatMap((m) => scopeTargets(S.docs[m], 'map', m, MAP_GRAPH, '🗺', m))]
+    const targets = [...scopeTargets(S.module, 'game', null, GAME_NAME, glyphOf('action.scopegame'), 'the game'),
+      ...Object.keys(S.docs).sort().flatMap((m) => scopeTargets(S.docs[m], 'map', m, MAP_GRAPH, glyphOf('action.scopemap'), m))]
     rows.push(select('open it from', '', [['', 'choose a graph…'], ...targets], (g) => { if (g) this.#addNodes(g, 'open') }))
-    rows.push(select('answer', '', [['', 'choose a widget…'], ...p.widgets.filter((w) => w.kind !== 'label').map((w) => [w.name, `${ICON[w.kind]} ${w.name}`])], (wn) => {
+    rows.push(select('answer', '', [['', 'choose a widget…'], ...p.widgets.filter((w) => w.kind !== 'label').map((w) => [w.name, `${glyphOf(ICON_ID(w.kind))} ${w.name}`])], (wn) => {
       if (!wn) return
       this.answering = wn
       this.render()

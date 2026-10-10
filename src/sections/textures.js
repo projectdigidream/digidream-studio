@@ -9,7 +9,7 @@
 //
 import { useStroke } from '../../vendor/uikit/runtime.js'
 import { shell } from '../bridge.js'
-import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, pictureBackground } from '../ui.js'
+import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, pictureBackground, withIcon, icon } from '../ui.js'
 import { guessSheet, frameRect, frameSize, sheetProblems, MAX_FRAMES, DEFAULT_FPS } from '../texsheet.js'
 
 let S = null
@@ -54,7 +54,7 @@ function sheetDialog ({ name, url, w, h, sheet, okLabel = 'save', nameEditable =
     fpsIn.querySelector('input').dataset.sheetFps = '1'
     const nameIn = nameEditable ? text('name', name, (v) => { shownName = String(v).toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24) || name; nameRow.querySelector('input').value = shownName }) : null
     const nameRow = nameIn
-    const play = button('⏸', () => { playing = !playing; play.textContent = playing ? '⏸' : '▶' })
+    const play = button(withIcon('transport.pause'), () => { playing = !playing; play.replaceChildren(icon(playing ? 'transport.pause' : 'transport.play')) })
     const sync = () => {
       for (const r of [framesIn, sizeIn, fpsIn]) r.hidden = !spec
       play.hidden = !spec
@@ -106,7 +106,7 @@ function sheetDialog ({ name, url, w, h, sheet, okLabel = 'save', nameEditable =
     }
     // novalidate: a hidden field's limits (a still picture's frame size) must not block the button.
     const dlg = el('dialog', { class: 'st-dialog sd-sheet-dialog', 'data-sheet-dialog': name }, [el('form', { method: 'dialog', novalidate: '' }, [
-      el('div', { class: 'st-section-head', text: `🎞 ${name}` }),
+      el('div', { class: 'st-section-head' }, withIcon('section.sprites', `${name}`)),
       // Pictures beside the controls where there is room (a phone on its side), above them where not.
       el('div', { class: 'sd-sheet-body' }, [
         el('div', { class: 'sd-sheet-pics' }, [

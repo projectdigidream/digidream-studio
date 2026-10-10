@@ -12,7 +12,7 @@
 // the section is up); one that was a full-screen window (the monster workshop,
 // Screens, the graph) moves its root into the page body.
 //
-import { el } from '../ui.js'
+import { el, icon, withIcon } from '../ui.js'
 
 const STYLE = `
 :root{--rail-w:212px}
@@ -26,7 +26,7 @@ const STYLE = `
   font:inherit;text-align:left;padding:0 10px;cursor:pointer;flex:0 0 auto}
 .sd-rail button:hover{background:var(--dnp-color-bg-hover)}
 .sd-rail button[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 35%,transparent);color:var(--dnp-color-text-primary)}
-.sd-rail .ico{font-size:17px;width:22px;text-align:center;flex:0 0 auto}
+.sd-rail .ico{font-size:17px;width:22px;text-align:center;flex:0 0 auto;--icon-size:20px}
 .sd-rail .sd-mod{font-weight:700;color:var(--dnp-color-text-primary);min-height:48px}
 .sd-rail .sd-gap{flex:1 1 auto;min-height:8px}
 .sd-rail .sd-badge{margin-left:auto;background:var(--dnp-color-error);color:var(--dnp-color-accentInk);border-radius:9px;padding:0 6px;font-size:11px}
@@ -119,7 +119,7 @@ const STYLE = `
 .sd-maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .sd-body.st-page .sd-tile,.sd-body.st-page .sd-map{height:auto;min-height:72px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;
   padding:10px 12px;text-align:left;border-radius:10px}
-.sd-tile .ico{font-size:22px}
+.sd-tile .ico{font-size:22px;--icon-size:24px}
 .sd-tile .lbl,.sd-map .lbl{font-weight:700}
 @media (orientation:portrait) and (max-width:900px){.st-home-btn{display:inline-block}}
 `
@@ -136,11 +136,11 @@ export class Shell {
     this.rail = el('nav', { class: 'sd-rail' })
     this.title = el('span', { class: 'sd-title' })
     this.actions = el('span', { class: 'sd-actions' })
-    this.back = el('button', { class: 'sd-back', text: '‹ module', onclick: () => router.go('home') })
+    this.back = el('button', { class: 'sd-back', onclick: () => router.go('home') }, withIcon('action.back', 'module'))
     // The module's own undo: what a page changes is the module document, which
     // has a history of its own beside each map's.
-    this.undoBtn = el('button', { text: '↶', title: 'undo (the module)', 'data-action': 'undo', onclick: () => on.undo?.() })
-    this.redoBtn = el('button', { text: '↷', title: 'redo (the module)', 'data-action': 'redo', onclick: () => on.redo?.() })
+    this.undoBtn = el('button', { title: 'undo (the module)', 'data-action': 'undo', onclick: () => on.undo?.() }, withIcon('action.undo'))
+    this.redoBtn = el('button', { title: 'redo (the module)', 'data-action': 'redo', onclick: () => on.redo?.() }, withIcon('action.redo'))
     this.head = el('div', { class: 'sd-head' }, [this.back, this.title, this.actions, this.undoBtn, this.redoBtn])
     this.body = el('div', { class: 'sd-body' })
     this.page = el('div', { class: 'sd-page' }, [this.head, this.body])
@@ -156,21 +156,21 @@ export class Shell {
     const cur = this.router.current
     const lit = cur?.section.parent ?? cur?.id
     const items = [el('button', { class: 'sd-mod', title: 'the module', 'data-section': 'home', 'data-on': lit === 'home' ? '1' : '0',
-      onclick: () => this.router.go('home') }, [el('span', { class: 'ico', text: '◆' }), el('span', { class: 'lbl', text: this.moduleName })])]
+      onclick: () => this.router.go('home') }, [el('span', { class: 'ico' }, withIcon('section.home')), el('span', { class: 'lbl', text: this.moduleName })])]
     for (const s of this.router.rail) {
       if (s.id === 'home') continue
       const n = this.badges.get(s.id) ?? 0
       items.push(el('button', { title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => this.router.go(s.id) },
-        [el('span', { class: 'ico', text: s.icon }), el('span', { class: 'lbl', text: s.label }), n ? el('span', { class: 'sd-badge', text: String(n) }) : null].filter(Boolean)))
+        [icon(s.icon, 'ico'), el('span', { class: 'lbl', text: s.label }), n ? el('span', { class: 'sd-badge', text: String(n) }) : null].filter(Boolean)))
     }
     // Undo and redo, for a phone on its side, where a window's own bar is the
     // header and the page's row (which holds them) gives its height back.
-    this.railUndo = el('button', { class: 'sd-hist', title: 'undo (the module)', 'data-action': 'rail-undo', onclick: () => this.on.undo?.() }, [el('span', { class: 'ico', text: '↶' }), el('span', { class: 'lbl', text: 'Undo' })])
-    this.railRedo = el('button', { class: 'sd-hist', title: 'redo (the module)', 'data-action': 'rail-redo', onclick: () => this.on.redo?.() }, [el('span', { class: 'ico', text: '↷' }), el('span', { class: 'lbl', text: 'Redo' })])
+    this.railUndo = el('button', { class: 'sd-hist', title: 'undo (the module)', 'data-action': 'rail-undo', onclick: () => this.on.undo?.() }, [el('span', { class: 'ico' }, withIcon('action.undo')), el('span', { class: 'lbl', text: 'Undo' })])
+    this.railRedo = el('button', { class: 'sd-hist', title: 'redo (the module)', 'data-action': 'rail-redo', onclick: () => this.on.redo?.() }, [el('span', { class: 'ico' }, withIcon('action.redo')), el('span', { class: 'lbl', text: 'Redo' })])
     this.railUndo.disabled = this.undoBtn.disabled; this.railRedo.disabled = this.redoBtn.disabled
     items.push(el('div', { class: 'sd-gap' }), this.railUndo, this.railRedo,
-      el('button', { title: 'play the map being edited', 'data-action': 'play', onclick: () => this.on.play() }, [el('span', { class: 'ico', text: '▶' }), el('span', { class: 'lbl', text: 'Play' })]),
-      el('button', { title: 'export the module as a pack', 'data-action': 'export', onclick: () => this.on.exportPack() }, [el('span', { class: 'ico', text: '⇪' }), el('span', { class: 'lbl', text: 'Export' })]))
+      el('button', { title: 'play the map being edited', 'data-action': 'play', onclick: () => this.on.play() }, [el('span', { class: 'ico' }, withIcon('transport.play')), el('span', { class: 'lbl', text: 'Play' })]),
+      el('button', { title: 'export the module as a pack', 'data-action': 'export', onclick: () => this.on.exportPack() }, [el('span', { class: 'ico' }, withIcon('action.export')), el('span', { class: 'lbl', text: 'Export' })]))
     this.rail.replaceChildren(...items)
   }
 

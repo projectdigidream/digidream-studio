@@ -7,7 +7,7 @@
 // The workshop (workshop.js) composes these into its windows; nothing here
 // knows about a window.
 //
-import { el, row, text, toggle, select, button, chips, card, muted, number, ask } from './ui.js'
+import { el, row, text, toggle, select, button, chips, card, muted, number, ask, withIcon, icon } from './ui.js'
 import { nextPropId } from './props_emit.js'
 import { argFields } from './argform.js'
 import { painLength } from './mobs_emit.js'
@@ -110,7 +110,7 @@ function painRows (S, m, ctx) {
   const V = S.vocab.mob
   if (!V.pain_time_fields) return []
   const pain = m.states?.pain
-  const rows = [el('div', { class: 'st-section-head', text: '💢 the flinch' })]
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('workshop.flinch', 'the flinch'))]
   if (!pain) {
     rows.push(muted('No state called "pain": this monster never flinches. Add one (with ticks and a next) and pain_chance decides how often it does.'))
     if (m.pain_time) rows.push(el('div', { class: 'st-danger', text: 'pain_time is set and there is no pain state for it to lengthen.' }))
@@ -139,7 +139,7 @@ export function dropsRows (S, m, ctx) {
   const V = S.vocab.mob
   if (!V.drop_fields) return []
   const changed = () => { if (m.drops && !m.drops.length) delete m.drops; ctx.onChange() }
-  const rows = [el('div', { class: 'st-section-head', text: '🎁 drops' })]
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('workshop.drops', 'drops'))]
   ;(m.drops ?? []).forEach((d, i) => {
     const body = [...argFields(V.drop_fields, d, { ...ctx, onChange: changed }, ['one_of'])]
     if (d.one_of) {
@@ -147,7 +147,7 @@ export function dropsRows (S, m, ctx) {
       d.one_of.forEach((c, j) => {
         body.push(el('div', { class: 'st-card' }, [
           ...argFields(V.drop_choice_fields ?? [], c, { ...ctx, onChange: changed }),
-          button('✕ choice', () => { d.one_of.splice(j, 1); if (!d.one_of.length) delete d.one_of; changed() })
+          button(withIcon('action.close', 'choice'), () => { d.one_of.splice(j, 1); if (!d.one_of.length) delete d.one_of; changed() })
         ]))
       })
       const total = d.one_of.reduce((n, c) => n + (c.weight ?? 0), 0)
@@ -156,7 +156,7 @@ export function dropsRows (S, m, ctx) {
     }
     body.push(el('div', { class: 'st-row' }, [
       button('+ weighted choice', () => { delete d.item; (d.one_of ??= []).push({ weight: 1 }); changed() }),
-      button('✕ drop', () => { m.drops.splice(i, 1); changed() }, 'st-danger')
+      button(withIcon('action.close', 'drop'), () => { m.drops.splice(i, 1); changed() }, 'st-danger')
     ]))
     rows.push(el('div', { class: 'st-card' }, body))
   })
@@ -195,18 +195,18 @@ export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null,
   }
   const states = Object.keys(m[nodes] ?? {})
   const rows = [...argFields(spec.fields, st, ctx, ['sequence', 'transitions', ...skip])]
-  rows.push(el('div', { class: 'st-section-head st-if', text: '❓ go to … when all of …' }))
+  rows.push(el('div', { class: 'st-section-head st-if' }, withIcon('trigger.if', 'go to … when all of …')))
   ;(st.transitions ?? []).forEach((tr, i) => {
     const trRows = [el('div', { class: 'st-row' }, [
       select('to', tr.to ?? '', [['', '(choose)'], ...states], (v) => { tr.to = v; changed() }).lastChild,
-      button('✕', () => { st.transitions.splice(i, 1); changed() })
+      button(withIcon('action.close'), () => { st.transitions.splice(i, 1); changed() })
     ])]
     ;(tr.when ?? []).forEach((c, j) => {
       const cspec = spec.conditionSpec(c.cond)
       trRows.push(el('div', { class: 'st-row' }, [
         el('span', { class: 'st-entry', text: c.cond }),
         toggle('', !!c.negate, (v) => { c.negate = v || undefined; changed() }).lastChild, muted('not'),
-        button('✕', () => { tr.when.splice(j, 1); changed() })
+        button(withIcon('action.close'), () => { tr.when.splice(j, 1); changed() })
       ]))
       if (cspec) trRows.push(...argFields(cspec.args ?? [], c, ctx, ['fn']))
     })
@@ -216,15 +216,15 @@ export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null,
   })
   rows.push(el('div', { class: 'st-row' }, [
     button('+ transition', () => { (st.transitions ??= []).push({ to: states[0], when: [] }); changed() }),
-    onPickTarget ? button('→ tap a target state', onPickTarget) : null
+    onPickTarget ? button(withIcon('action.link', 'tap a target state'), onPickTarget) : null
   ]))
-  rows.push(el('div', { class: 'st-section-head st-then', text: '▶ at tick … do …' }))
+  rows.push(el('div', { class: 'st-section-head st-then' }, withIcon('transport.play', 'at tick … do …')))
   ;(st.sequence ?? []).forEach((step, i) => {
     const aspec = spec.actionSpec(step.action)
     const stRows = [el('div', { class: 'st-row' }, [
       number('at', step.at ?? 0, { min: 0, max: 600, step: 1 }, (v) => { step.at = Math.round(v); changed() }).lastChild,
       el('span', { class: 'st-entry', text: step.action }),
-      button('✕', () => { st.sequence.splice(i, 1); changed() })
+      button(withIcon('action.close'), () => { st.sequence.splice(i, 1); changed() })
     ])]
     if (aspec) stRows.push(...argFields(aspec.args ?? [], step, ctx, ['fn'], step.action))
     rows.push(el('div', { class: 'st-card' }, stRows))
@@ -247,7 +247,7 @@ export function missilesSection (S, changed) {
       ;(ms[list] ?? []).forEach((act, i) => {
         const spec = vocab.mobActions.get(act.action)
         r.push(el('div', { class: 'st-card' }, [
-          el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: act.action }), button('✕', () => { ms[list].splice(i, 1); changed() })]),
+          el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: act.action }), button(withIcon('action.close'), () => { ms[list].splice(i, 1); changed() })]),
           ...(spec ? argFields(spec.args ?? [], act, ctx, ['fn'], act.action) : [])
         ]))
       })

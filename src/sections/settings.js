@@ -5,7 +5,7 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { PERSIST } from '../module_emit.js'
-import { text, muted, select, toggle, button, card } from '../ui.js'
+import { text, muted, select, toggle, button, card, withIcon, icon } from '../ui.js'
 
 let S = null
 
@@ -33,7 +33,7 @@ function showSettings () {
         S.save()
       })),
     muted(`Prop ids start at ${S.module.propIdBase}.`),
-    button('🕘 snapshots: the module as it was…', () => S.go('snapshots')),
+    button(withIcon('section.snapshots', 'snapshots: the module as it was…'), () => S.go('snapshots')),
     look()
   ])
 }

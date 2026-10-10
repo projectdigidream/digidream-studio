@@ -12,7 +12,7 @@
 // the rest by baking a probe map with one effect of each kind and reading it
 // back through the client's own readEffects -- the same numbers the game draws.
 //
-import { el, row, button, muted, chips, select } from './ui.js'
+import { el, row, button, muted, chips, select, withIcon, icon } from './ui.js'
 import { newDoc, addSector, addSpawn, FX_KIND_NAMES, CAP } from './doc.js'
 import { normalize, derive } from './topology.js'
 import { emitMap, fxWord } from './mapfmt.js'
@@ -20,7 +20,8 @@ import { readEffects } from '/src/mapdata.js'
 
 export const FX_KINDS = FX_KIND_NAMES
 export const MAX_MAP_FX = CAP.effects
-const ICON = { rain: '🌧', snow: '❄', dust: '·', embers: '✦', fog: '🌫' }
+// Each weather's icon: the catalog's weather.<kind>.
+const ICON = (kind) => `weather.${kind}`
 
 /**
  * Every kind's keys and defaults, from the engine: { rain: { density: 8, ... }, ... }.
@@ -53,8 +54,8 @@ export function fxRows (s, schema, ctx) {
   s.fx.forEach((e, i) => {
     const defaults = schema?.[e.kind] ?? {}
     const body = [el('div', { class: 'st-row' }, [
-      el('span', { class: 'st-entry', text: `${ICON[e.kind] ?? ''} ${e.kind}` }),
-      button('✕', () => { s.fx.splice(i, 1); if (!s.fx.length) delete s.fx; again() })
+      el('span', { class: 'st-entry' }, withIcon(ICON(e.kind), e.kind)),
+      button(withIcon('action.close'), () => { s.fx.splice(i, 1); if (!s.fx.length) delete s.fx; again() })
     ])]
     for (const [key, def] of Object.entries(defaults)) {
       const has = key in (e.params ?? {})
@@ -78,12 +79,12 @@ export function fxRows (s, schema, ctx) {
           if (Number.isFinite(v)) set(v)
         })
       }
-      body.push(row(has ? `${key} •` : key, input, has ? button('↺', () => set(null)) : null))
+      body.push(row(has ? `${key} •` : key, input, has ? button(withIcon('action.reset'), () => set(null)) : null))
     }
     if (!schema) body.push(muted('reading the defaults from the engine…'))
     rows.push(el('div', { class: 'st-card', 'data-fx': e.kind }, body))
   })
-  rows.push(chips(FX_KINDS.map((k) => ({ id: k, label: `+ ${ICON[k]} ${k}` })), (it) => {
+  rows.push(chips(FX_KINDS.map((k) => ({ id: k, icon: ICON(k), label: `+ ${k}` })), (it) => {
     s.fx.push({ kind: it.id, params: {} })
     again()
   }))

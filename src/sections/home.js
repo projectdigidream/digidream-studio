@@ -5,7 +5,7 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { newModule } from '../module_emit.js'
-import { el, button, row, text, muted, chips, ask } from '../ui.js'
+import { el, button, row, text, muted, chips, ask, icon, withIcon } from '../ui.js'
 import { moduleProblems } from '../app/problems.js'
 import { lastPlay } from '../playlog.js'
 import { thumbCanvas } from '../thumbs.js'
@@ -42,8 +42,8 @@ async function showHome () {
   const m = S.module
   const count = (o) => Object.keys(o ?? {}).length
   const maps = Object.keys(S.docs)
-  const tile = (id, icon, label, note) => el('button', { class: 'sd-tile', 'data-section': id, onclick: () => S.go(id) },
-    [el('span', { class: 'ico', text: icon }), el('span', { class: 'lbl', text: label }), el('span', { class: 'st-muted', text: note })])
+  const tile = (id, label, note) => el('button', { class: 'sd-tile', 'data-section': id, onclick: () => S.go(id) },
+    [icon(`section.${id}`, 'ico'), el('span', { class: 'lbl', text: label }), el('span', { class: 'st-muted', text: note })])
   const list = await S.store.list()
   // Left while the list was read (a quick tap, a slow phone's storage): drawn
   // now it would open as a sheet over the section that was gone to.
@@ -53,35 +53,35 @@ async function showHome () {
       el('div', { class: 'sd-hero-name', text: m.name || m.id }),
       el('div', { class: 'st-muted', text: m.about || 'A module: maps, and everything they share.' }),
       el('div', { class: 'st-muted sd-version', 'data-version': STUDIO_VERSION, text: `studio ${STUDIO_VERSION}` }),
-      el('div', { class: 'st-row' }, [button('▶ play', () => S.play()), button('⇪ export', () => S.exportPack()), button('⇩ import pack', () => S.importPack()),
-        button('+ new module', () => newModuleFlow()),
-        el('button', { 'data-section': 'snapshots', text: '🕘 snapshots', onclick: () => S.go('snapshots') }),
-        el('button', { 'data-section': 'plugins', text: `🧩 plugins (${S.plugins?.list().filter((p) => !p.manifest.hidden).length ?? 0})`, onclick: () => S.go('plugins') }),
+      el('div', { class: 'st-row' }, [button(withIcon('transport.play', 'play'), () => S.play()), button(withIcon('action.export', 'export'), () => S.exportPack()), button(withIcon('action.import', 'import pack'), () => S.importPack()),
+        button(withIcon('action.add', 'new module'), () => newModuleFlow()),
+        el('button', { 'data-section': 'snapshots', onclick: () => S.go('snapshots') }, withIcon('section.snapshots', 'snapshots')),
+        el('button', { 'data-section': 'plugins', onclick: () => S.go('plugins') }, withIcon('section.plugins', `plugins (${S.plugins?.list().filter((p) => !p.manifest.hidden).length ?? 0})`)),
         // What the last play-test left to read, when there was one.
-        lastPlay() ? el('button', { 'data-section': 'playlog', text: `📋 play log (${String(lastPlay().map).replace(/\.dnpm$/, '')})`, onclick: () => S.go('playlog') }) : null].filter(Boolean))
+        lastPlay() ? el('button', { 'data-section': 'playlog', onclick: () => S.go('playlog') }, withIcon('section.playlog', `play log (${String(lastPlay().map).replace(/\.dnpm$/, '')})`)) : null].filter(Boolean))
     ]),
-    el('div', { class: 'st-section-head', text: `🗺 maps (${maps.length})` }),
+    el('div', { class: 'st-section-head' }, withIcon('section.maps', `maps (${maps.length})`)),
     el('div', { class: 'sd-maps' }, [
       ...maps.map((n) => el('button', { class: 'sd-map', 'data-map': n, onclick: () => S.go('map', n) },
         [thumbCanvas(S.docs[n], { imageFor: S.imageFor, skin: S.skin }), el('span', { class: 'lbl', text: n }), el('span', { class: 'st-muted', text: `${plural(S.docs[n].order.length, 'room')} · ${plural(S.docs[n].entities.length, 'thing')}` })])),
       el('button', { class: 'sd-map', onclick: () => S.go('maps') }, [el('span', { class: 'lbl', text: 'all maps…' })])
     ]),
     ...problemRows(),
-    el('div', { class: 'st-section-head', text: '◆ the module' }),
+    el('div', { class: 'st-section-head' }, withIcon('section.home', 'the module')),
     el('div', { class: 'sd-tiles' }, [
-      tile('monsters', '☠', 'Monsters', `${count(m.mobs?.mobs)}`),
-      tile('player', '🧍', 'Player', m.player?.prop ?? 'default'),
-      tile('weapons', '🔫', 'Weapons', `${count(m.weapons?.weapons)}`),
-      tile('props', '📦', 'Props', `${(m.props ?? []).length}`),
-      tile('particles', '✨', 'Particles', `${(m.vfx ?? []).length}`),
-      tile('textures', '🧱', 'Textures', `${Object.keys(m.textures ?? {}).length} own`),
-      tile('music', '♪', 'Music', `${S.trackNames().length} tracks`),
-      tile('sounds', '🔊', 'Sounds', `${(S.moduleSounds ?? []).length}`),
-      tile('screens', '▣', 'Screens', m.ui ? 'own' : 'default'),
-      tile('scripts', '📜', 'Scripts', `${Object.keys(m.scripts ?? {}).length}`),
-      tile('settings', '⚙', 'Settings', m.controls ?? 'platformer')
+      tile('monsters', 'Monsters', `${count(m.mobs?.mobs)}`),
+      tile('player', 'Player', m.player?.prop ?? 'default'),
+      tile('weapons', 'Weapons', `${count(m.weapons?.weapons)}`),
+      tile('props', 'Props', `${(m.props ?? []).length}`),
+      tile('particles', 'Particles', `${(m.vfx ?? []).length}`),
+      tile('textures', 'Textures', `${Object.keys(m.textures ?? {}).length} own`),
+      tile('music', 'Music', `${S.trackNames().length} tracks`),
+      tile('sounds', 'Sounds', `${(S.moduleSounds ?? []).length}`),
+      tile('screens', 'Screens', m.ui ? 'own' : 'default'),
+      tile('scripts', 'Scripts', `${Object.keys(m.scripts ?? {}).length}`),
+      tile('settings', 'Settings', m.controls ?? 'platformer')
     ]),
-    list.length > 1 ? el('div', { class: 'st-section-head', text: '⇄ other modules' }) : null,
+    list.length > 1 ? el('div', { class: 'st-section-head' }, withIcon('action.swap', 'other modules')) : null,
     list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null
   ])
 }
@@ -90,20 +90,20 @@ async function showHome () {
 function problemRows () {
   const p = moduleProblems(S)
   const items = [
-    ...p.maps.map((x) => ({ go: ['map', x.map], text: `🗺 ${x.map}: ${x.msg}` })),
-    ...p.metamap.map((m) => ({ go: ['maps'], text: `▦ metamap: ${m}` })),
-    ...p.graphs.map((m) => ({ go: ['graphs'], text: `◇ ${m}` })),
-    ...(p.sky ?? []).map((m) => ({ go: ['sky'], text: `🌌 ${m}` })),
-    ...(p.player ?? []).map((m) => ({ go: ['player'], text: `🧍 ${m}` })),
-    ...(p.textures ?? []).map((m) => ({ go: ['textures'], text: `🧱 ${m}` })),
-    ...(p.controls ?? []).map((m) => ({ go: ['controls'], text: `🎮 ${m}` })),
-    ...p.monsters.map((m) => ({ go: ['monsters'], text: `☠ ${m}` })),
-    ...p.weapons.map((m) => ({ go: ['weapons'], text: `🔫 ${m}` })),
-    ...p.sounds.map((m) => ({ go: ['sounds'], text: `🔊 ${m}` }))
+    ...p.maps.map((x) => ({ go: ['map', x.map], icon: 'section.maps', text: `${x.map}: ${x.msg}` })),
+    ...p.metamap.map((m) => ({ go: ['maps'], icon: 'section.maps', text: `metamap: ${m}` })),
+    ...p.graphs.map((m) => ({ go: ['graphs'], icon: 'section.graphs', text: `${m}` })),
+    ...(p.sky ?? []).map((m) => ({ go: ['sky'], icon: 'section.sky', text: `${m}` })),
+    ...(p.player ?? []).map((m) => ({ go: ['player'], icon: 'section.player', text: `${m}` })),
+    ...(p.textures ?? []).map((m) => ({ go: ['textures'], icon: 'section.textures', text: `${m}` })),
+    ...(p.controls ?? []).map((m) => ({ go: ['controls'], icon: 'section.controls', text: `${m}` })),
+    ...p.monsters.map((m) => ({ go: ['monsters'], icon: 'section.monsters', text: `${m}` })),
+    ...p.weapons.map((m) => ({ go: ['weapons'], icon: 'section.weapons', text: `${m}` })),
+    ...p.sounds.map((m) => ({ go: ['sounds'], icon: 'section.sounds', text: `${m}` }))
   ]
-  if (!items.length) return [el('div', { class: 'st-muted', 'data-problems': '0', text: '✔ nothing wrong that the studio can see' })]
-  return [el('div', { class: 'st-section-head', text: `✖ to fix (${items.length})` }),
-    ...items.slice(0, 30).map((it) => el('button', { class: 'sd-problem', 'data-problem': it.go[0], onclick: () => S.go(...it.go) }, [el('span', { text: it.text })])),
+  if (!items.length) return [el('div', { class: 'st-muted', 'data-problems': '0' }, withIcon('status.ok', 'nothing wrong that the studio can see'))]
+  return [el('div', { class: 'st-section-head' }, withIcon('status.error', `to fix (${items.length})`)),
+    ...items.slice(0, 30).map((it) => el('button', { class: 'sd-problem', 'data-problem': it.go[0], onclick: () => S.go(...it.go) }, withIcon(it.icon, it.text))),
     items.length > 30 ? muted(`and ${items.length - 30} more`) : null]
 }
 

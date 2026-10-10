@@ -21,6 +21,13 @@ export const DEFAULT_POINTER = 'touch'
 
 const SKINS = new URL('../vendor/uikit/skins/', import.meta.url)
 
+let catalog = null
+/** The icon catalog: every id, and the glyph shown where a skin draws none. */
+export async function iconCatalog () {
+  if (!catalog) catalog = fetch(new URL('../vendor/uikit/catalog/icons.json', import.meta.url)).then((r) => (r.ok ? r.json() : { groups: [] })).catch(() => ({ groups: [] }))
+  return catalog
+}
+
 let listing = null
 /** The shipped skins: [{ id, name, about, modes, pointers, file }]. */
 export async function skinList () {

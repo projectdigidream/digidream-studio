@@ -6,7 +6,7 @@
 //
 import { buildSpline } from '/src/spline.js'
 import { addPath, addPathPoint } from '../doc.js'
-import { el, button, row, text, muted, card, select, slider, toggle, number, confirmDialog } from '../ui.js'
+import { el, button, row, text, muted, card, select, slider, toggle, number, confirmDialog, withIcon, icon } from '../ui.js'
 
 import { ISO_ELEVATION } from '/src/camera.js'
 
@@ -106,8 +106,8 @@ function showPathSheet () {
           number('x', sel.x, { min: -256, max: 256, step: 0.125 }, (v) => { sel.x = v; S.commit(); showPathSheet() }),
           number('y', sel.y, { min: -256, max: 256, step: 0.125 }, (v) => { sel.y = v; S.commit(); showPathSheet() }),
           el('div', { class: 'st-row' }, [
-            button('‹ previous', () => S.selectPathPoint(p.points[(i - 1 + p.points.length) % p.points.length]?.id)),
-            button('next ›', () => S.selectPathPoint(p.points[(i + 1) % p.points.length]?.id)),
+            button(withIcon('action.back', 'previous'), () => S.selectPathPoint(p.points[(i - 1 + p.points.length) % p.points.length]?.id)),
+            button(withIcon('action.next', 'next'), () => S.selectPathPoint(p.points[(i + 1) % p.points.length]?.id)),
             button('remove', () => { p.points = p.points.filter((q) => q.id !== sel.id); S.pathPointSel = null; S.commit(); showPathSheet(); S.redraw() }, 'st-danger')
           ]),
           // WHERE A WAYPOINT SITS IN THE LIST IS PART OF THE SHAPE, because
@@ -115,8 +115,8 @@ function showPathSheet () {
           // different order are a different path. So they can be moved along
           // it without being deleted and re-tapped.
           el('div', { class: 'st-row' }, [
-            button('◀ earlier', () => movePoint(-1), i === 0 ? 'st-dim' : ''),
-            button('later ▶', () => movePoint(1), i === p.points.length - 1 ? 'st-dim' : ''),
+            button(withIcon('action.left', 'earlier'), () => movePoint(-1), i === 0 ? 'st-dim' : ''),
+            button(withIcon('action.right', 'later'), () => movePoint(1), i === p.points.length - 1 ? 'st-dim' : ''),
             button('+ after this', () => insertAfter())
           ])
         ])
@@ -127,7 +127,7 @@ function showPathSheet () {
       if (done) S.commit()
     }),
     ...pathRows(),
-    button('‹ all cameras', () => { S.pathEdit = null; S.pathPointSel = null; S.redraw(); showCamera() })
+    button(withIcon('action.back', 'all cameras'), () => { S.pathEdit = null; S.pathPointSel = null; S.redraw(); showCamera() })
   ].filter(Boolean))
 }
 
@@ -193,7 +193,7 @@ function showCamera () {
     toggle('lock zoom', !!c.lockZoom, (v) => { c.lockZoom = v; S.commit() }),
     muted('The level view follows these while they are set. Sprites stand upright in the world, so the steeper the camera looks down, the shorter they show -- here and in the game.'),
 
-    el('div', { class: 'st-section-head', text: '🎬 how it follows' }),
+    el('div', { class: 'st-section-head' }, withIcon('graphgroup.cutscene', 'how it follows')),
     select('mode', c.mode ?? '', [['', "follow the player (the engine's own)"], ['track', 'track: stay on the path, nearest the player'],
                                   ['flythrough', 'flythrough: ride the path at a speed'], ['auto', 'auto: take the path when the player comes near']],
            (v) => { c.mode = v || null; S.commit(); showCamera() }),
@@ -217,8 +217,8 @@ function showCamera () {
           el('div', { class: 'st-trow-name', text: `tag ${p.tag}${p.loop ? ' · loop' : ''}` }),
           el('div', { class: 'st-muted', text: `${p.points.length} point(s)${curve ? ` · ${curve.length.toFixed(2)} units of curve` : ' · needs at least 2'}${p.anchored === false ? ' · world-fixed' : ''}` })
         ]),
-        button('✎', () => editPath(p.id)),
-        button('✕', async () => {
+        button(withIcon('action.edit'), () => editPath(p.id)),
+        button(withIcon('action.close'), async () => {
           if (!await confirmDialog(`delete camera path tag ${p.tag}?`)) return
           S.doc.paths = S.doc.paths.filter((x) => x.id !== p.id)
           if (S.pathEdit === p.id) S.pathEdit = null

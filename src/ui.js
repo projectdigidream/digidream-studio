@@ -20,7 +20,10 @@ const STYLE = `
   background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);
   font:600 12px/1.1 var(--dnp-font-ui);cursor:pointer;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:3px}
-.st-bar button .ico{font-size:18px;line-height:1}
+/* Icons (icon(id)): as tall as the text round them, unless a place says otherwise. */
+.ui-icon.st-i{--icon-size:1.25em;vertical-align:-.25em}
+.st-i-label{margin-left:.4em}
+.st-bar button .ico{font-size:18px;line-height:1;--icon-size:20px}
 .st-bar button[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 55%,transparent);border-color:color-mix(in srgb,var(--dnp-color-text-primary) 70%,transparent)}
 /* A phone held upright: the eight tools in ONE row of icon-first buttons
    (they fit at 390 CSS px once each takes an equal share), not three rows
@@ -28,12 +31,12 @@ const STYLE = `
 @media (max-width:600px) and (orientation:portrait){
   .st-bar{flex-wrap:nowrap;gap:4px;padding:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
   .st-bar button{flex:1 1 0;min-width:0;height:50px;font-size:9px;letter-spacing:-.2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
-  .st-bar button .ico{font-size:17px}
+  .st-bar button .ico{font-size:17px;--icon-size:19px}
 }
 @media (max-height:560px) and (orientation:landscape){
   .st-bar{padding:4px 6px;padding-bottom:calc(4px + env(safe-area-inset-bottom))}
   .st-bar button{height:42px;font-size:10px;gap:2px}
-  .st-bar button .ico{font-size:15px}
+  .st-bar button .ico{font-size:15px;--icon-size:16px}
 }
 .st-top{position:absolute;left:0;right:0;top:0;display:flex;gap:6px;align-items:flex-start;
   padding:8px;padding-top:calc(8px + env(safe-area-inset-top));padding-left:calc(8px + env(safe-area-inset-left));
@@ -247,7 +250,9 @@ const el = (tag, attrs = {}, children = []) => {
   const e = document.createElement(tag)
   for (const [k, v] of Object.entries(attrs)) {
     if (k === 'class') e.className = v
-    else if (k === 'text') e.textContent = v
+    else if (k === 'text') { if (v !== null && v !== undefined) e.append(String(v)) }
+    // An icon by catalog id, before any text: el('button', { icon: 'action.close' }).
+    else if (k === 'icon') { if (v) e.prepend(icon(v)) }
     else if (k === 'html') e.innerHTML = v
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v)
     else if (v !== null && v !== undefined) e.setAttribute(k, v)
@@ -257,15 +262,60 @@ const el = (tag, attrs = {}, children = []) => {
 }
 export { el }
 
+// --- icons (docs/STUDIO_SKINS.md, phase 3) -----------------------------------------
+// Every icon the studio shows is a catalog id (vendor/uikit/catalog/icons.json):
+// drawn by the skin when it has a picture for it, else today's glyph, so
+// nothing disappears. A plugin's own glyph (no dot in it) is shown as given.
+const icons = { skin: null, glyphs: new Map() }
+
+/** The skin to draw icons with, and the catalog of ids and their glyphs. */
+export function useIcons (skin, catalog) {
+  icons.skin = skin
+  for (const g of catalog?.groups ?? []) for (const [n, , glyph] of g.icons) icons.glyphs.set(`${g.id}.${n}`, glyph)
+}
+
+/** The glyph an id stands for (the catalog's), or the string itself when it is not an id. */
+export function glyphOf (id) { return icons.glyphs.get(id) ?? (String(id).includes('.') ? '' : String(id ?? '')) }
+
+/** The skin's picture for an id, as a URL, and whether it is tinted; null when the skin draws none. */
+export function iconPicture (id) {
+  const url = String(id).includes('.') ? icons.skin?.view?.iconUrl(id) : null
+  return url ? { url, tinted: icons.skin.view.iconTinted(id) } : null
+}
+
+function paintIcon (e) {
+  const pic = iconPicture(e.dataset.icon)
+  e.classList.add('ui-icon', 'st-i')
+  e.classList.toggle('is-glyph', !pic)
+  e.classList.toggle('is-img', !!pic && !pic.tinted)
+  if (pic) { e.style.setProperty('--icon', `url("${pic.url}")`); e.textContent = '' } else { e.style.removeProperty('--icon'); e.textContent = glyphOf(e.dataset.icon) }
+}
+
+/** An icon, by catalog id: <span class="ui-icon" data-icon=…>. Size: --icon-size. */
+export function icon (id, cls = '') {
+  const e = document.createElement('span')
+  e.dataset.icon = id
+  if (cls) e.className = cls
+  e.setAttribute('aria-hidden', 'true')
+  paintIcon(e)
+  return e
+}
+
+/** An icon and a label, as children: button(withIcon('action.export', 'export'), …). */
+export const withIcon = (id, label) => [icon(id), label ? el('span', { class: 'st-i-label', text: label }) : null].filter(Boolean)
+
+/** Draw every icon on the page again (the skin changed). */
+export function refreshIcons (root = document) { for (const e of root.querySelectorAll('[data-icon]')) paintIcon(e) }
+
 export const TOOLS = [
-  { id: 'select', label: 'Select', ico: '⌖' },
-  { id: 'room', label: 'Room', ico: '▭' },
-  { id: 'place', label: 'Place', ico: '✦' },
-  { id: 'trigger', label: 'Triggers', ico: '⚡' },
-  { id: 'camera', label: 'Camera', ico: '🎥' },
-  { id: 'graph', label: 'Graph', ico: '◇' },
-  { id: 'play', label: 'Play', ico: '▶' },
-  { id: 'menu', label: 'More', ico: '⋯' }
+  { id: 'select', label: 'Select', ico: 'maptool.select' },
+  { id: 'room', label: 'Room', ico: 'maptool.room' },
+  { id: 'place', label: 'Place', ico: 'maptool.place' },
+  { id: 'trigger', label: 'Triggers', ico: 'maptool.triggers' },
+  { id: 'camera', label: 'Camera', ico: 'maptool.camera' },
+  { id: 'graph', label: 'Graph', ico: 'maptool.graph' },
+  { id: 'play', label: 'Play', ico: 'maptool.play' },
+  { id: 'menu', label: 'More', ico: 'maptool.more' }
 ]
 
 export class Ui {
@@ -275,26 +325,26 @@ export class Ui {
     document.head.appendChild(el('style', { text: STYLE }))
     this.layer = el('div', { class: 'st-layer' })
     this.status = el('div', { class: 'st-status', text: '' })
-    this.undoBtn = el('button', { text: '↶', title: 'undo', onclick: () => on.undo() })
-    this.redoBtn = el('button', { text: '↷', title: 'redo', onclick: () => on.redo() })
+    this.undoBtn = el('button', { title: 'undo', onclick: () => on.undo() }, [icon('action.undo')])
+    this.redoBtn = el('button', { title: 'redo', onclick: () => on.redo() }, [icon('action.redo')])
     this.viewBtn = el('button', { text: 'PLAN', title: 'plan / game view', onclick: () => on.view() })
-    this.rotL = el('button', { text: '⟲', title: 'rotate', onclick: () => on.rotate(-1) })
-    this.rotR = el('button', { text: '⟳', title: 'rotate', onclick: () => on.rotate(1) })
+    this.rotL = el('button', { title: 'rotate', onclick: () => on.rotate(-1) }, [icon('action.rotateleft')])
+    this.rotR = el('button', { title: 'rotate', onclick: () => on.rotate(1) }, [icon('action.rotate')])
     // Back to the module, on a phone held upright where there is no rail.
-    this.homeBtn = el('button', { class: 'st-home-btn', text: '‹', title: 'the module', onclick: () => on.home?.() })
+    this.homeBtn = el('button', { class: 'st-home-btn', title: 'the module', onclick: () => on.home?.() }, [icon('action.back')])
     this.side = el('div', { class: 'st-side' }, [this.homeBtn, this.undoBtn, this.redoBtn, this.rotL, this.rotR, this.viewBtn])
     this.top = el('div', { class: 'st-top' }, [this.status, this.side])
     this.bar = el('div', { class: 'st-bar' })
     this.buttons = {}
     for (const t of TOOLS) {
-      const b = el('button', { onclick: () => on.tool(t.id) }, [el('span', { class: 'ico', text: t.ico }), el('span', { text: t.label })])
+      const b = el('button', { onclick: () => on.tool(t.id) }, [icon(t.ico, 'ico'), el('span', { text: t.label })])
       this.buttons[t.id] = b
       this.bar.appendChild(b)
     }
     this.sheetTitle = el('span')
     this.sheetBody = el('div', { class: 'st-sheet-body' })
     this.sheet = el('div', { class: 'st-sheet' }, [
-      el('div', { class: 'st-sheet-title' }, [this.sheetTitle, el('button', { text: '✕', onclick: () => this.hideSheet() })]),
+      el('div', { class: 'st-sheet-title' }, [this.sheetTitle, el('button', { title: 'close', onclick: () => this.hideSheet() }, [icon('action.close')])]),
       this.sheetBody
     ])
     this.menu = el('div', { class: 'st-menu st-hidden' })
@@ -376,7 +426,8 @@ export function addHelp (rowEl, doc) {
   if (!doc || !rowEl?.appendChild || rowEl.querySelector(':scope > .st-help')) return rowEl
   const text = el('div', { class: 'st-help-text', text: doc })
   text.hidden = !helpOpen.has(doc)
-  const b = el('button', { class: 'st-help', type: 'button', text: 'ⓘ', title: doc, 'aria-label': 'what is this?', 'data-on': text.hidden ? '0' : '1' })
+  const b = el('button', { class: 'st-help', type: 'button', title: doc, 'aria-label': 'what is this?', 'data-on': text.hidden ? '0' : '1' })
+  b.append(icon('action.help'))
   b.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
     text.hidden = !text.hidden
@@ -432,13 +483,14 @@ export function select (label, value, options, onChange) {
   return row(label, s)
 }
 
+/** A button; `label` is its text, or children (withIcon(id, text)). */
 export function button (label, onClick, cls = '') {
-  return el('button', { text: label, class: cls, onclick: onClick })
+  return Array.isArray(label) ? el('button', { class: cls, onclick: onClick }, label) : el('button', { text: label, class: cls, onclick: onClick })
 }
 
 export function chips (items, onPick) {
   return el('div', { class: 'st-chips' }, items.map((it) => {
-    const c = el('div', { class: 'st-chip', text: it.label, 'data-on': it.on ? '1' : '0' })
+    const c = el('div', { class: 'st-chip', 'data-on': it.on ? '1' : '0' }, it.icon ? withIcon(it.icon, it.label) : [it.label])
     c.addEventListener('click', () => onPick(it))
     return c
   }))

@@ -8,7 +8,7 @@
 // should run once for the whole game rather than once per level -- is the
 // game's graph's (sections/graphs.js) and the weapons runtime's.
 //
-import { el, button, muted, row, confirmDialog, ask } from '../ui.js'
+import { el, button, muted, row, confirmDialog, ask, withIcon, icon } from '../ui.js'
 
 let S = null
 
@@ -17,7 +17,7 @@ function showScripts (open = null) {
   const names = Object.keys(S.module.scripts).sort()
   if (open && !(open in S.module.scripts)) open = null
   const body = names.map((n) => el('div', { class: 'st-trow', 'data-script': n, 'data-on': n === open ? '1' : '0', onclick: () => showScripts(n) }, [
-    el('span', { class: 'st-mark', text: '📜' }),
+    el('span', { class: 'st-mark' }, withIcon('section.scripts')),
     el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: n }),
       el('div', { class: 'st-muted', text: `${String(S.module.scripts[n]).split('\n').length} lines` })])
   ]))
@@ -26,7 +26,7 @@ function showScripts (open = null) {
     const area = el('textarea', { class: 'sd-code', spellcheck: 'false', 'data-editing': open })
     area.value = S.module.scripts[open]
     area.addEventListener('change', () => { S.module.scripts[open] = area.value; S.moduleChanged() })
-    body.push(el('div', { class: 'st-section-head', text: `📜 ${open}` }), area, el('div', { class: 'st-row' }, [
+    body.push(el('div', { class: 'st-section-head' }, withIcon('section.scripts', `${open}`)), area, el('div', { class: 'st-row' }, [
       ...(S.editButtons?.('record:script', open) ?? []),
       button('rename', async () => {
         const raw = await ask('file name', open)

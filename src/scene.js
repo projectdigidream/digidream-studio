@@ -12,7 +12,7 @@
 //
 // Esc or ■ ends it; ↻ plays it again.
 //
-import { el } from './ui.js'
+import { el, withIcon, icon } from './ui.js'
 import { planScene, cameraPose } from './scene_plan.js'
 import { buildSpline } from '/src/spline.js'
 import { HudView, parseLayout, withSubtitles } from '/src/render/layout.js'
@@ -61,9 +61,9 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
   const clock = el('span', { class: 'sc-clock', text: '0.0 s' })
   const log = el('div', { class: 'sc-log' })
   const strip = el('div', { class: 'sc-strip' }, [
-    el('span', { class: 'sc-title', text: `▶ ${startId}` }), clock,
+    el('span', { class: 'sc-title' }, withIcon('transport.play', `${startId}`)), clock,
     el('button', { text: '↻', title: 'again', 'data-scene': 'again', onclick: () => restart() }),
-    el('button', { text: '■', title: 'back to the graph', 'data-scene': 'stop', onclick: () => stop() })
+    el('button', { title: 'back to the graph', 'data-scene': 'stop', onclick: () => stop() }, withIcon('transport.stop'))
   ])
   const root = el('div', { class: 'sc-scene', 'data-scene': 'playing' }, [top, bottom, fade, hudHost, log, strip])
   if (!document.getElementById('sc-scene-style')) document.head.appendChild(el('style', { id: 'sc-scene-style', text: STYLE }))

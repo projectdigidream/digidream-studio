@@ -5,7 +5,7 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { shell } from '../bridge.js'
-import { el, button, row, text, muted, select, ask, confirmDialog } from '../ui.js'
+import { el, button, row, text, muted, select, ask, confirmDialog, withIcon, icon } from '../ui.js'
 
 let S = null
 
@@ -68,8 +68,8 @@ function showMusic () {
   const cueRows = Object.entries(S.doc.music).map(([cue, track]) => el('div', { class: 'st-row', 'data-cue': cue }, [
     el('span', { class: 'st-entry', text: cue }),
     select('', track, [['', '(choose a track)'], ...tracks], (v) => { if (v) S.doc.music[cue] = v; else delete S.doc.music[cue]; S.commit(); showMusic() }).lastChild,
-    button(playing(track) ? '■' : '▶', () => (playing(track) ? stopListening() : listen(track))),
-    button('✕', () => { delete S.doc.music[cue]; S.commit(); showMusic() })
+    button(withIcon(playing(track) ? 'transport.stop' : 'transport.play'), () => (playing(track) ? stopListening() : listen(track))),
+    button(withIcon('action.close'), () => { delete S.doc.music[cue]; S.commit(); showMusic() })
   ]))
   const trackRows = tracks.map((t) => el('div', { class: 'st-trow', 'data-track': t }, [
     el('div', { class: 'st-trow-text' }, [
@@ -89,8 +89,8 @@ function showMusic () {
       S.status(`${t} baked`, 'ok')
       showMusic()
     }) : null,
-    S.trackUrls.has(t) ? button(playing(t) ? '■' : '▶', () => (playing(t) ? stopListening() : listen(t))) : null,
-    button('✕', async () => {
+    S.trackUrls.has(t) ? button(withIcon(playing(t) ? 'transport.stop' : 'transport.play'), () => (playing(t) ? stopListening() : listen(t))) : null,
+    button(withIcon('action.close'), async () => {
       const n = usedBy(t)
       if (!await confirmDialog(`delete track ${t}?${n ? ` ${n} cue(s) use it; they go too.` : ''}`)) return
       if (playing(t)) stopListening()
@@ -102,7 +102,7 @@ function showMusic () {
     }, 'st-danger')
   ].filter(Boolean)))
   S.ui.showSheet('Soundtrack', [
-    el('div', { class: 'st-section-head', text: `♪ ${S.docName}: cues` }),
+    el('div', { class: 'st-section-head' }, withIcon('section.music', `${S.docName}: cues`)),
     ...cueRows,
     cueRows.length ? null : muted('No music for this map yet. The game starts the cue called default; a script can switch to another.'),
     button('+ cue', async () => {

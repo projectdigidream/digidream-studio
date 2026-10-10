@@ -25,6 +25,7 @@ import { makeCamera, resizeCamera } from '/src/render/scene.js'
 import { cameraOffset, ISO_ELEVATION, distanceForFraming } from '/src/camera.js'
 import { toThreeX, toThreeY, toThreeZ } from '/src/mapgeom.js'
 import { colorParts } from '../vendor/uikit/runtime.js'
+import { iconPicture, glyphOf } from './ui.js'
 
 const FOV = 50
 const MIN_VIEW = 4
@@ -403,7 +404,7 @@ export class Viewport {
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + m.icon.dy, toThreeZ(m.y))
         sprite.userData = { kind: m.kind, id: m.id, own: true, h: m.icon.h }
       } else {
-        sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.#label(m.label, m.color), depthTest: false, transparent: true, opacity: m.alpha ?? 1 }))
+        sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.#label(m.label, m.color, m.iconId), depthTest: false, transparent: true, opacity: m.alpha ?? 1 }))
         sprite.scale.set(h * 3, h, 1)
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + h / 2, toThreeZ(m.y))
         sprite.userData = { kind: m.kind, id: m.id, own: true, label: m.label }
@@ -428,22 +429,55 @@ export class Viewport {
     this.dirty = true
   }
 
-  #label (text, color) {
-    const key = `${text}|${color}`
+  /** An icon's picture from the skin, decoded: null until it has loaded (the badges are drawn again then). */
+  #iconArt (id) {
+    const pic = iconPicture(id)
+    if (!pic) return null
+    this.iconImages ??= new Map()
+    let img = this.iconImages.get(pic.url)
+    if (!img) {
+      img = new Image()
+      img.onload = () => { for (const t of this.labelCache.values()) t.dispose(); this.labelCache.clear(); this.onLabelArt?.() }
+      img.src = pic.url
+      this.iconImages.set(pic.url, img)
+    }
+    return img.complete && img.naturalWidth ? { img, tinted: pic.tinted } : null
+  }
+
+  #label (text, color, iconId = null) {
+    const key = `${text}|${color}|${iconId}`
     if (this.labelCache.has(key)) return this.labelCache.get(key)
     const c = document.createElement('canvas')
     c.width = 192; c.height = 64
     const g = c.getContext('2d')
     // map.marker, drawn at the canvas's scale (the sprite is ~2.2x the skin's px)
     const K = 2.2
+    const hex = `#${color.toString(16).padStart(6, '0')}`
     g.fillStyle = BADGE.fill
     g.beginPath(); g.roundRect(4, 8, 184, 48, (BADGE.radius ?? 6) * K); g.fill()
-    g.strokeStyle = `#${color.toString(16).padStart(6, '0')}`
+    g.strokeStyle = hex
     g.lineWidth = Math.max(1, (BADGE.width ?? 2) * 4 / 3); g.stroke()
     g.fillStyle = BADGE.color
     g.font = String(BADGE.font ?? '600 11px sans-serif').replace(/(\d+(?:\.\d+)?)px/, (_, n) => `${Math.round(n * K)}px`)
-    g.textAlign = 'center'; g.textBaseline = 'middle'
-    g.fillText(text.slice(0, 12), 96, 33)
+    g.textBaseline = 'middle'
+    // The marker's icon (a catalog id): the skin's picture, tinted in the
+    // marker's colour, once it has loaded -- the glyph until then, or when the
+    // skin draws none.
+    const art = iconId ? this.#iconArt(iconId) : null
+    const glyph = iconId && !art ? glyphOf(iconId) : ''
+    const words = (glyph ? `${glyph} ${text}` : text).trim().slice(0, 12)
+    const iw = art ? 30 : 0
+    const tw = g.measureText(words).width
+    const x0 = 96 - (iw + (art && words ? 6 : 0) + tw) / 2
+    if (art) {
+      const t = document.createElement('canvas'); t.width = t.height = 60
+      const tg = t.getContext('2d')
+      tg.drawImage(art.img, 0, 0, 60, 60)
+      if (art.tinted) { tg.globalCompositeOperation = 'source-in'; tg.fillStyle = hex; tg.fillRect(0, 0, 60, 60) }
+      g.drawImage(t, x0, 33 - iw / 2, iw, iw)
+    }
+    g.textAlign = 'left'
+    g.fillText(words, x0 + iw + (art && words ? 6 : 0), 33)
     const tex = new THREE.CanvasTexture(c)
     this.labelCache.set(key, tex)
     return tex

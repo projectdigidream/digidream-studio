@@ -25,7 +25,7 @@
 // row on the node: linked, it takes the value at run time and its field says so.
 //
 import { buttonNames, ENGINE_BUTTON_NAMES, keyLabel } from './keys_emit.js'
-import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog, addHelp } from './ui.js'
+import { el, row, text, select, button, muted, number, toggle, ask, confirmDialog, addHelp, withIcon, icon } from './ui.js'
 import { argFields } from './argform.js'
 import { decorIdsOf } from './panels_emit.js'
 import { playScene } from './scene.js'
@@ -54,16 +54,18 @@ const MENU = [
   ['when …', (s) => s.starts || s.name === 'on_call'],
   ['do to a thing', (s) => s.category === 'entity' && (s.exec_in ?? []).length],
   ['move the map', (s) => (s.category === 'sector' || s.category === 'wall') && (s.exec_in ?? []).length],
-  ['🎬 cutscene', (s) => s.category === 'cinematic'],
-  ['🎥 camera', (s) => s.category === 'camera'],
-  ['🚪 maps', (s) => s.category === 'maps'],
+  ['cutscene', (s) => s.category === 'cinematic'],
+  ['camera', (s) => s.category === 'camera'],
+  ['maps', (s) => s.category === 'maps'],
   ['read', (s) => ['entity', 'sector', 'wall'].includes(s.category) && !(s.exec_in ?? []).length],
   ['flow', (s) => ['branch', 'sequence', 'delay', 'once', 'call'].includes(s.name)],
   ['data', (s) => ['get_var', 'set_var', 'add_var', 'literal', 'compare', 'math', 'logic', 'random'].includes(s.name)]
 ]
 
 // The panel words, in the menu's own group (menuItems): [kind, verb, label].
-const PANELS_GROUP = '🪟 panels'
+const PANELS_GROUP = 'panels'
+// The menu groups drawn with an icon (catalog ids).
+const GROUP_ICON = { cutscene: 'graphgroup.cutscene', camera: 'graphgroup.camera', maps: 'graphgroup.maps', panels: 'graphgroup.panels', board: 'graphgroup.note' }
 // What using each kind of widget is called.
 const USED = { button: 'pressed', toggle: 'flipped', slider: 'moved', select: 'chosen' }
 /** A doc's first sentence, for a line under a menu entry. */
@@ -277,23 +279,23 @@ class GraphWindow {
   render () {
     const S = this.S
     if (!this.gv) {
-      this.root.replaceChildren(el('div', { class: 'wk-top' }, [el('span', { class: 'wk-title', text: '◇ graph' }), button('‹ back', () => this.back())]),
+      this.root.replaceChildren(el('div', { class: 'wk-top' }, [el('span', { class: 'wk-title' }, withIcon('section.graphs', 'graph')), button(withIcon('action.back', 'back'), () => this.back())]),
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
     const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
-      el('span', { class: 'wk-title', text: this.game ? '◇ the game' : `◇ ${S.docName}` }),
+      el('span', { class: 'wk-title' }, withIcon('section.graphs', this.game ? 'the game' : S.docName)),
       this.#graphPicker(),
       this.#palette(),
-      el('div', { class: 'wk-tabs gw-panes' }, [['board', 'board'], ['details', 'details'], ['variables', '𝑥']].map(([v, l]) =>
-        el('button', { text: l, 'data-pane-tab': v, 'data-on': (v === 'variables' ? this.pane === 'details' && this.side === 'variables' : this.pane === v && !(v === 'details' && this.side === 'variables')) ? '1' : '0',
-          onclick: () => { this.pane = v === 'variables' ? 'details' : v; if (v !== 'board') this.side = v; this.root.dataset.pane = this.pane; this.render() } }))),
-      this.graph?.nodes.length ? button('▶ scene', () => this.playScene(), 'gw-play') : null,
+      el('div', { class: 'wk-tabs gw-panes' }, [['board', 'board'], ['details', 'details'], ['variables', null, 'action.variable']].map(([v, l, i]) =>
+        el('button', { 'data-pane-tab': v, 'data-on': (v === 'variables' ? this.pane === 'details' && this.side === 'variables' : this.pane === v && !(v === 'details' && this.side === 'variables')) ? '1' : '0',
+          onclick: () => { this.pane = v === 'variables' ? 'details' : v; if (v !== 'board') this.side = v; this.root.dataset.pane = this.pane; this.render() } }, i ? withIcon(i, l) : [l]))),
+      this.graph?.nodes.length ? button(withIcon('transport.play', 'scene'), () => this.playScene(), 'gw-play') : null,
       el('span', { style: 'flex:1' }),
       problems.length ? el('span', { class: 'st-danger', text: `${problems.length} problem${problems.length > 1 ? 's' : ''}` }) : null,
-      button(this.game ? '‹ graphs' : '‹ map', () => this.back())
+      button(withIcon('action.back', this.game ? 'graphs' : 'map'), () => this.back())
     ].filter(Boolean))
 
     const board = el('div', { class: 'wk-board gw-board' })
@@ -413,7 +415,7 @@ class GraphWindow {
   /** The menu after the panels: the rest of the nodes, a note, and the trigger words. */
   #menuRest (out, push, specs, taken) {
     for (const n of specs.filter((x) => !taken.has(x.name))) push('other', `node:${n.name}`, n.name.replace(/_/g, ' '), n.doc)
-    push('📝 board', 'note:', 'a note', 'A labelled box on the board, round the picked node if there is one: what this part of the graph is for. Drag its title and the nodes inside go with it. Never run.')
+    push('board', 'note:', 'a note', 'A labelled box on the board, round the picked node if there is one: what this part of the graph is for. Drag its title and the nodes inside go with it. Never run.')
     // The trigger vocabulary's own words, each by name, for what the world's nodes do not say.
     for (const e of this.events) push('trigger words', `event:${e.name}`, `when ${e.name.replace(/^on_/, '').replace(/_/g, ' ')}`, this.#verbDoc('event', e.name))
     for (const c of this.verbs('condition')) push('trigger words', `cond:${c.name}`, `if ${c.name.replace(/_/g, ' ')}`, c.doc)
@@ -437,7 +439,7 @@ class GraphWindow {
     const items = this.menuItems()
     const input = el('input', { type: 'search', class: 'gw-menu-find', placeholder: 'find a node: open, fog, damage, panel…', autocomplete: 'off' })
     const list = el('div', { class: 'gw-menu-list' })
-    const menu = el('div', { class: 'gw-menu', role: 'dialog' }, [el('div', { class: 'gw-menu-top' }, [input, button('✕', () => this.#closeMenu())]), list])
+    const menu = el('div', { class: 'gw-menu', role: 'dialog' }, [el('div', { class: 'gw-menu-top' }, [input, button(withIcon('action.close'), () => this.#closeMenu())]), list])
     let shown = []
     const draw = () => {
       const q = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -453,7 +455,7 @@ class GraphWindow {
       const rows = []
       let last = null
       for (const it of shown) {
-        if (!q.length && it.group !== last) { rows.push(el('div', { class: 'gw-menu-group', text: it.group })); last = it.group }
+        if (!q.length && it.group !== last) { rows.push(el('div', { class: 'gw-menu-group' }, GROUP_ICON[it.group] ? withIcon(GROUP_ICON[it.group], it.group) : [it.group])); last = it.group }
         rows.push(el('button', { class: 'gw-menu-item', 'data-value': it.value, onclick: () => { this.#closeMenu(); this.addFrom(it.value) } }, [
           el('span', { class: 'gw-menu-label', text: it.label }),
           q.length ? el('span', { class: 'gw-menu-in', text: it.group }) : null,
@@ -636,8 +638,8 @@ class GraphWindow {
   }
 
   #sideRows (problems) {
-    const tabs = el('div', { class: 'wk-tabs gw-side-tabs' }, [['details', 'details'], ['variables', '𝑥 variables']].map(([v, l]) =>
-      el('button', { text: l, 'data-side': v, 'data-on': (this.side ?? 'details') === v ? '1' : '0', onclick: () => { this.side = v; this.#drawSide() } })))
+    const tabs = el('div', { class: 'wk-tabs gw-side-tabs' }, [['details', 'details'], ['variables', 'variables', 'action.variable']].map(([v, l, i]) =>
+      el('button', { 'data-side': v, 'data-on': (this.side ?? 'details') === v ? '1' : '0', onclick: () => { this.side = v; this.#drawSide() } }, i ? withIcon(i, l) : [l])))
     return [tabs, ...((this.side ?? 'details') === 'variables' ? this.#varsPane() : this.#details(problems))]
   }
 
@@ -697,20 +699,20 @@ class GraphWindow {
     const bad = problems.some((m) => m.startsWith(`node '${n.id}'`))
     const on = this.picked?.kind === 'node' && this.picked.id === n.id
     // A small ✕ to delete it where it is; undo brings it back.
-    const del = el('button', { class: 'gw-del', text: '✕', title: `delete ${n.id}`, 'data-del': n.id, onclick: (e) => { e.stopPropagation(); this.#deleteNode(n) } })
+    const del = el('button', { class: 'gw-del', title: `delete ${n.id}`, 'data-del': n.id, onclick: (e) => { e.stopPropagation(); this.#deleteNode(n) } }, [icon('action.close')])
     // What it does, a tap away: the vocabulary's own description, under the title.
     const docText = this.#nodeDoc(n, spec)
     this.docOpen ??= new Set()
     const docEl = docText ? el('div', { class: 'gw-doc', text: docText }) : null
     if (docEl) docEl.hidden = !this.docOpen.has(n.id)
-    const info = docText ? el('button', { class: 'gw-info', text: 'ⓘ', title: docText, 'data-info': n.id, 'data-on': docEl.hidden ? '0' : '1', onclick: (e) => {
+    const info = docText ? el('button', { class: 'gw-info', title: docText, 'data-info': n.id, 'data-on': docEl.hidden ? '0' : '1', onclick: (e) => {
       e.stopPropagation()
       docEl.hidden = !docEl.hidden
       info.dataset.on = docEl.hidden ? '0' : '1'
       if (docEl.hidden) this.docOpen.delete(n.id); else this.docOpen.add(n.id)
       this.#drawLinks()
-    } }) : null
-    const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title', text: `${n.type === 'event' ? '⚡ ' : ''}${n.id}` }), info, del].filter(Boolean))
+    } }, [icon('action.help')]) : null
+    const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title' }, n.type === 'event' ? withIcon('trigger.event', n.id) : [n.id]), info, del].filter(Boolean))
     const body = el('div', { class: 'gw-body' })
     // A var node's entity input matters only for a property: dimmed for the graph's own variable.
     const idle = (name) => name === 'entity' && VAR_NODES.includes(n.type) && Object.prototype.hasOwnProperty.call(this.graph?.vars ?? {}, n.var ?? '')
@@ -771,7 +773,7 @@ class GraphWindow {
       if (n.c === 'side_is') {
         const v = n.side
         out.push(el('div', { class: 'st-row' }, [el('label', { text: 'side' }),
-          button(v?.edge ? `wall ${v.edge}` : v?.edgeTwin ? `facing ${v.edgeTwin}` : '📍 tap a wall', () => this.pickOnMap(['edge'], 'tap the wall').then((hit) => { n.side = { edge: hit.id }; this.changed() }))]))
+          button(v?.edge ? `wall ${v.edge}` : v?.edgeTwin ? `facing ${v.edgeTwin}` : withIcon('action.pick', 'tap a wall'), () => this.pickOnMap(['edge'], 'tap the wall').then((hit) => { n.side = { edge: hit.id }; this.changed() }))]))
       }
       const verb = this.tv[n.type === 'condition' ? 'conditions' : 'actions'].find((x) => x.name === n[key])
       if (verb) out.push(...this.#argRows(verb.args, shown, argPins, linked, (args) => argFields(args, n, ctx, HIDDEN_ARGS, n[key])))
@@ -804,7 +806,7 @@ class GraphWindow {
       if (!shown(args).some((a) => a.name === name)) continue
       let r = rows.find((x) => x.dataset?.arg === name)
       if (linked.has(name)) {
-        const nr = el('div', { class: 'st-row gw-linked', 'data-arg': name }, [el('label', { text: name }), el('span', { class: 'gw-from', text: `← ${linked.get(name)}` })])
+        const nr = el('div', { class: 'st-row gw-linked', 'data-arg': name }, [el('label', { text: name }), el('span', { class: 'gw-from' }, withIcon('action.left', `${linked.get(name)}`))])
         if (r) rows.splice(rows.indexOf(r), 1, nr); else rows.push(nr)
         r = nr
       }
@@ -837,7 +839,7 @@ class GraphWindow {
 
   /** 𝑥 beside a number: take it from a variable instead. */
   #bindButton (n, name) {
-    return el('button', { class: 'gw-bind', type: 'button', text: '𝑥', title: `take ${name} from a variable`, 'data-bind': name, onclick: (e) => {
+    return el('button', { class: 'gw-bind', type: 'button', icon: 'action.variable', title: `take ${name} from a variable`, 'data-bind': name, onclick: (e) => {
       e.stopPropagation()
       const first = numberSources(this.graph, this.gv)[0]
       if (!first) { this.S.status('no variable to take it from yet: make one in 𝑥 variables', 'warn'); this.side = 'variables'; this.#drawSide(); return }
@@ -859,8 +861,8 @@ class GraphWindow {
     if (!sources.some((c) => c.value === cur)) sel.prepend(el('option', { value: cur, text: `${cur} -- no such variable` }))
     sel.value = cur
     sel.addEventListener('change', () => { n[name] = { var: sel.value }; this.changed() })
-    return el('div', { class: 'st-row gw-bound-row', 'data-arg': name }, [el('label', { text: `${name} 𝑥` }), sel,
-      el('button', { class: 'gw-bind', type: 'button', text: '✕', title: 'a typed number again', onclick: (e) => {
+    return el('div', { class: 'st-row gw-bound-row', 'data-arg': name }, [el('label', {}, [`${name} `, icon('action.variable')]), sel,
+      el('button', { class: 'gw-bind', type: 'button', icon: 'action.close', title: 'a typed number again', onclick: (e) => {
         e.stopPropagation()
         delete n[name]
         // Kept on the node, to type the number into (an optional one would otherwise go).
@@ -938,10 +940,10 @@ class GraphWindow {
     this.zoomLabel = el('span', { class: 'gw-zoom-pct', text: `${Math.round(this.view.z * 100)}%` })
     const mid = (f) => { const r = board.getBoundingClientRect(); this.#zoomAt(r.left + r.width / 2, r.top + r.height / 2, f, board); this.#applyView() }
     const bar = el('div', { class: 'gw-zoom' }, [
-      el('button', { text: '−', title: 'zoom out', 'data-zoom': 'out', onclick: () => mid(1 / 1.25) }),
+      el('button', { title: 'zoom out', 'data-zoom': 'out', onclick: () => mid(1 / 1.25) }, withIcon('action.zoomout')),
       this.zoomLabel,
       el('button', { text: '+', title: 'zoom in', 'data-zoom': 'in', onclick: () => mid(1.25) }),
-      el('button', { text: '⤢', title: 'every node in view', 'data-zoom': 'fit', onclick: () => this.fitAll(board) })
+      el('button', { title: 'every node in view', 'data-zoom': 'fit', onclick: () => this.fitAll(board) }, withIcon('action.fit'))
     ])
     bar.addEventListener('pointerdown', (e) => e.stopPropagation())
     return bar
@@ -1154,7 +1156,7 @@ class GraphWindow {
     const on = this.picked?.kind === 'note' && this.picked.id === note.id
     const head = el('div', { class: 'gw-note-head' }, [
       el('span', { class: 'gw-note-text', text: note.text || 'note' }),
-      el('button', { class: 'gw-del', text: '✕', title: 'delete the note (the nodes stay)', onclick: (e) => { e.stopPropagation(); this.#deleteNote(note) } })])
+      el('button', { class: 'gw-del', icon: 'action.close', title: 'delete the note (the nodes stay)', onclick: (e) => { e.stopPropagation(); this.#deleteNote(note) } })])
     const size = el('div', { class: 'gw-note-size', title: 'drag to resize' })
     const box = el('div', { class: `gw-note gw-note-${NOTE_COLORS.includes(note.color) ? note.color : 'slate'}${on ? ' gw-note-on' : ''}`, 'data-note': note.id }, [head, size])
     const place = () => { box.style.left = `${note.x}px`; box.style.top = `${note.y}px`; box.style.width = `${note.w}px`; box.style.height = `${note.h}px` }
@@ -1216,7 +1218,7 @@ class GraphWindow {
   #noteForm (note) {
     const ch = () => this.changed()
     return [
-      el('div', { class: 'st-section-head', text: '📝 note' }),
+      el('div', { class: 'st-section-head' }, withIcon('graphgroup.note', 'note')),
       text('text', note.text ?? '', (v) => { note.text = v; ch() }, { multiline: true, placeholder: 'What this part of the graph does' }),
       row('colour', el('div', { class: 'st-row gw-note-colours' }, NOTE_COLORS.map((c) =>
         el('button', { class: `gw-swatch gw-note-${c}`, title: c, 'data-on': note.color === c ? '1' : '0', onclick: () => { note.color = c; ch() } })))),
@@ -1241,7 +1243,7 @@ class GraphWindow {
       const bends = g.bends?.[key] ?? []
       rows.push(el('div', { class: 'st-section-head', text: 'link' }), muted(`${f} → ${t}`),
         el('div', { class: 'st-row' }, [
-          button('＋ bend', () => this.addBend(this.picked.index)),
+          button(withIcon('action.add', 'bend'), () => this.addBend(this.picked.index)),
           bends.length ? button(`remove ${bends.length > 1 ? 'the bends' : 'the bend'}`, () => { delete g.bends[key]; this.changed() }) : null].filter(Boolean)),
         muted('A bend is a point the link is drawn through, to route it round other nodes: drag it where it should go. Only the drawing changes.'),
         button('delete link', () => { g.links.splice(this.picked.index, 1); this.picked = null; this.changed() }, 'st-danger'))
@@ -1257,7 +1259,7 @@ class GraphWindow {
           ? 'The game has no graph yet. It runs once for the whole game, across levels: start from "when on_player_enter", count, keep score, open a screen. To act in a level, "call" it -- the level\'s graph starts from "on_call".'
           : 'This map has no graph yet. Add a "when …" node from the menu above: it is where a run starts. Then do something, ask something, wait, count.'))
     }
-    rows.push(button('𝑥 variables…', () => { this.side = 'variables'; this.#drawSide() }))
+    rows.push(button(withIcon('action.variable', 'variables…'), () => { this.side = 'variables'; this.#drawSide() }))
     rows.push(...this.#graphRows())
     rows.push(muted(this.game
       ? 'The game\'s graph runs once, in the game, not in any level: it hears the players arrive and leave, and its variables are kept from level to level and saved with the game. What happens in a level is a "call" to it (to: level), which that level\'s "on_call" of the same name takes.'
@@ -1270,7 +1272,7 @@ class GraphWindow {
     const g = this.graph
     const spec = nodeSpecs(this.gv).get(n.type)
     const ch = () => this.changed()
-    const rows = [el('div', { class: 'st-section-head', text: `▸ ${n.type}` })]
+    const rows = [el('div', { class: 'st-section-head' }, withIcon('action.expand', `${n.type}`))]
     if (spec?.doc) rows.push(muted(spec.doc))
     rows.push(text('id', n.id, (v) => {
       const id = v.trim().replace(/[^a-z0-9_]/gi, '_')
@@ -1302,7 +1304,7 @@ class GraphWindow {
         rows.push(row('side', b, button('other side', () => { if (v?.edge) n.side = { edgeTwin: v.edge }; else if (v?.edgeTwin) n.side = { edge: v.edgeTwin }; ch() })))
       }
       const linked = this.#linkedArgs(n)
-      for (const [name, from] of linked) if ((verb?.args ?? []).some((a) => a.name === name)) rows.push(row(name, el('span', { class: 'gw-from', text: `← linked from ${from}` })))
+      for (const [name, from] of linked) if ((verb?.args ?? []).some((a) => a.name === name)) rows.push(row(name, el('span', { class: 'gw-from' }, withIcon('action.left', `linked from ${from}`))))
       if (verb) rows.push(...this.#withBinding(n, verb.args ?? [], linked, (args) => argFields(args, n, ctx, [...HIDDEN_ARGS, ...linked.keys()], n[key])))
     } else if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
       rows.push(this.#varRow(n))
@@ -1313,7 +1315,7 @@ class GraphWindow {
       if (spec.doc) rows.push(muted(spec.doc))
       const linked = this.#linkedArgs(n)
       const own = (spec.args ?? []).filter((a) => !linked.has(a.name))
-      for (const a of (spec.args ?? []).filter((x) => linked.has(x.name))) rows.push(row(a.name, el('span', { class: 'gw-from', text: `← linked from ${linked.get(a.name)}` })))
+      for (const a of (spec.args ?? []).filter((x) => linked.has(x.name))) rows.push(row(a.name, el('span', { class: 'gw-from' }, withIcon('action.left', `linked from ${linked.get(a.name)}`))))
       rows.push(...this.#withBinding(n, own.filter((a) => a.type !== 'value' || a.name === 'level'), linked, (args) => argFields(args, n, ctx, [], n.type)))
       for (const a of own.filter((x) => x.type === 'value' && x.name !== 'level')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
     }
@@ -1348,7 +1350,7 @@ class GraphWindow {
         el('span', { class: 'st-entry', text: k }),
         text('starts at', String(v), (x) => { g.vars[k] = literal(x) ?? 0; this.changed() }).lastChild,
         ...(extra ? extra(k) : []),
-        button('✕', () => { delete g.vars[k]; this.changed() })
+        button(withIcon('action.close'), () => { delete g.vars[k]; this.changed() })
       ]))
     }
     rows.push(button('+ variable', async () => {

@@ -13,7 +13,7 @@
 // without reading. Edits commit (undo step, save, bake) and the view is drawn
 // again from the document, scroll position kept.
 //
-import { el, row, text, toggle, select, button, chips, muted, ask, addHelp } from './ui.js'
+import { el, row, text, toggle, select, button, chips, muted, ask, addHelp, withIcon, icon, glyphOf } from './ui.js'
 import { addTrigger, findEdge } from './doc.js'
 import * as presets from './presets.js'
 import { argFields, refLabel } from './argform.js'
@@ -53,15 +53,16 @@ export function refsOf (S, t) {
 }
 
 const EVENT_ICON = {
-  on_interact: '✋', on_cross: '🚶', on_touch: '☝', on_prop_use: '🔘', on_attack: '⚔',
-  on_crush: '⬇', on_tick: '⏱', on_post_tick: '⏱', on_ui_event: '🎛'
+  on_interact: 'trigger.interact', on_cross: 'trigger.cross', on_touch: 'trigger.touch', on_prop_use: 'trigger.use', on_attack: 'trigger.attack',
+  on_crush: 'trigger.crush', on_tick: 'trigger.tick', on_post_tick: 'trigger.tick', on_ui_event: 'trigger.ui'
 }
-const icon = (event) => (event ? (EVENT_ICON[event] ?? '⚡') : '↪')
+/** A trigger event's icon id; run by another trigger when it has none. */
+const eventIcon = (event) => (event ? (EVENT_ICON[event] ?? 'trigger.event') : 'trigger.chained')
 
 /** A marked section: an icon, a title, a colour down the side. */
 function section (mark, title, tone, body, aside = null) {
   return el('div', { class: `st-section st-${tone}` }, [
-    el('div', { class: 'st-section-head' }, [el('span', { class: 'st-mark', text: mark }), el('span', { text: title }), aside]),
+    el('div', { class: 'st-section-head' }, [icon(mark, 'st-mark'), el('span', { text: title }), aside]),
     ...[].concat(body).filter(Boolean)
   ])
 }
@@ -140,10 +141,7 @@ function listView (S) {
   const body = [
     muted('Presets write the usual sentences. Select a room or a wall first, or tap it when asked.'),
     chips([
-      { id: 'door', label: '🚪 door' }, { id: 'lift', label: '⇕ lift' }, { id: 'switch', label: '⏻ switch' },
-      { id: 'teleport', label: '✧ teleport' }, { id: 'ambush', label: '☠ ambush' }, { id: 'exit', label: '⇥ exit' },
-      { id: 'crusher', label: '▼ crusher' }, { id: 'slider', label: '⇄ slider' },
-      { id: 'turntable', label: '⟳ turntable' }, { id: 'blank', label: '+ blank' }
+      ...['door', 'lift', 'switch', 'teleport', 'ambush', 'exit', 'crusher', 'slider', 'turntable', 'blank'].map((id) => ({ id, icon: `preset.${id}`, label: id }))
     ], (it) => applyPreset(it.id))
   ]
   if (problems.length) body.push(el('div', { class: 'st-danger', text: problems.join('\n'), style: 'white-space:pre-wrap;font-size:12px' }))
@@ -152,12 +150,12 @@ function listView (S) {
   for (const t of doc.triggers) {
     const bad = problems.some((p) => p.startsWith(`trigger "${t.name || t.id}"`))
     const rowEl = el('div', { class: 'st-trow' + (bad ? ' st-trow-bad' : '') }, [
-      el('span', { class: 'st-mark', text: icon(t.event) }),
+      icon(eventIcon(t.event), 'st-mark'),
       el('div', { class: 'st-trow-text' }, [
         el('div', { class: 'st-trow-name', text: t.name || t.id }),
         el('div', { class: 'st-muted', text: `${t.event ?? 'run by another trigger'} · ${(t.conditions ?? []).length} if · ${(t.actions ?? []).length} then${t.once ? ' · once' : ''}${t.enabled === false ? ' · disabled' : ''}` })
       ]),
-      el('span', { class: 'st-muted', text: '›' })
+      el('span', { class: 'st-muted' }, withIcon('action.next'))
     ])
     rowEl.addEventListener('click', () => { S.triggerOpen = t.id; redraw() })
     body.push(rowEl)
@@ -177,7 +175,7 @@ function panelRows (S) {
   const names = Object.keys(S.module.panels ?? {})
   const used = new Set()
   for (const t of S.doc.triggers) for (const a of t.actions ?? []) if ((a.a === 'ui_open' || a.a === 'ui_close') && a.panel) used.add(a.panel)
-  return [el('div', { class: 'st-section-head', text: '▢ panels' }),
+  return [el('div', { class: 'st-section-head' }, withIcon('section.panels', 'panels')),
     el('div', { class: 'st-row' }, [
       el('span', { class: 'st-muted', text: names.length ? `${names.length} in the module${used.size ? `; these cards open ${[...used].join(', ')}` : ''}` : 'none in the module yet' }),
       button('design panels…', () => S.go('panels'))
@@ -206,7 +204,7 @@ function triggerView (S, t) {
 
   const body = [
     el('div', { class: 'st-row' }, [
-      button('‹ all triggers', () => { S.triggerOpen = null; redraw() }),
+      button(withIcon('action.back', 'all triggers'), () => { S.triggerOpen = null; redraw() }),
       el('span', { style: 'flex:1 1 auto' }),
       button('delete', () => { doc.triggers = doc.triggers.filter((x) => x.id !== t.id); S.triggerOpen = null; done() }, 'st-danger')
     ]),
@@ -215,8 +213,8 @@ function triggerView (S, t) {
   if (problems.length) body.push(el('div', { class: 'st-danger', text: problems.join('\n'), style: 'white-space:pre-wrap;font-size:12px' }))
 
   // WHEN
-  body.push(section(icon(t.event), 'WHEN', 'when', [
-    addHelp(select('event', t.event ?? '', [['', '↪ only when another trigger runs it'], ...vocab.trigger.events.map((e) => [e.name, `${icon(e.name)} ${e.name} (${(e.params ?? []).join(', ')})`])],
+  body.push(section(eventIcon(t.event), 'WHEN', 'when', [
+    addHelp(select('event', t.event ?? '', [['', `${glyphOf('trigger.chained')} only when another trigger runs it`], ...vocab.trigger.events.map((e) => [e.name, `${glyphOf(eventIcon(e.name))} ${e.name} (${(e.params ?? []).join(', ')})`])],
            (v) => { t.event = v || null; done() }), vocab.trigger.events.find((e) => e.name === t.event)?.doc),
     el('div', { class: 'st-row' }, [
       toggle('', !!t.once, (v) => { t.once = v; done() }).lastChild, muted('once: spent after it first does something'),
@@ -231,7 +229,7 @@ function triggerView (S, t) {
     const rows = [addHelp(el('div', { class: 'st-row' }, [
       el('span', { class: 'st-entry', text: c.c }),
       toggle('', !!c.negate, (v) => { c.negate = v || undefined; done() }).lastChild, muted('not'),
-      button('✕', () => { t.conditions.splice(i, 1); done() })
+      button(withIcon('action.close'), () => { t.conditions.splice(i, 1); done() })
     ]), spec?.doc)]
     if (c.c === 'side_is') rows.push(sideField(c, S, done))
     if (spec) rows.push(...argFields(spec.args ?? [], c, ctx, ['side', 'expect_neighbour', 'expect_tag'], c.c))
@@ -241,7 +239,7 @@ function triggerView (S, t) {
   ifRows.push(select('add', '', [['', '+ condition…'], ...vocab.trigger.conditions
     .filter((c) => !t.event || !c.events || c.events.includes(t.event)).map((c) => [c.name, c.name])],
   (v) => { if (!v) return; (t.conditions ??= []).push({ c: v }); done() }))
-  body.push(section('❓', 'IF all of these hold', 'if', ifRows))
+  body.push(section('trigger.if', 'IF all of these hold', 'if', ifRows))
 
   // THEN
   const thenRows = []
@@ -249,8 +247,8 @@ function triggerView (S, t) {
     const spec = vocab.actions.get(a.a)
     const rows = [addHelp(el('div', { class: 'st-row' }, [
       el('span', { class: 'st-entry', text: `${i + 1}. ${a.a}` }),
-      i > 0 ? button('↑', () => { [t.actions[i - 1], t.actions[i]] = [t.actions[i], t.actions[i - 1]]; done() }) : null,
-      button('✕', () => { t.actions.splice(i, 1); done() })
+      i > 0 ? button(withIcon('action.up'), () => { [t.actions[i - 1], t.actions[i]] = [t.actions[i], t.actions[i - 1]]; done() }) : null,
+      button(withIcon('action.close'), () => { t.actions.splice(i, 1); done() })
     ]), spec?.doc)]
     if (spec) rows.push(...argFields(spec.args ?? [], a, ctx, ['expect_tag', 'fn'], a.a))
     thenRows.push(el('div', { class: 'st-card' }, rows))
@@ -258,7 +256,7 @@ function triggerView (S, t) {
   if (!thenRows.length) thenRows.push(el('div', { class: 'st-danger', text: 'a trigger needs at least one action' }))
   thenRows.push(select('add', '', [['', '+ action…'], ...vocab.trigger.actions.map((a) => [a.name, a.name])],
                        (v) => { if (!v) return; (t.actions ??= []).push({ a: v }); done() }))
-  body.push(section('▶', 'THEN, in order', 'then', thenRows))
+  body.push(section('trigger.then', 'THEN, in order', 'then', thenRows))
   return body
 }
 

@@ -6,7 +6,7 @@
 // Restoring takes a snapshot of the module as it is first, so a restore is
 // never a step that cannot be taken back.
 //
-import { el, button, muted, ask, confirmDialog } from '../ui.js'
+import { el, button, muted, ask, confirmDialog, withIcon, icon } from '../ui.js'
 import { when, compareMaps, missingAssets, digest } from '../snapshots.js'
 
 let S = null
@@ -25,7 +25,7 @@ async function showSnapshots () {
   const rows = [
     muted('Copies of this module kept on this device: when it is opened, every few minutes while it is edited, and before anything that replaces work (a pack imported over it, a map deleted, a restore). The newest 20 are kept, and one a day for two weeks. Imported pictures, sounds and fonts are not copied: a restore says if one it names is gone.'),
     el('div', { class: 'st-row' }, [
-      button('＋ snapshot now', async () => {
+      button(withIcon('action.add', 'snapshot now'), async () => {
         const label = await ask('A name for it (optional)', '')
         if (label === null) return
         S.save.flush?.()
@@ -34,7 +34,7 @@ async function showSnapshots () {
         showSnapshots()
       })
     ]),
-    el('div', { class: 'st-section-head', text: `🕘 ${list.length} snapshot${list.length === 1 ? '' : 's'} of ${S.module.name || S.module.id}` })
+    el('div', { class: 'st-section-head' }, withIcon('section.snapshots', `${list.length} snapshot${list.length === 1 ? '' : 's'} of ${S.module.name || S.module.id}`))
   ]
   if (!list.length) rows.push(muted('None yet. One is taken the next time the module is opened, or now with the button above.'))
   for (const s of list) {
@@ -45,9 +45,9 @@ async function showSnapshots () {
           el('div', { class: 'st-trow-name', text: `${when(s.at)} · ${s.reason}` }),
           el('div', { class: 'st-muted', text: `${s.maps.length} map${s.maps.length === 1 ? '' : 's'}: ${s.maps.join(', ')} · ${kb(s.size)}${same ? ' · the same as now' : ''}` })
         ]),
-        button(open === s.key ? '▴ maps' : '▾ maps', () => { open = open === s.key ? null : s.key; showSnapshots() }),
+        button(withIcon(open === s.key ? 'action.collapse' : 'action.expand', 'maps'), () => { open = open === s.key ? null : s.key; showSnapshots() }),
         same ? null : button('restore', () => restoreAll(s)),
-        button('✕', async () => { if (await confirmDialog(`forget the snapshot from ${when(s.at)}?`)) { await S.snaps.remove(s.key); showSnapshots() } }, 'st-danger')
+        button(withIcon('action.close'), async () => { if (await confirmDialog(`forget the snapshot from ${when(s.at)}?`)) { await S.snaps.remove(s.key); showSnapshots() } }, 'st-danger')
       ].filter(Boolean))
     ])
     if (open === s.key) card.appendChild(await mapRows(s))
@@ -63,7 +63,7 @@ async function mapRows (s) {
   for (const m of compareMaps(snap.data.docs, S.docs)) {
     const says = { same: 'the same as now', changed: 'changed since', gone: 'deleted since', new: 'made since -- not in this snapshot' }[m.state]
     box.appendChild(el('div', { class: 'st-row', 'data-snap-map': m.name, 'data-state': m.state }, [
-      el('span', { style: 'flex:1 1 auto', text: `🗺 ${m.name} -- ${says}` }),
+      el('span', { style: 'flex:1 1 auto' }, withIcon('section.maps', `${m.name} -- ${says}`)),
       m.state === 'changed' || m.state === 'gone' ? button(`restore ${m.name}`, () => restoreMap(s, snap, m.name)) : null
     ].filter(Boolean)))
   }

@@ -9,7 +9,7 @@
 // what it calls and what it answers, and a call that nothing answers is said.
 //
 import { buttonNames } from '../keys_emit.js'
-import { el, button, muted, ask } from '../ui.js'
+import { el, button, muted, ask, withIcon, icon } from '../ui.js'
 import { graphProblems, everyGraph, graphRoute, newGraph, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME } from '../graphs_emit.js'
 
 let S = null
@@ -84,7 +84,7 @@ function showGraphs () {
     if (calls.length) lines.push(`calls ${calls.join(', ')}`)
     if (answers.length) lines.push(`answers ${answers.join(', ')}`)
     return el('div', { class: 'st-trow', 'data-graph': g.key, onclick: () => openGraphOf(g.scope, g.map, g.name) }, [
-      el('span', { class: 'st-mark', text: g.game ? '🌐' : '◇' }),
+      icon(g.game ? 'action.scopegame' : 'section.graphs', 'st-mark'),
       el('div', { class: 'st-trow-text' }, [
         el('div', { class: 'st-trow-name', text: g.name }),
         el('div', { class: 'st-muted', text: lines.join(' · ') }),
@@ -92,11 +92,11 @@ function showGraphs () {
       ].filter(Boolean))
     ])
   }
-  body.push(el('div', { class: 'st-section-head', text: '🌐 the game\'s graphs' }))
+  body.push(el('div', { class: 'st-section-head' }, withIcon('action.scopegame', 'the game\'s graphs')))
   for (const g of all.filter((x) => x.game)) body.push(row(g))
   body.push(button('+ new graph for the game', () => newGraphIn(null)))
   for (const m of Object.keys(S.docs).sort()) {
-    body.push(el('div', { class: 'st-section-head', text: `🗺 ${m}` }))
+    body.push(el('div', { class: 'st-section-head' }, withIcon('action.scopemap', `${m}`)))
     for (const g of all.filter((x) => x.map === m)) body.push(row(g))
     body.push(button(`+ new graph on ${m}`, () => newGraphIn(m)))
   }

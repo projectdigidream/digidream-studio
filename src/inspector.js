@@ -7,7 +7,7 @@
 // the document is the model and the sheet is a view of it.
 //
 import { fxRows } from './fxlib.js'
-import { el, row, slider, number, text, toggle, select, button, tiles, chips, card, muted } from './ui.js'
+import { el, row, slider, number, text, toggle, select, button, tiles, chips, card, muted, withIcon, icon } from './ui.js'
 import { EDGE_FLAGS, removeSector, newId, newEdge, newStyle } from './doc.js'
 import { findEdge } from './doc.js'
 import { twinEdge } from './presets.js'
@@ -61,7 +61,7 @@ function texButton (label, value, ctx, onPick) {
 function styleRows (label, owner, key, ctx) {
   owner[key] ??= newStyle()
   const st = owner[key]
-  const rows = [el('div', { class: 'st-section-head', text: `▦ ${label} pattern` })]
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('section.textures', `${label} pattern`))]
   rows.push(slider('turn (°)', st.angle ?? 0, { min: 0, max: 360, step: 5 }, (v, done) => { st.angle = v; done ? ctx.commit() : ctx.preview() }))
   rows.push(number('shift x', st.offX ?? 0, { min: -64, max: 64, step: 0.25 }, (v) => { st.offX = v; ctx.commit() }))
   rows.push(number('shift y', st.offY ?? 0, { min: -64, max: 64, step: 0.25 }, (v) => { st.offY = v; ctx.commit() }))
@@ -96,17 +96,17 @@ function alphaRows (owner, ctx, what = 'this is') {
 function seamRows (sm) {
   if (!sm) return []
   const say = {
-    joined: `✔ joins ${sm.with}: both sides are open, so the engine stitches them and you walk across.`,
-    'one-way': `◐ meets ${sm.with}, but only one of the two sides is open: they will not join. Open both.`,
-    walls: `▭ meets ${sm.with} along the same line, closed. Open this side and theirs to walk across.`,
-    loose: '○ open, and no neighbour meets it: a drop off the edge of the world.'
+    joined: `joins ${sm.with}: both sides are open, so the engine stitches them and you walk across.`,
+    'one-way': `meets ${sm.with}, but only one of the two sides is open: they will not join. Open both.`,
+    walls: `meets ${sm.with} along the same line, closed. Open this side and theirs to walk across.`,
+    loose: 'open, and no neighbour meets it: a drop off the edge of the world.'
   }
-  return [el('div', { class: sm.state === 'joined' ? 'st-muted' : 'st-warn-box', text: say[sm.state] })]
+  return [el('div', { class: sm.state === 'joined' ? 'st-muted' : 'st-warn-box', icon: `seam.${sm.state.replace('-', '')}`, text: ` ${say[sm.state]}` })]
 }
 
 /** What is wrong with this room, said first: the reason it is marked on the map. */
 function problemRows (list) {
-  return list.map((p) => el('div', { class: p.level === 'warn' ? 'st-warn-box' : 'st-danger st-problem', text: `${p.level === 'warn' ? '⚠' : '✖'} ${p.msg}` }))
+  return list.map((p) => el('div', { class: p.level === 'warn' ? 'st-warn-box' : 'st-danger st-problem', icon: p.level === 'warn' ? 'status.warning' : 'status.error', text: ` ${p.msg}` }))
 }
 
 function sectorForm (s, doc, ctx) {
@@ -304,6 +304,6 @@ export function placePalette ({ mobs, props, armed }, onArm, onEditProps = null)
   return [
     muted('Tap one, then tap the floor to place it. Tap it again to stop placing.'),
     chips(list, (it) => onArm(it.on ? null : { kind: it.kind, name: it.name })),
-    onEditProps ? button('✎ props…', onEditProps) : null
+    onEditProps ? button(withIcon('action.edit', 'props…'), onEditProps) : null
   ]
 }

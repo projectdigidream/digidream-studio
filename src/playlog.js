@@ -18,7 +18,7 @@
 // fails, and Home says when the last play-test left something to read.
 //
 import { shell, hasShell } from './bridge.js'
-import { el, button, muted } from './ui.js'
+import { el, button, muted, withIcon, icon } from './ui.js'
 import { STUDIO_VERSION } from './version.js'
 
 export const LOG_DIR = 'logs'
@@ -129,12 +129,12 @@ export async function showPlayLog (S) {
   rows.push(el('div', { class: 'st-row' }, [
     button('↻ read again', () => showPlayLog(S)),
     button('share the log', async () => { await shell.share(`play-log-${last?.map?.replace(/\.dnpm$/, '') ?? 'last'}.txt`, new TextEncoder().encode(asText(logs))) }),
-    last ? button('▶ play again', () => S.play()) : null
+    last ? button(withIcon('transport.play', 'play again'), () => S.play()) : null
   ].filter(Boolean)))
   rows.push(muted(last
     ? `The last play-test: ${last.module}/${String(last.map).replace(/\.dnpm$/, '')}, ${new Date(last.at).toLocaleString()}.`
     : 'No play-test has run on this device yet.'))
-  rows.push(el('div', { class: 'st-section-head', text: bad.length ? `✖ what looks wrong (${bad.length})` : '✔ nothing in the logs looks like a failure' }))
+  rows.push(el('div', { class: 'st-section-head', icon: bad.length ? 'status.error' : 'status.ok', text: bad.length ? ` what looks wrong (${bad.length})` : ' nothing in the logs looks like a failure' }))
   for (const b of bad.slice(0, 40)) rows.push(el('div', { class: 'sd-log-line sd-log-bad', 'data-log-bad': b.log, text: `${b.log}: ${tidy(b.line)}` }))
   if (bad.length > 40) rows.push(muted(`and ${bad.length - 40} more, in the logs below`))
   for (const [key, file, about] of FILES) {

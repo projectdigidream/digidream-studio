@@ -29,7 +29,7 @@
 //   whole game (a module.txt `game` line), so what a player holds follows them
 //   from map to map and a map has no starting kit of its own to override.
 //
-import { el, row, number, select, toggle, muted, button, card } from './ui.js'
+import { el, row, number, select, toggle, muted, button, card, withIcon, icon } from './ui.js'
 import { DEFAULT_BODY } from './doc.js'
 
 // THE PLAYER'S PARAMETERS, grouped as docs/PLAYER.md §3 has them, with the
@@ -331,7 +331,7 @@ export function migratePlayer (module, docs) {
  */
 export function scopeRows (S, ctx) {
   const scope = S.playerScope ?? 'module'
-  const pick = (v) => el('button', { text: v === 'module' ? '🌐 every map' : `🗺 only ${S.docName}`, 'data-on': scope === v ? '1' : '0',
+  const pick = (v) => el('button', { icon: v === 'module' ? 'action.scopegame' : 'action.scopemap', text: v === 'module' ? 'every map' : `only ${S.docName}`, 'data-on': scope === v ? '1' : '0',
     'data-scope': v, onclick: () => { S.playerScope = v; ctx.render() } })
   const own = overrides(S.doc)
   return [
@@ -394,7 +394,7 @@ export function moveRows (S, ctx) {
   const rows = [...scopeRows(S, ctx),
     muted(`How the player moves, written into module.txt as \`player\` lines the server builds each player from as they arrive. What is not set is the engine's${fps ? ', or what first-person controls set (turn_speed 1000, move_relative on)' : ''}. Scripts, weapons and effects build on these.`)]
   for (const g of PLAYER_PARAMS) {
-    rows.push(el('div', { class: 'st-section-head', text: `▸ ${g.group}` }))
+    rows.push(el('div', { class: 'st-section-head' }, withIcon('action.expand', `${g.group}`)))
     for (const prm of g.params) {
       const { name } = prm
       const base = baseValue(S.module, name)
@@ -435,13 +435,13 @@ export function soundRows (S, ctx) {
   const field = (label, get, set) => (S.soundField ? S.soundField(label, get(), (v) => { set(v || undefined); ctx.changed() })
     : row(label, el('input', { type: 'text', value: get() ?? '', onchange: (e) => { set(e.target.value || undefined); ctx.changed() } })))
   const rows = [muted('Picked from the module\'s sound packs (Sounds). A sound left at (none) is silence.')]
-  rows.push(el('div', { class: 'st-section-head', text: '🏃 moving' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.moves', 'moving')))
   for (const k of ['jump', 'land']) rows.push(field(PLAYER_SOUNDS.find((x) => x.key === k).label, () => s[k], (v) => { if (v) s[k] = v; else delete s[k] }))
   rows.push(number('a hard landing is faster than (units/s)', s.fall ?? DEFAULT_FALL, { min: 1, max: 60, step: 1 }, (v) => { if (Math.round(v) === DEFAULT_FALL) delete s.fall; else s.fall = Math.round(v); ctx.changed() }))
   rows.push(muted('Heard at once by the one jumping -- their own client plays it -- and a moment later by everybody else. An ordinary jump comes down at about 9 units a second.'))
-  rows.push(el('div', { class: 'st-section-head', text: '💥 hurt' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.hurt', 'hurt')))
   for (const k of ['pain', 'death']) rows.push(field(PLAYER_SOUNDS.find((x) => x.key === k).label, () => s[k], (v) => { if (v) s[k] = v; else delete s[k] }))
-  rows.push(el('div', { class: 'st-section-head', text: '🎒 taking a pickup' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.arsenal', 'taking a pickup')))
   for (const k of PICKUP_SOUNDS) {
     rows.push(field(`a${k === 'ammo' || k === 'armour' ? 'n' : ''} ${k} pickup`, () => s.pickup?.[k], (v) => {
       s.pickup ??= {}
@@ -462,10 +462,10 @@ export function kitRows (S, ctx) {
   if (!a || !S.vocab.weapon) return [...rows, muted('No arsenal yet. Make a weapon in the Player & weapons window and the kit appears here.')]
   if (!map) {
     a.health ??= { max: 100, bonus_max: 200 }
-    rows.push(el('div', { class: 'st-section-head', text: '❤ health' }))
+    rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.health', 'health')))
     rows.push(number('max', a.health.max ?? 100, { min: 1, max: 9999, step: 5 }, (v) => { a.health.max = Math.round(v); ctx.changed() }))
     rows.push(number('bonus max', a.health.bonus_max ?? 200, { min: 1, max: 9999, step: 5 }, (v) => { a.health.bonus_max = Math.round(v); ctx.changed() }))
-    rows.push(el('div', { class: 'st-section-head', text: '🔢 ammunition carried at the start' }))
+    rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.ammo', 'ammunition carried at the start')))
     const pools = Object.entries(a.ammo ?? {})
     if (!pools.length) rows.push(muted('No pools yet.'))
     for (const [name, pool] of pools) {
@@ -477,7 +477,7 @@ export function kitRows (S, ctx) {
       'The weapons run once for the whole game, so a player arrives in a map holding what they held in the last one.'))
     return rows
   }
-  rows.push(el('div', { class: 'st-section-head', text: '🔫 weapons in hand' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('section.weapons', 'weapons in hand')))
   const names = Object.keys(a.weapons ?? {})
   if (!names.length) rows.push(muted('No weapons yet.'))
   const holder = { get: () => p.start?.weapons, set: (v) => { p.start ??= {}; p.start.weapons = v } }

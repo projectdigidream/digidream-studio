@@ -6,7 +6,7 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { overrides } from '../player.js'
-import { el, button, text, muted, ask, confirmDialog, toggle, number, select } from '../ui.js'
+import { el, button, text, muted, ask, confirmDialog, toggle, number, select, withIcon, icon } from '../ui.js'
 import { metamapProblems, mapAt, outsideCell, MAX_RADIUS } from '../metamap.js'
 import { newMetamap } from '../migrate.js'
 import { thumbCanvas } from '../thumbs.js'
@@ -22,10 +22,10 @@ function showMaps () {
     const r = el('div', { class: 'st-trow', 'data-on': on ? '1' : '0', 'data-map': n }, [
       thumbCanvas(d, { imageFor: S.imageFor, skin: S.skin }, 'sd-thumb sd-thumb-row'),
       el('div', { class: 'st-trow-text' }, [
-        el('div', { class: 'st-trow-name', text: `${on ? '▶ ' : ''}${n}` }),
+        el('div', { class: 'st-trow-name', icon: on ? 'transport.play' : null, text: on ? ` ${n}` : n }),
         el('div', { class: 'st-muted', text: `${d.order.length} sectors · ${d.entities.length} things · ${d.triggers.length} triggers${overrides(d).length ? ` · own player ${overrides(d).join(', ')}` : ''}${on ? ' · editing' : ''}` })
       ]),
-      button('✕', async (e) => {
+      button(withIcon('action.close'), async (e) => {
         e.stopPropagation()
         if (Object.keys(S.docs).length < 2) { S.status('a module keeps at least one map', 'warn'); return }
         if (!await confirmDialog(`delete map ${n}? Undo on this page brings it back, and a snapshot keeps it.`)) return
@@ -67,7 +67,7 @@ function metamapRows () {
   S.module.metamap ??= newMetamap()
   const mm = S.module.metamap
   const changed = () => { S.moduleChanged(); showMaps() }
-  const rows = [el('div', { class: 'st-section-head', text: '▦ metamap' }),
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('section.metamap', 'metamap')),
     toggle('put the maps on a grid', !!mm.enabled, (v) => { mm.enabled = v; changed() })]
   if (!mm.enabled) {
     rows.push(muted('A grid says where each map sits: which ones are kept in memory around a player and, with a pitch, one world you walk across from map to map.'))
@@ -96,7 +96,7 @@ function metamapRows () {
           // In one shared world every cell is drawn at the cell's own scale, so
           // the grid reads as the world; otherwise each map fills its cell.
           name ? thumbCanvas(S.docs[name], { imageFor: S.imageFor, skin: S.skin, bounds: mm.pitch ? [0, 0, mm.pitch[0], mm.pitch[1]] : null }, 'sd-thumb sd-thumb-cell') : null,
-          el('span', { class: 'sd-cell-name', text: name ?? (S.mmPicked ? '↓ here' : '+') }), el('span', { class: 'st-muted sd-cell-xy', text: `${x},${y}` })].filter(Boolean)))
+          el('span', { class: 'sd-cell-name', icon: name ? null : S.mmPicked ? 'action.down' : 'action.add', text: name ?? (S.mmPicked ? ' here' : '') }), el('span', { class: 'st-muted sd-cell-xy', text: `${x},${y}` })].filter(Boolean)))
     }
   }
   rows.push(grid)

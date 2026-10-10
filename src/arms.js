@@ -11,7 +11,7 @@
 // as the monster forms are generated from the mob vocabulary, so a field the
 // runtime grows appears here with no change.
 //
-import { el, row, number, text, select, button, chips, muted, card, toggle, ask, confirmDialog } from './ui.js'
+import { el, row, number, text, select, button, chips, muted, card, toggle, ask, confirmDialog, withIcon, icon } from './ui.js'
 import { argFields } from './argform.js'
 import { newPlayer } from './player.js'
 import { CONDITIONS, defaultStates } from '/src/render/animstate.js'
@@ -47,7 +47,7 @@ export function avatarRows (S, ctx) {
   }
   rows.push(number('cross-fade (s)', player.blend ?? 0, { min: 0, max: 1, step: 0.02 }, (v) => { player.blend = v > 0 ? v : null; ctx.changed() }))
   rows.push(muted('Zero is a hard cut, which is what hand-drawn frames want: a dissolve between two of them is a double exposure that reads as a renderer fault.'))
-  rows.push(el('div', { class: 'st-section-head', text: '🎞 which state draws which condition' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.preview', 'which state draws which condition')))
   const defaults = defaultStates()
   const anims = module.sprites?.[(module.props ?? []).find((p) => p.name === player.prop)?.art?.sheet]?.animations ?? []
   for (const cond of CONDITIONS) {
@@ -70,7 +70,7 @@ export function weaponRows (S, name, w, ctx) {
   return [
     ...argFields(V.weapon_fields, w, ctx, ['phases', 'swing', 'vars', 'gives', 'predict']),
     ...predictRows(S, w, ctx),
-    el('div', { class: 'st-section-head', text: '🎒 what its own pickup grants' }),
+    el('div', { class: 'st-section-head' }, withIcon('workshop.arsenal', 'what its own pickup grants')),
     ...ammoAmountRows(S, w.gives ?? (w.gives = {}), ctx),
     muted('Doom\'s shotgun arrives with eight shells. Granted every time the pickup is walked over, not only the first.')
   ]
@@ -86,14 +86,14 @@ const PREDICT_ON = ['primary', 'primary_held', 'secondary', 'secondary_held', 's
  * shot should then be `predicted`, so their client drops the server's copy.
  */
 function predictRows (S, w, ctx) {
-  const rows = [el('div', { class: 'st-section-head', text: '🔊 heard at once by the one firing' })]
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('workshop.sounds', 'heard at once by the one firing'))]
   const changed = () => { if (w.predict && !w.predict.length) delete w.predict; ctx.onChange() }
   ;(w.predict ?? []).forEach((p, i) => {
     rows.push(el('div', { class: 'st-card' }, [
       select('on', p.on ?? 'primary', PREDICT_ON, (v) => { p.on = v; changed() }),
       ...argFields([{ name: 'sound', type: 'string' }], p, { ...ctx, onChange: changed }),
       /_held$/.test(p.on ?? '') ? number('every (ticks)', p.every ?? 4, { min: 1, max: 600, step: 1 }, (v) => { p.every = Math.round(v); changed() }) : null,
-      button('✕', () => { w.predict.splice(i, 1); changed() }, 'st-danger')
+      button(withIcon('action.close'), () => { w.predict.splice(i, 1); changed() }, 'st-danger')
     ].filter(Boolean)))
   })
   rows.push(button('+ predicted sound', () => { (w.predict ??= []).push({ on: 'primary', sound: '' }); changed() }))
@@ -116,7 +116,7 @@ export function arsenalRows (S, ctx) {
   const V = S.vocab.weapon
   const a = S.module.weapons
   if (!V || !a) return [muted('No weapon vocabulary staged with this studio.')]
-  const rows = [el('div', { class: 'st-section-head', text: '🔢 ammunition' })]
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('workshop.ammo', 'ammunition'))]
   for (const [name, pool] of Object.entries(a.ammo ?? {})) {
     rows.push(card(name, [
       ...argFields(V.ammo_fields, pool, ctx),
@@ -136,11 +136,11 @@ export function arsenalRows (S, ctx) {
   }))
   rows.push(muted('The panel\'s read-out list is generated from `order`, so a pool with none can be carried, counted and capped and never appear on screen.'))
 
-  rows.push(el('div', { class: 'st-section-head', text: '❤ health' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.health', 'health')))
   a.health ??= { max: 100, bonus_max: 200 }
   rows.push(...argFields(V.health_fields, a.health, ctx))
 
-  rows.push(el('div', { class: 'st-section-head', text: '📦 pickups' }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('section.props', 'pickups')))
   for (const [name, p] of Object.entries(a.pickups ?? {})) {
     rows.push(card(name, [
       ...argFields(V.pickup_fields, p, ctx, ['ammo'], 'pickup'),

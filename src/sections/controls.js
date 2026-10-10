@@ -8,7 +8,7 @@
 // client gives them, so a clash is seen before it is played. Written as
 // module.txt `key` lines (keys_emit.js); a touch button is placed in Screens.
 //
-import { el, button, muted, select, confirmDialog } from '../ui.js'
+import { el, button, muted, select, confirmDialog, withIcon, icon } from '../ui.js'
 import { ENGINE_BUTTONS, MAX_KEYS, CODES, keyLabel, cleanKeyName, cleanLabel, keyProblems } from '../keys_emit.js'
 import { graphsOf } from '../graphs_emit.js'
 
@@ -59,7 +59,7 @@ function keyCard (k, i, problems) {
     if (moved) S.status(`renamed in ${moved} graph node${moved > 1 ? 's' : ''} too`, 'ok')
     showControls()
   })
-  const pressBtn = button(waiting ? 'press a key… (Esc)' : `⌨ ${keyLabel(k.code)}`, () => (waiting ? (stopCapture?.(), showControls()) : capture(k)), waiting ? 'sd-key-wait' : 'sd-key')
+  const pressBtn = button(waiting ? 'press a key… (Esc)' : withIcon('action.keyboard', keyLabel(k.code)), () => (waiting ? (stopCapture?.(), showControls()) : capture(k)), waiting ? 'sd-key-wait' : 'sd-key')
   pressBtn.dataset.keyPress = k.name ?? String(i)
   const pick = select('', k.code ?? '', [['', '(choose)'], ...(k.code && !CODES.includes(k.code) ? [[k.code, keyLabel(k.code)]] : []), ...CODES.map((c) => [c, keyLabel(c)])], (v) => { k.code = v || undefined; S.moduleChanged(); showControls() }).lastChild
   pick.dataset.keyCode = k.name ?? String(i)
@@ -71,8 +71,8 @@ function keyCard (k, i, problems) {
       el('span', { class: 'st-entry sd-key-n', text: `${i + 1}` }),
       nameIn, pressBtn, pick,
       el('span', { class: 'sd-key-tl', text: '👆' }), touchIn,
-      i > 0 ? button('↑', () => { [keys[i - 1], keys[i]] = [keys[i], keys[i - 1]]; S.moduleChanged(); showControls() }) : null,
-      button('✕', async () => {
+      i > 0 ? button(withIcon('action.up'), () => { [keys[i - 1], keys[i]] = [keys[i], keys[i - 1]]; S.moduleChanged(); showControls() }) : null,
+      button(withIcon('action.close'), async () => {
         if (k.name && !await confirmDialog(`delete the key ${k.name}? A graph that answers it will be told it is gone.`)) return
         keys.splice(i, 1); S.moduleChanged(); showControls()
       }, 'st-danger')
@@ -106,7 +106,7 @@ function showControls () {
     m.keys.some((k) => k.touch) ? button('place the touch buttons…', () => S.showScreensTouch?.() ?? S.go('screens')) : null
   ].filter(Boolean)))
   if (m.keys.length >= MAX_KEYS) rows.push(muted(`A game has ${MAX_KEYS} keys of its own at most.`))
-  rows.push(el('div', { class: 'st-section-head', text: '🎮 the engine\'s buttons' }),
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('section.controls', 'the engine\'s buttons')),
     muted('Every module has these. A graph names them as its own keys (jump, use, attack ...); their keys are the engine\'s, and a module key on one of them fires both.'))
   for (const b of ENGINE_BUTTONS) {
     rows.push(el('div', { class: 'st-row sd-engine-btn', 'data-engine-button': b.name }, [

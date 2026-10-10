@@ -1085,7 +1085,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   await page.evaluate(() => {
     const S = window.__studio
     S.selectPathPoint(S.doc.paths[0].points[2].id)
-    ;[...document.querySelectorAll('.st-sheet button')].find((b) => b.textContent === '◀ earlier').click()
+    ;[...document.querySelectorAll('.st-sheet button')].find((b) => b.querySelector('[data-icon="action.left"]') && /earlier$/.test(b.textContent)).click()
   })
   const reordered = await order()
   check(reordered[1] === before[2] && reordered[2] === before[1], `a waypoint moves one place along the curve (${before.join(' → ')} became ${reordered.join(' → ')})`)
@@ -1093,7 +1093,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   const stuck = await page.evaluate(() => {
     const S = window.__studio
     S.selectPathPoint(S.doc.paths[0].points[0].id)
-    const b = [...document.querySelectorAll('.st-sheet button')].find((x) => x.textContent === '◀ earlier')
+    const b = [...document.querySelectorAll('.st-sheet button')].find((x) => x.querySelector('[data-icon="action.left"]') && /earlier$/.test(x.textContent))
     const dim = b.className.includes('st-dim')
     b.click()
     return { dim, order: S.doc.paths[0].points.map((q) => `${q.x},${q.y}`) }
@@ -1747,7 +1747,7 @@ await page.keyboard.press('Escape')
     const held = JSON.stringify(g.nodes.find((n) => n.id === hurt).amount)
     const sel = node().querySelector('[data-bound="amount"]')
     const choices = sel ? [...sel.options].map((o) => o.value) : []
-    ;[...node().querySelectorAll('.gw-bound-row .gw-bind')].find((b) => b.textContent === '✕')?.click()
+    ;[...node().querySelectorAll('.gw-bound-row .gw-bind')].find((b) => b.querySelector('[data-icon="action.close"]'))?.click()
     await new Promise((r) => setTimeout(r, 100))
     const back = g.nodes.find((n) => n.id === hurt).amount
     g.nodes = g.nodes.filter((n) => n.id !== hurt && n.id !== wait); delete g.vars.dmg; S.commit(); w.render()
@@ -1845,7 +1845,8 @@ await page.keyboard.press('Escape')
   check(during.linking === 'exec' && during.glow === during.want, `while a link is dragged the inputs it can reach light up (${JSON.stringify(during)})`)
   // Picks on the map, from the nodes: the board steps aside, the tap fills the fields.
   const tapWorld = async (x, y, z = 0) => { const p = await page.evaluate(([x, y, z]) => window.__studio.viewport.toScreen(x, y, z), [x, y, z]); await page.mouse.click(p.x, p.y); await new Promise((r) => setTimeout(r, 150)) }
-  const clickIn = (id, text) => page.evaluate(([id, text]) => [...document.querySelectorAll(`.gw [data-node="${id}"] button`)].find((b) => b.textContent.includes(text)).click(), [id, text])
+  // by its text, or by its icon: '📍' is the action.pick icon (ui.js icon), whichever the skin draws
+  const clickIn = (id, text) => page.evaluate(([id, text]) => [...document.querySelectorAll(`.gw [data-node="${id}"] button`)].find((b) => b.textContent.includes(text) || (text === '📍' && b.querySelector('[data-icon="action.pick"]'))).click(), [id, text])
   await page.evaluate(() => { const S = window.__studio; S.viewport.setMode('plan'); S.ui.setView('plan') })
   await clickIn('tp', 'pick a point')
   await new Promise((r) => setTimeout(r, 150))
@@ -2318,7 +2319,7 @@ await page.keyboard.press('Escape')
              txt: r ? String(r.files.find((f) => f.path === 'module.txt').bytes) : '',
              unanswered: [...document.querySelectorAll('[data-unanswered]')].length }
   })
-  check(fed.links.some(([f, t]) => f === 'heard.value' && t === 'add.by') && /← heard\.value/.test(fed.row), `a value dragged into an argument's pin feeds it, and the field says so (${JSON.stringify(fed.links)} / ${fed.row})`)
+  check(fed.links.some(([f, t]) => f === 'heard.value' && t === 'add.by') && /← ?heard\.value/.test(fed.row), `a value dragged into an argument's pin feeds it, and the field says so (${JSON.stringify(fed.links)} / ${fed.row})`)
   check(fed.ok && fed.files.includes('maps/module.game.graph.json') && /game graphs\.lua shared/.test(fed.txt), `the module is written with its game graph (${fed.files.join(', ')})`)
   check(fed.unanswered === 0, 'and with the map answering, no call is left unanswered')
   await page.evaluate(async () => { const S = window.__studio; delete S.module.graphs; S.moduleChanged(); delete S.doc.graphs; S.commit(); await S.go('map') })

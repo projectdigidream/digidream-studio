@@ -16,7 +16,7 @@
 // Plugin SECTIONS (a page in the rail, like the packager) are iframes on a
 // page too, with the same protocol but no document.
 //
-import { el } from '../ui.js'
+import { el, withIcon, icon } from '../ui.js'
 import { handshake, sameBytes } from './protocol.js'
 import { getDraft, putDraft, clearDraft } from './drafts.js'
 
@@ -77,10 +77,10 @@ class EditorSession {
     this.iframe = el('iframe', { class: 'sx-frame', title: this.editor.label, allow: 'autoplay; clipboard-read; clipboard-write; fullscreen' })
     this.root = el('div', { class: 'sx-editor', 'data-editor': this.editor.key, 'data-kind': this.kindId }, [
       el('div', { class: 'sx-bar' }, [
-        el('button', { class: 'sx-back', 'data-action': 'editor-back', text: '← studio', title: 'back to the studio, saving', onclick: () => this.finish(true) }),
+        el('button', { class: 'sx-back', 'data-action': 'editor-back', title: 'back to the studio, saving', onclick: () => this.finish(true) }, withIcon('action.back', 'studio')),
         el('span', { class: 'sx-title', text: `${this.editor.label} · ${this.kind.label} ${name}` }),
         this.statusEl,
-        el('button', { class: 'st-danger sx-discard', 'data-action': 'editor-discard', text: '✕', title: 'discard: back without saving', onclick: () => this.finish(false) })
+        el('button', { class: 'st-danger sx-discard', 'data-action': 'editor-discard', title: 'discard: back without saving', onclick: () => this.finish(false) }, withIcon('action.close'))
       ]),
       this.iframe
     ])
@@ -262,7 +262,7 @@ export function installEditors (S) {
   if (!document.getElementById('sx-css')) document.head.appendChild(el('style', { id: 'sx-css', text: CSS }))
   let session = null
   S.router.register({
-    id: 'edit', label: 'Edit', icon: '✎', rail: false,
+    id: 'edit', label: 'Edit', icon: 'action.edit', rail: false,
     mount: async (arg, from) => {
       const a = parseEditArg(arg)
       const editor = a && S.plugins.editor(a.editorKey)
@@ -306,7 +306,7 @@ export function installEditors (S) {
     if (!S.plugins.hasPluginEditor(kind)) return []
     const editors = S.plugins.editorsFor(kind).filter((x) => !x.builtin)
     const first = editors[0]
-    const out = [el('button', { text: `✎ edit in ${first.label}`, 'data-edit-in': first.key, onclick: () => S.go('edit', editArg(first.key, kind, key)) })]
+    const out = [el('button', { 'data-edit-in': first.key, onclick: () => S.go('edit', editArg(first.key, kind, key)) }, withIcon('action.edit', `edit in ${first.label}`))]
     if (S.plugins.editorsFor(kind).length > 1) out.push(el('button', { text: 'open with…', 'data-open-with': kind, onclick: () => S.openWith(kind, key, { pick: true }) }))
     return out
   }

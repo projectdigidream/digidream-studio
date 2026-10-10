@@ -18,7 +18,7 @@
 // mobs.load{} reads.
 //
 import { useStroke, useText } from '../vendor/uikit/runtime.js'
-import { el, row, slider, select, button, chips, muted, text, ask, confirmDialog } from './ui.js'
+import { el, row, slider, select, button, chips, muted, text, ask, confirmDialog, withIcon, icon } from './ui.js'
 import { parseAtlas, frameKey, quadFor } from '/src/render/atlas.js'
 import { rotationFor, frameAt } from '/src/render/props.js'
 import { edgesOf, autoLayout, problemsByState, NODE_W, NODE_H, MOB_SHAPE, WEAPON_SHAPE } from './graph.js'
@@ -60,7 +60,7 @@ const SPECS = {
     word: 'monster',
     node: 'state',
     shape: MOB_SHAPE,
-    sibling: { label: '🧍 player', kind: 'player' },
+    sibling: { label: 'player', icon: 'section.player', kind: 'player' },
     home: (S) => { S.module.mobs ??= { missiles: {}, mobs: {} }; return S.module.mobs.mobs },
     layoutKey: (name) => name,
     vocab: (S) => S.vocab.mob,
@@ -71,14 +71,14 @@ const SPECS = {
     remove: (S, name) => deleteMonster(S, name),
     // The body that draws it: its own prop record.
     prop: (S, name, subject) => (S.module.props ?? []).find((p) => p.name === (subject?.prop ?? name)),
-    tabs: [['node', '⬡'], ['brain', '🧠 brain'], ['swing', '🌀 swing'], ['body', '👤 body'], ['vars', '# vars'], ['missiles', '☄ missiles']]
+    tabs: [['node', '', 'workshop.state'], ['brain', 'brain', 'workshop.brain'], ['swing', 'swing', 'workshop.swing'], ['body', 'body', 'workshop.body'], ['vars', 'vars', 'workshop.vars'], ['missiles', 'missiles', 'workshop.missiles']]
   },
   weapon: {
     kind: 'weapon',
     word: 'weapon',
     node: 'phase',
     shape: WEAPON_SHAPE,
-    sibling: { label: '☠ monsters', kind: 'mob' },
+    sibling: { label: 'monsters', icon: 'section.monsters', kind: 'mob' },
     home: (S) => { S.module.weapons ??= newArsenal(); return S.module.weapons.weapons },
     // Namespaced, because a weapon and a monster may share a name and their
     // graphs are laid out separately.
@@ -91,7 +91,7 @@ const SPECS = {
     remove: (S, name) => deleteWeapon(S.module, name),
     // A weapon is held by the PLAYER, so the preview shows the player's art.
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['node', '⬡'], ['weapon', '🔫 weapon'], ['swing', '🌀 swing'], ['vars', '# vars'], ['arsenal', '🎒 arsenal']]
+    tabs: [['node', '', 'workshop.state'], ['weapon', 'weapon', 'workshop.weapon'], ['swing', 'swing', 'workshop.swing'], ['vars', 'vars', 'workshop.vars'], ['arsenal', 'arsenal', 'workshop.arsenal']]
   },
   // The player, who has no graph: nothing about them is a state machine, so
   // the window is its preview and its forms.
@@ -101,7 +101,7 @@ const SPECS = {
     node: null,
     graph: false,
     shape: MOB_SHAPE,
-    sibling: { label: '⚔ weapons', kind: 'weapon' },
+    sibling: { label: 'weapons', icon: 'section.weapons', kind: 'weapon' },
     home: (S) => { S.module.player ??= newPlayer(); return { player: S.module.player } },
     layoutKey: (name) => `player:${name}`,
     vocab: (S) => S.vocab.mob,
@@ -111,7 +111,7 @@ const SPECS = {
     make: () => null,
     remove: () => {},
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['skin', '🧍 skin'], ['size', '📏 size'], ['moves', '🏃 moves'], ['kit', '🎒 kit'], ['sounds', '🔊 sounds']]
+    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds']]
   }
 }
 
@@ -196,11 +196,11 @@ class Workshop {
     const names = Object.keys(sp.home(S))
     const problems = this.#problems()
     const top = el('div', { class: 'wk-top' }, [
-      button('‹ back', () => (S.leave ? S.leave() : this.close()), 'wk-back'),
+      button(withIcon('action.back', 'back'), () => (S.leave ? S.leave() : this.close()), 'wk-back'),
       // Across to the sibling window. A monster's claw and a player's fist are
       // the same facility, so moving between them should not be a trip out to
       // the level and back in again.
-      button(sp.sibling.label, () => (S.go ? S.go({ mob: 'monsters', weapon: 'weapons', player: 'player' }[sp.sibling.kind]) : this.open(sp.sibling.kind, null))),
+      button(withIcon(sp.sibling.icon, sp.sibling.label), () => (S.go ? S.go({ mob: 'monsters', weapon: 'weapons', player: 'player' }[sp.sibling.kind]) : this.open(sp.sibling.kind, null))),
       sp.graph === false ? el('span', { class: 'st-muted wk-note', text: 'one player for the module; a map may override parts' }) : null,
       sp.graph === false ? null : chips([...names.map((n) => ({ id: n, label: n, on: n === this.mob })), { id: '+', label: `+ new ${sp.word}` }], async (it) => {
         if (it.id === '+') {
@@ -219,8 +219,8 @@ class Workshop {
       el('span', { style: 'flex:1 1 auto' }),
       problems.length ? el('span', { class: 'st-danger', text: `${problems.length} problem(s)`, title: problems.join('\n') }) : el('span', { class: 'st-muted', text: 'loads clean' }),
       el('div', { class: 'wk-tabs' }, [
-        ['preview', '🎞 preview'], ...(sp.graph === false ? [] : [['graph', '⬡ graph']]), ['details', '☰ details']
-      ].map(([id, label]) => el('button', { text: label, 'data-on': this.pane === id ? '1' : '0', onclick: () => { this.pane = id; this.root.dataset.pane = id; this.#syncTabs() } })))
+        ['preview', 'preview', 'workshop.preview'], ...(sp.graph === false ? [] : [['graph', 'graph', 'workshop.state']]), ['details', 'details', 'workshop.details']
+      ].map(([id, label, i]) => el('button', { icon: i, text: label, 'data-on': this.pane === id ? '1' : '0', onclick: () => { this.pane = id; this.root.dataset.pane = id; this.#syncTabs() } })))
     ])
     const details = el('div', { class: 'wk-details' })
     const keep = this.root.querySelector('.wk-details')?.scrollTop ?? 0
@@ -272,8 +272,8 @@ class Workshop {
       stateChips,
       sheet ? this.animSelect : null,
       el('div', { class: 'st-row' }, [
-        button(p.playing ? '⏸ pause' : '▶ play', () => { p.playing = !p.playing; p.t0 = performance.now(); this.render() }),
-        button('⟲ turn', () => { p.facing = (p.facing + 0.125) % 1; this.#refreshFacing() })
+        button(p.playing ? withIcon('transport.pause', 'pause') : withIcon('transport.play', 'play'), () => { p.playing = !p.playing; p.t0 = performance.now(); this.render() }),
+        button(withIcon('action.rotateleft', 'turn'), () => { p.facing = (p.facing + 0.125) % 1; this.#refreshFacing() })
       ]),
       this.facingRow,
       muted('Drag across the picture to turn it. The ruler is in world units: the sheet\'s height sets the size (body card). Frames and views are chosen by the client\'s own code, so this is what the game draws.')
@@ -407,9 +407,9 @@ class Workshop {
     const pane = el('div', { class: 'wk-graph' })
     const bar = el('div', { class: 'wk-bar' }, [
       button(`+ ${this.spec.node}`, () => { this.#addState() }),
-      this.state ? button('★ initial', () => { m.initial = this.state; this.changed() }) : null,
-      this.state ? button(this.linking ? 'tap the target…' : '→ link', () => { this.linking = !this.linking; this.render() }) : null,
-      this.state ? button(`✕ ${this.spec.node}`, () => { delete this.nodes[this.state]; this.state = null; this.changed() }, 'st-danger') : null,
+      this.state ? button(withIcon('status.initial', 'initial'), () => { m.initial = this.state; this.changed() }) : null,
+      this.state ? button(this.linking ? 'tap the target…' : withIcon('action.link', 'link'), () => { this.linking = !this.linking; this.render() }) : null,
+      this.state ? button(withIcon('action.close', `${this.spec.node}`), () => { delete this.nodes[this.state]; this.state = null; this.changed() }, 'st-danger') : null,
       button('auto layout', () => { this.S.module.layouts[this.spec.layoutKey(this.mob)] = autoLayout(m, {}, this.spec.shape); this.S.moduleChanged(); this.render() }),
       this.mob ? button(`delete ${this.spec.word}`, async () => { if (await confirmDialog(`delete ${this.spec.word} ${this.mob}?`)) { this.spec.remove(this.S, this.mob); this.mob = null; this.state = null; this.changed() } }, 'st-danger') : null
     ])
@@ -424,7 +424,7 @@ class Workshop {
       const pos = layout[name]
       const node = el('div', { class: 'wk-node' + (name === this.state ? ' wk-node-on' : '') + (bad.has(name) ? ' wk-node-bad' : ''),
                              style: `left:${pos.x}px;top:${pos.y}px`, title: bad.get(name)?.join('\n') ?? '' }, [
-        el('div', { class: 'wk-node-name', text: `${m.initial === name ? '★ ' : ''}${name}` }),
+        el('div', { class: 'wk-node-name', icon: m.initial === name ? 'status.initial' : null, text: name }),
         el('div', { class: 'st-muted', text: `anim ${st.anim ?? '?'} · ${st.move ?? 'stop'}${st.ticks !== undefined ? ` · ${st.ticks}t → ${st.next ?? '?'}` : ''}` }),
         el('div', { class: 'st-muted', text: `${(st.transitions ?? []).length} out · ${(st.sequence ?? []).length} steps` })
       ])
@@ -586,10 +586,10 @@ class Workshop {
     this.zoomLabel = el('span', { class: 'wk-zoom-pct', text: `${Math.round(this.view.z * 100)}%` })
     const mid = (f) => { const r = pane.getBoundingClientRect(); this.#zoomAt(r.left + r.width / 2, r.top + r.height / 2, f, pane); this.applyView?.() }
     const bar = el('div', { class: 'wk-zoom' }, [
-      el('button', { text: '−', title: 'zoom out', 'data-zoom': 'out', onclick: () => mid(1 / 1.25) }),
+      el('button', { title: 'zoom out', 'data-zoom': 'out', onclick: () => mid(1 / 1.25) }, withIcon('action.zoomout')),
       this.zoomLabel,
       el('button', { text: '+', title: 'zoom in', 'data-zoom': 'in', onclick: () => mid(1.25) }),
-      el('button', { text: '⤢', title: 'every node in view', 'data-zoom': 'fit', onclick: () => this.fitAll(pane) })
+      el('button', { title: 'every node in view', 'data-zoom': 'fit', onclick: () => this.fitAll(pane) }, withIcon('action.fit'))
     ])
     bar.addEventListener('pointerdown', (e) => e.stopPropagation())
     return bar
@@ -641,8 +641,8 @@ class Workshop {
           conditionSpec: (n) => sp.conditionSpec(S, n), actionSpec: (n) => sp.actionSpec(S, n) }
       : null
     const tabs = el('div', { class: 'wk-tabs' }, sp.tabs
-      .map(([id, label]) => [id, id === 'node' ? `⬡ ${this.state ?? sp.node}` : label])
-      .map(([id, label]) => el('button', { text: label, 'data-on': this.tab === id ? '1' : '0', onclick: () => { this.tab = id; this.render() } })))
+      .map(([id, label, i]) => [id, id === 'node' ? `${this.state ?? sp.node}` : label, i])
+      .map(([id, label, i]) => el('button', { icon: i, text: label, 'data-on': this.tab === id ? '1' : '0', onclick: () => { this.tab = id; this.render() } })))
     const body = []
     if (!m && this.kind !== 'player') body.push(muted(`No ${sp.word}.`))
     else if (this.tab === 'node') {

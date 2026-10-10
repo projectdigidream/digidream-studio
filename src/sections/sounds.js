@@ -11,7 +11,7 @@
 // own loader on import, because JSON that parses is not a bank that plays.
 //
 import { shell } from '../bridge.js'
-import { el, button, muted, toggle, confirmDialog, ask } from '../ui.js'
+import { el, button, muted, toggle, confirmDialog, ask, withIcon, icon } from '../ui.js'
 import { mergeBanks, bankNames, packId, packPath } from '../soundpacks.js'
 import { editArg } from '../plugins/frame.js'
 
@@ -144,7 +144,7 @@ function showSounds () {
     }) : null,
     button('+ import sound packs (.sfxproj)', importPacks)
   ].filter(Boolean)))
-  body.push(el('div', { class: 'st-section-head', text: `🔊 packs, highest first (${packs.length})` }))
+  body.push(el('div', { class: 'st-section-head' }, withIcon('section.sounds', `packs, highest first (${packs.length})`)))
   packs.forEach((p, i) => {
     const json = S.packs?.get(p.id)
     const total = bankNames(json).length
@@ -153,9 +153,9 @@ function showSounds () {
       el('div', { class: 'st-row' }, [
         el('span', { class: 'st-entry', text: p.name === p.id ? p.id : `${p.name} (${p.id})` }),
         ...(S.editButtons?.('file:sfxproj', p.id) ?? []),
-        i > 0 ? button('↑', () => { [packs[i - 1], packs[i]] = [packs[i], packs[i - 1]]; changed() }) : null,
-        i < packs.length - 1 ? button('↓', () => { [packs[i + 1], packs[i]] = [packs[i], packs[i + 1]]; changed() }) : null,
-        button('✕', async () => {
+        i > 0 ? button(withIcon('action.up'), () => { [packs[i - 1], packs[i]] = [packs[i], packs[i - 1]]; changed() }) : null,
+        i < packs.length - 1 ? button(withIcon('action.down'), () => { [packs[i + 1], packs[i]] = [packs[i], packs[i + 1]]; changed() }) : null,
+        button(withIcon('action.close'), async () => {
           if (!await confirmDialog(`remove the pack ${p.id}? Its sounds go silent unless another pack has them.`)) return
           packs.splice(i, 1); delete S.rec.assets[packPath(p.id)]; S.packs?.delete(p.id); changed()
         }, 'st-danger')
@@ -177,13 +177,13 @@ function showSounds () {
   const byPack = new Map()
   for (const n of names) { const k = merged.origin[n] ?? 'the app'; (byPack.get(k) ?? byPack.set(k, []).get(k)).push(n) }
   for (const [k, list] of byPack) {
-    body.push(el('div', { class: 'st-section-head', text: `▸ ${k} (${list.length})` }))
+    body.push(el('div', { class: 'st-section-head' }, withIcon('action.expand', `${k} (${list.length})`)))
     for (const n of list) {
       const by = used.get(n)
       body.push(el('div', { class: 'st-row', 'data-sound': n }, [
         el('span', { class: 'st-entry', text: n }),
         by ? el('span', { class: 'st-muted', text: [...by].join(', ') }) : null,
-        button('▶', () => hear(n))
+        button(withIcon('transport.play'), () => hear(n))
       ].filter(Boolean)))
     }
   }

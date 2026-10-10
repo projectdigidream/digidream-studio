@@ -18,7 +18,7 @@
 // and panels (templates a script's panel can name). Sample data drives the
 // HUD so a low-health bar or a full magazine can be seen without playing.
 //
-import { el, row, number, text, select, toggle, button, muted } from './ui.js'
+import { el, row, number, text, select, toggle, button, muted, withIcon, icon } from './ui.js'
 import { newLayout, anchorFor } from './ui_emit.js'
 import { DEFAULT_LAYOUT, ANCHORS, TOUCH_IDS, CLIENT_BINDINGS, STANDARD_HUD_NAMES, HudView, parseLayout, place, uiScale } from '/src/render/layout.js'
 import { touchLayout } from '/src/render/touchui.js'
@@ -102,14 +102,14 @@ class Screens {
     const scheme = S.module.controls === 'fps' ? 'fps' : 'platformer'
     const checked = parseLayout(this.layout)
     const top = el('div', { class: 'wk-top' }, [
-      el('span', { class: 'wk-title', text: '▣ screens' }),
-      el('div', { class: 'wk-tabs sc-tabs' }, [['module', '🌐 every map'], ['map', `🗺 only ${S.docName}`]].map(([v, l]) =>
-        el('button', { text: l, 'data-on': this.scope === v ? '1' : '0', 'data-scope': v, onclick: () => { S.screensScope = v; this.picked = null; this.render() } }))),
+      el('span', { class: 'wk-title' }, withIcon('section.screens', 'screens')),
+      el('div', { class: 'wk-tabs sc-tabs' }, [['module', 'every map', 'action.scopegame'], ['map', `only ${S.docName}`, 'action.scopemap']].map(([v, l, i]) =>
+        el('button', { 'data-on': this.scope === v ? '1' : '0', 'data-scope': v, onclick: () => { S.screensScope = v; this.picked = null; this.render() } }, withIcon(i, l)))),
       select('', this.device, Object.keys(DEVICES), (v) => { this.device = v; this.render() }).lastChild,
       el('div', { class: 'wk-tabs sc-tabs' }, [['hud', 'HUD'], ['touch', 'touch'], ['panels', 'templates']].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.tab === v ? '1' : '0', 'data-tab': v, onclick: () => { this.tab = v; this.picked = null; this.render() } }))),
       el('span', { style: 'flex:1' }),
-      button('‹ back', () => (this.S.leave ? this.S.leave() : this.close()), 'wk-back')
+      button(withIcon('action.back', 'back'), () => (this.S.leave ? this.S.leave() : this.close()), 'wk-back')
     ])
 
     // The frame, scaled to fit beside the controls; the client draws at the
@@ -287,7 +287,7 @@ class Screens {
       return row(label, el('span', {}, [i, list]))
     }
     const size = (k) => (typeof e[k] === 'number' ? e[k] : '')
-    const rows = [el('div', { class: 'st-section-head', text: `▸ ${e.id}` }),
+    const rows = [el('div', { class: 'st-section-head' }, withIcon('action.expand', `${e.id}`)),
       text('id', e.id, (v) => { const id = v.trim().slice(0, 24); if (id) { e.id = id; this.picked = id; ch() } })]
     if (!nested) {
       rows.push(select('anchor', e.anchor ?? 'tl', ANCHORS, set('anchor')),
@@ -384,7 +384,7 @@ class Screens {
       const b = resolved.buttons.find((x) => x.id === id) ?? full.find((x) => x.id === id) ?? { id }
       const on = id === this.picked
       rows.push(el('div', { class: 'st-card', 'data-btn': id }, [
-        el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: id }), button(on ? '▾' : '▸', () => { this.picked = on ? null : id; this.render() })]),
+        el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: id }), button(withIcon(on ? 'action.collapse' : 'action.expand'), () => { this.picked = on ? null : id; this.render() })]),
         toggle('shown', !b.hidden, (v) => { own(id).hidden = !v; this.changed() }),
         ...(on ? [
           text('label', b.label ?? id.toUpperCase(), (v) => { own(id).label = v; this.changed() }),
@@ -424,12 +424,12 @@ class Screens {
   #panelRows () {
     const L = this.layout
     L.panels ??= {}
-    const rows = [el('div', { class: 'st-row' }, [el('span', { class: 'st-muted', text: 'The module\'s panels are designed in Panels, widgets and look together.' }), button('▢ Panels…', () => this.S.go('panels'))]),
+    const rows = [el('div', { class: 'st-row' }, [el('span', { class: 'st-muted', text: 'The module\'s panels are designed in Panels, widgets and look together.' }), button(withIcon('section.panels', 'Panels…'), () => this.S.go('panels'))]),
       muted('Here: templates for panels a hand-written script opens (dnp.ui_open{ template = … }) -- how such a panel LOOKS: where it sits and where each widget goes. Widgets it does not place are stacked in the body, so a template never loses a control.')]
     for (const [name, t] of Object.entries(L.panels)) {
       const on = name === this.picked
       const set = (k) => (v) => { if (v === '' || v === undefined) delete t[k]; else t[k] = v; this.changed() }
-      const body = [el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: name }), button(on ? '▾' : '▸', () => { this.picked = on ? null : name; this.render() })])]
+      const body = [el('div', { class: 'st-row' }, [el('span', { class: 'st-entry', text: name }), button(withIcon(on ? 'action.collapse' : 'action.expand'), () => { this.picked = on ? null : name; this.render() })])]
       if (on) {
         body.push(select('anchor', t.anchor ?? 'c', ANCHORS, set('anchor')),
           number('x', t.x ?? 0, { min: -2000, max: 2000, step: 1 }, set('x')), number('y', t.y ?? 0, { min: -2000, max: 2000, step: 1 }, set('y')),
@@ -443,7 +443,7 @@ class Screens {
             number('x', sl.x ?? 0, { min: -2000, max: 2000, step: 1 }, (v) => { sl.x = v; this.changed() }),
             number('y', sl.y ?? 0, { min: -2000, max: 2000, step: 1 }, (v) => { sl.y = v; this.changed() }),
             number('w', sl.w ?? 120, { min: 20, max: 1200, step: 5 }, (v) => { sl.w = v; this.changed() }),
-            button('✕ slot', () => { t.slots.splice(i, 1); this.changed() })
+            button(withIcon('action.close', 'slot'), () => { t.slots.splice(i, 1); this.changed() })
           ]))
         })
         body.push(button('+ slot', () => { const used = new Set((t.slots ?? []).map((s) => s.widget)); let id = 1; while (used.has(id)) id++; (t.slots ??= []).push({ widget: id, anchor: 'tl', x: 12, y: 40 + 44 * (t.slots.length), w: 140 }); this.changed() }),

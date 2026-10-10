@@ -131,7 +131,7 @@ export class VfxPreview {
     this.clock = 0
     this.real = null
     const slow = el('button', { class: 'st-vfx-slow', text: '1×', title: 'slow motion', onclick: () => { this.rate = this.rate === 1 ? 0.25 : 1; slow.textContent = this.rate === 1 ? '1×' : '¼×'; slow.dataset.on = this.rate === 1 ? '0' : '1' } })
-    this.wrap.append(this.label, el('div', { class: 'st-vfx-tools' }, [slow, el('button', { text: '⟲', title: 'frame it again', onclick: () => { this.zoom = 1; this.yaw = -0.6; this.pitch = 0.32 } })]))
+    this.wrap.append(this.label, el('div', { class: 'st-vfx-tools' }, [slow, el('button', { icon: 'action.fit', title: 'frame it again', onclick: () => { this.zoom = 1; this.yaw = -0.6; this.pitch = 0.32 } })]))
   }
 
   /** The element to put on the page (the canvas inside its frame). */

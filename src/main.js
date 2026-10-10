@@ -60,7 +60,7 @@ import { STUDIO_VERSION } from './version.js'
 import { parseAnimations } from '/src/render/animtex.js'
 import { animationsTxt } from './texsheet.js'
 import { shell, hasShell } from './bridge.js'
-import { Ui, el, button, row, text, muted, card, select, number, ask } from './ui.js'
+import { Ui, el, button, row, text, muted, card, select, number, ask, useIcons, refreshIcons, icon, withIcon } from './ui.js'
 import { moduleProps } from './props.js'
 import { hasWeapons } from './weapons_emit.js'
 import { inspector, titleFor, texturePicker, placePalette } from './inspector.js'
@@ -78,7 +78,7 @@ import { install as installPluginsPage } from './sections/plugins.js'
 import { install as installSprites } from './sections/sprites.js'
 import { installBaking } from './bake/apply.js'
 import { ensureServiceWorker, loadInstalled } from './plugins/install.js'
-import { wearSkin, skinList } from './skin.js'
+import { wearSkin, skinList, iconCatalog } from './skin.js'
 import { redrawThumbs } from './thumbs.js'
 
 const boot = document.getElementById('boot')
@@ -137,6 +137,8 @@ bootLog(`studio ${STUDIO_VERSION} · ${hasShell() ? 'in the app' : 'in a browser
 stage('putting on the skin', 0.02)
 S.skin = await wearSkin(S.prefs)
 S.skinList = await skinList()
+// Icons by catalog id (ui.js icon): the skin's picture, or today's glyph.
+useIcons(S.skin, await iconCatalog())
 bootStep(`skin ${S.skin.id} · ${S.skin.view.mode} · ${S.skin.view.pointer}`)
 stage('loading the core', 0.05)
 S.core = await Core.load()
@@ -223,11 +225,13 @@ await seedFromShell()
 stage('the picture', 0.85)
 wearCanvasSkin(S.skin)
 S.viewport = new Viewport(document.body)
+// A marker's icon picture has loaded: the badges are drawn again with it.
+S.viewport.onLabelArt = () => redraw()
 // A new skin or mode: the map editor's colours in place, then every drawing
 // that asks the skin draws again (S.onSkin listeners: graph, previews, …).
 S.skinListeners = new Set()
 S.onSkin = (fn) => { S.skinListeners.add(fn); return () => S.skinListeners.delete(fn) }
-S.onSkin((skin) => redrawThumbs(skin))
+S.onSkin((skin) => { redrawThumbs(skin); refreshIcons() })
 S.skin.onChange(() => {
   wearCanvasSkin(S.skin)
   S.viewport.reskin()
@@ -332,8 +336,8 @@ const windowSection = (id, label, icon, open, extra = {}) => S.router.register({
   },
   unmount: () => { S.window?.close(); S.window = null; S.ui.layer.dataset.workshop = '0' }
 })
-pageSection('home', 'Home', '◆', /^Home$/, () => S.showHome(), { rail: false })
-pageSection('maps', 'Maps', '🗺', /^Maps$/, () => S.showMaps())
+pageSection('home', 'Home', 'section.home', /^Home$/, () => S.showHome(), { rail: false })
+pageSection('maps', 'Maps', 'section.maps', /^Maps$/, () => S.showMaps())
 // The old entry points go to their sections; called from inside one, they draw it.
 const sectionAlias = (id, fn) => (...a) => (S.route() === id ? fn(...a) : S.go(id, a[0] ?? null))
 S.sectionAlias = sectionAlias
@@ -346,7 +350,7 @@ Object.assign(S, { play, exportPack, importPack, frameToDoc, openModule, starter
 for (const install of [installHome, installMaps, installProps, installParticles, installMusic, installSounds, installTextures, installSettings, installSnapshots, installControls, installScripts, installGraphs, installStyle, installSkySection, installCamera, installNeighbours]) install(S)
 await S.loadPacks()
 S.router.register({
-  id: 'map', label: 'Map', icon: '▭', rail: false, parent: 'maps',
+  id: 'map', label: 'Map', icon: 'section.map', rail: false, parent: 'maps',
   mount: async (arg) => {
     S.shell.hidePage()
     S.ui.layer.dataset.page = '0'
@@ -361,29 +365,29 @@ S.router.register({
   },
   unmount: () => { S.ui.hideSheet(); if (S.tool === 'room') tools.cancelRoom(S) }
 })
-windowSection('monsters', 'Monsters', '☠', (name) => openWorkshop(S, name))
-windowSection('player', 'Player', '🧍', () => openPlayer(S))
-pageSection('controls', 'Controls', '🎮', /^Controls$/, () => S.showControls())
+windowSection('monsters', 'Monsters', 'section.monsters', (name) => openWorkshop(S, name))
+windowSection('player', 'Player', 'section.player', () => openPlayer(S))
+pageSection('controls', 'Controls', 'section.controls', /^Controls$/, () => S.showControls())
 // Screens on its touch tab: where the module's keys' buttons are placed.
 S.showScreensTouch = async () => { await S.go('screens'); if (S.window) { S.window.tab = 'touch'; S.window.picked = null; S.window.render() } }
-windowSection('weapons', 'Weapons', '🔫', (name) => openArsenal(S, name))
-pageSection('props', 'Props', '📦', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
+windowSection('weapons', 'Weapons', 'section.weapons', (name) => openArsenal(S, name))
+pageSection('props', 'Props', 'section.props', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
 installSprites(S)
-pageSection('sprites', 'Sprites', '🎞', /^Sprites$/, (n) => S.showSprites(n))
-pageSection('particles', 'Particles', '✨', /^Particles/, (id) => S.showVfx(id ?? undefined))
-pageSection('textures', 'Textures', '🧱', /^Textures$/, (n) => S.showTextures(n))
-pageSection('music', 'Music', '♪', /^Soundtrack/, () => S.showMusic())
-pageSection('sounds', 'Sounds', '🔊', /^Sounds$/, () => S.showSounds())
-windowSection('screens', 'Screens', '▣', () => openScreens(S))
-windowSection('panels', 'Panels', '▢', (name) => openPanels(S, name))
-pageSection('style', 'Style', '🎨', /^Style$/, (name) => S.showStyle(name ?? null))
-pageSection('sky', 'Sky', '🌌', /^Sky$/, (map) => S.showSky(map ?? null))
-pageSection('scripts', 'Scripts', '📜', /^Scripts$/, (n) => S.showScripts(n))
-pageSection('graphs', 'Graphs', '◇', /^Graphs$/, () => S.showGraphs())
-windowSection('graph', 'Graph', '◇', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
-pageSection('settings', 'Settings', '⚙', /^Module settings$/, () => S.showSettings())
-pageSection('snapshots', 'Snapshots', '🕘', /^Snapshots$/, () => S.showSnapshots(), { rail: false })
-pageSection('playlog', 'Play log', '📋', /^Play log$/, () => showPlayLog(S), { rail: false })
+pageSection('sprites', 'Sprites', 'section.sprites', /^Sprites$/, (n) => S.showSprites(n))
+pageSection('particles', 'Particles', 'section.particles', /^Particles/, (id) => S.showVfx(id ?? undefined))
+pageSection('textures', 'Textures', 'section.textures', /^Textures$/, (n) => S.showTextures(n))
+pageSection('music', 'Music', 'section.music', /^Soundtrack/, () => S.showMusic())
+pageSection('sounds', 'Sounds', 'section.sounds', /^Sounds$/, () => S.showSounds())
+windowSection('screens', 'Screens', 'section.screens', () => openScreens(S))
+windowSection('panels', 'Panels', 'section.panels', (name) => openPanels(S, name))
+pageSection('style', 'Style', 'section.style', /^Style$/, (name) => S.showStyle(name ?? null))
+pageSection('sky', 'Sky', 'section.sky', /^Sky$/, (map) => S.showSky(map ?? null))
+pageSection('scripts', 'Scripts', 'section.scripts', /^Scripts$/, (n) => S.showScripts(n))
+pageSection('graphs', 'Graphs', 'section.graphs', /^Graphs$/, () => S.showGraphs())
+windowSection('graph', 'Graph', 'section.graphs', (arg) => openGraph(S, arg), { rail: false, parent: 'graphs' })
+pageSection('settings', 'Settings', 'section.settings', /^Module settings$/, () => S.showSettings())
+pageSection('snapshots', 'Snapshots', 'section.snapshots', /^Snapshots$/, () => S.showSnapshots(), { rail: false })
+pageSection('playlog', 'Play log', 'section.playlog', /^Play log$/, () => showPlayLog(S), { rail: false })
 // THE PLUGINS (docs/PLUGINS.md). The studio's own pages that already edit a kind
 // are its built-in editors: a plugin is offered beside them, never instead.
 S.plugins.addBuiltin({ key: 'scripts', label: 'the Scripts page', kinds: ['record:script'], open: (k) => S.go('scripts', k) })
@@ -392,7 +396,7 @@ S.plugins.addBuiltin({ key: 'sounds', label: 'the Sounds page', kinds: ['file:sf
 S.plugins.addBuiltin({ key: 'monsters', label: 'the Monsters workshop', kinds: ['record:mob'], open: (k) => S.go('monsters', k) })
 installEditors(S)
 installPluginsPage(S)
-pageSection('plugins', 'Plugins', '🧩', /^Plugins$/, () => S.showPlugins(), { rail: false })
+pageSection('plugins', 'Plugins', 'section.plugins', /^Plugins$/, () => S.showPlugins(), { rail: false })
 installPluginSections(S)
 
 /**
@@ -1073,7 +1077,7 @@ function redraw () {
     marked.add(p.sector)
     lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor + 0.08 })), closed: true, color, fill: FILL[tone] })
     const n = o.verts.length
-    badges.push({ x: o.verts.reduce((a, v) => a + v.x, 0) / n, y: o.verts.reduce((a, v) => a + v.y, 0) / n, z: o.floor, label: p.level === 'warn' ? '⚠' : '✖ wrong', color })
+    badges.push({ x: o.verts.reduce((a, v) => a + v.x, 0) / n, y: o.verts.reduce((a, v) => a + v.y, 0) / n, z: o.floor, label: p.level === 'warn' ? '' : 'wrong', iconId: p.level === 'warn' ? 'status.warning' : 'status.error', color })
   }
   // Camera paths: the CURVE the camera rides, which is not the polyline through
   // the points (docs/MAP_AUTHOR.md) -- so the one being edited shows both, the
@@ -1104,10 +1108,10 @@ function redraw () {
   }
   S.viewport.setLines(lines)
   const markers = []
-  for (const p of d.spawns) markers.push({ id: p.id, kind: 'spawn', x: p.x, y: p.y, z: p.z, label: `⚑ ${p.tag}`, ...tint('spawn') })
-  for (const l of d.lights) markers.push({ id: l.id, kind: 'light', x: l.x, y: l.y, z: l.z, label: '☀ light', ...tint('light') })
+  for (const p of d.spawns) markers.push({ id: p.id, kind: 'spawn', x: p.x, y: p.y, z: p.z, label: p.tag, iconId: 'marker.spawn', ...tint('spawn') })
+  for (const l of d.lights) markers.push({ id: l.id, kind: 'light', x: l.x, y: l.y, z: l.z, label: 'light', iconId: 'marker.light', ...tint('light') })
   for (const e of d.entities) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, ...tint(e.kind === 'mob' ? 'mob' : 'prop'), icon: S.sprites?.iconFor(e.name), heading: e.angle ?? 0 })
-  badges.forEach((b, i) => markers.push({ id: `badge${i}`, kind: 'badge', x: b.x, y: b.y, z: b.z + 0.6, label: b.label, color: b.color }))
+  badges.forEach((b, i) => markers.push({ id: `badge${i}`, kind: 'badge', x: b.x, y: b.y, z: b.z + 0.6, label: b.label, iconId: b.iconId, color: b.color }))
   S.viewport.setMarkers(markers)
 }
 
@@ -1205,7 +1209,7 @@ S.soundField = (label, value, onChange) => {
     }
     onChange(sel.value)
   })
-  const play = button('▶', () => { if (sel.value && sel.value !== '\u0000other') S.hear(sel.value) })
+  const play = button(withIcon('transport.play'), () => { if (sel.value && sel.value !== '\u0000other') S.hear(sel.value) })
   return row(label, sel, play)
 }
 
@@ -1389,11 +1393,11 @@ function showMapSettings () {
   const own = overrides(S.doc)
   S.ui.showSheet(`Map ${S.docName}`, [
     text('extra Lua', S.doc.extraLua, (v) => { S.doc.extraLua = v; S.commit() }, { multiline: true, placeholder: '-- hand-written Lua, kept verbatim' }),
-    el('div', { class: 'st-row' }, [button('🎥 camera…', () => S.showCamera()), button('◇ graph…', () => S.go('graph')), button('♪ music cues…', () => S.go('music'))]),
+    el('div', { class: 'st-row' }, [button(withIcon('maptool.camera', 'camera…'), () => S.showCamera()), button(withIcon('section.graphs', 'graph…'), () => S.go('graph')), button(withIcon('section.music', 'music cues…'), () => S.go('music'))]),
     el('div', { class: 'st-row' }, [button(`🌌 sky${S.doc.sky ? ' (own)' : S.module.sky ? ' (the module\'s)' : ''}…`, () => S.go('sky', S.docName))]),
     el('div', { class: 'st-row' }, [
-      button(`🧍 player${own.length ? ` (own ${own.join(', ')})` : ''}…`, () => { S.playerScope = 'map'; S.go('player') }),
-      button(`▣ screens${S.doc.ui ? ' (own)' : ''}…`, () => { S.screensScope = 'map'; S.go('screens') })
+      button(withIcon('section.player', `player${own.length ? ` (own ${own.join(', ')})` : ''}…`), () => { S.playerScope = 'map'; S.go('player') }),
+      button(withIcon('section.screens', `screens${S.doc.ui ? ' (own)' : ''}…`), () => { S.screensScope = 'map'; S.go('screens') })
     ]),
     muted(scriptBudget())
   ])

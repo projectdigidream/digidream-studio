@@ -7,7 +7,7 @@
 // is a new form with no studio change. The only knowledge here is what each
 // TYPE looks like on screen; nothing here knows what a door is.
 //
-import { el, row, toggle, select, button, muted, addHelp } from './ui.js'
+import { el, row, toggle, select, button, muted, addHelp, withIcon, icon, glyphOf } from './ui.js'
 
 /** "0.25" -> "0.25", "-4/48" -> [-4, 48], "2" -> 2. Null when unreadable. */
 export function parseFx (s) {
@@ -91,7 +91,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
     // A PLACE: x, y (and z) together, from one tap on the floor.
     for (const [px, py, pz, what] of [['x', 'y', 'z', 'where'], ['pivot_x', 'pivot_y', null, 'turning about']]) {
       if (a.name !== px || !names.has(py) || !ctx.pickPoint) continue
-      rows.push(row(`📍 ${what}`, button('pick a point on the map', () => ctx.pickPoint((p) => {
+      rows.push(row(`${glyphOf('action.pick')} ${what}`, button('pick a point on the map', () => ctx.pickPoint((p) => {
         obj[px] = fx(p.x); obj[py] = fx(p.y)
         if (pz && names.has(pz)) obj[pz] = fx(p.z ?? 0)
         ctx.onChange()
@@ -114,7 +114,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
             ...(cur !== undefined && !list.some((p) => p.tag === cur) ? [[String(cur), `tag ${cur} -- not on this map`]] : []),
             ...list.map((p) => [String(p.tag), `tag ${p.tag}${p.length !== null ? ` · ${p.length.toFixed(1)} u` : ' · needs 2 points'}`])]
           rows.push(row(label, selectOf(cur === undefined ? '' : String(cur), opts, (v) => set(v === '' ? undefined : Number(v))),
-            ctx.editPath ? button('✎', () => ctx.editPath(cur)) : null))
+            ctx.editPath ? button(withIcon('action.edit'), () => ctx.editPath(cur)) : null))
           const info = list.find((p) => p.tag === cur)
           if (info?.length && owner === 'camera_flythrough') {
             const speed = Math.abs(Number(obj.speed ?? 6)) || 6
@@ -130,19 +130,19 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         if (a.name === 'sector' && ctx.pickSector) {
           const b = button(refLabel(cur, ctx), () => ctx.pickSector((hit) => set({ sector: hit.id })))
           b.style.flex = '1 1 auto'
-          rows.push(row(label, b, cur !== undefined ? button('✕', () => set(undefined)) : null))
+          rows.push(row(label, b, cur !== undefined ? button(withIcon('action.close'), () => set(undefined)) : null))
           return
         }
         if (a.name === 'side' && ctx.pickEdge) {
           const b = button(cur?.edge ? `wall ${cur.edge}` : 'tap a wall', () => ctx.pickEdge((hit) => set({ edge: hit.id })))
           b.style.flex = '1 1 auto'
-          rows.push(row(label, b, cur !== undefined ? button('✕', () => set(undefined)) : null))
+          rows.push(row(label, b, cur !== undefined ? button(withIcon('action.close'), () => set(undefined)) : null))
           return
         }
         // A ROOM'S TAG, from tapping the room (which is given one if it has none).
         if (a.name === 'tag' && ctx.pickTag) {
           const i = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
-          rows.push(row(label, i, button('📍', () => ctx.pickTag((t) => { if (t) set(t) }))))
+          rows.push(row(label, i, button(withIcon('action.pick'), () => ctx.pickTag((t) => { if (t) set(t) }))))
           return
         }
         if (VFX_ARGS.has(a.name) && ctx.vfxChoices) {
@@ -180,7 +180,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         if (a.type === 'string' && a.name === 'panel' && ctx.panels) {
           const names = ctx.panels()
           rows.push(row(label, selectOf(cur ?? '', [['', a.optional ? '(none)' : '(choose)'], ...(cur && !names.includes(cur) ? [[cur, `${cur} -- no such panel`]] : []), ...names.map((n) => [n, n])], (v) => set(v || undefined)),
-            ctx.editPanel ? button('✎', () => ctx.editPanel(cur)) : null))
+            ctx.editPanel ? button(withIcon('action.edit'), () => ctx.editPanel(cur)) : null))
           return
         }
         // show_element / hide_element name a widget OR a decor element: choosing
@@ -202,7 +202,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
           const ok = typeof cur === 'string' && /^#[0-9a-f]{6}$/i.test(cur)
           const c = el('input', { type: 'color', value: ok ? cur : '#ffffff' })
           c.addEventListener('change', () => set(c.value))
-          rows.push(row(label, c, el('span', { class: 'st-muted', text: cur === undefined ? '(default)' : String(cur) }), cur !== undefined ? button('✕', () => set(undefined)) : null))
+          rows.push(row(label, c, el('span', { class: 'st-muted', text: cur === undefined ? '(default)' : String(cur) }), cur !== undefined ? button(withIcon('action.close'), () => set(undefined)) : null))
           return
         }
         // A BUTTON (when_button_pressed ...): the engine's, then the module's own keys.
@@ -216,7 +216,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
           if (cur && ![...engine, ...keys].some(([v]) => v === cur)) sel.prepend(el('option', { value: cur, text: `${cur} -- no such button or key` }))
           sel.value = cur ?? ''
           sel.addEventListener('change', () => set(sel.value || undefined))
-          rows.push(row(label, sel, ctx.editKeys ? button('⌨', () => ctx.editKeys()) : null))
+          rows.push(row(label, sel, ctx.editKeys ? button(withIcon('action.keyboard'), () => ctx.editKeys()) : null))
           return
         }
         // A sound is picked from the module's packs and heard, not typed.
@@ -227,7 +227,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         control = input(cur, (v) => set(v), { choices: ctx.suggest?.(a.name, owner) ?? null })
         // A THING'S NAME, from tapping one placed on the map.
         if (thingArg(a.name, owner) && ctx.pickThing) {
-          rows.push(row(label, control, button('📍', () => ctx.pickThing((e) => { if (e) set(e.name) }))))
+          rows.push(row(label, control, button(withIcon('action.pick'), () => ctx.pickThing((e) => { if (e) set(e.name) }))))
           return
         }
         break

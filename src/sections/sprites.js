@@ -34,7 +34,7 @@ function showSprites (open = null) {
   ].filter(Boolean)
   if (!names.length) body.push(muted('No sheets yet. A sheet is what a prop or a monster is drawn with.'))
   const grid = el('div', { class: 'st-grid' }, names.map((n) => {
-    const t = el('button', { class: 'st-tile', 'data-sprite': n, 'data-on': n === open ? '1' : '0', title: n, onclick: () => showSprites(n) }, [el('span', { text: `${sourceOf(n) ? '' : '◇ '}${n}` })])
+    const t = el('button', { class: 'st-tile', 'data-sprite': n, 'data-on': n === open ? '1' : '0', title: n, onclick: () => showSprites(n) }, [el('span', { icon: sourceOf(n) ? null : 'section.graphs', text: n })])
     const src = S.sheets.get(n)
     if (src) { t.style.backgroundImage = `url("${src.imageUrl}")`; t.style.backgroundSize = 'contain'; t.style.backgroundRepeat = 'no-repeat'; t.style.backgroundPosition = 'center' }
     return t

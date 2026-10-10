@@ -4,7 +4,7 @@
 // Moved out of main.js as a section of the module (app/router.js); it reaches
 // the studio's shared state and verbs through S, given at install.
 //
-import { el, button, row, text, muted, number, ask, confirmDialog } from '../ui.js'
+import { el, button, row, text, muted, number, ask, confirmDialog, withIcon, icon } from '../ui.js'
 import { newVfx, vfxRows, VfxPreview } from '../vfxlib.js'
 
 let S = null
@@ -27,7 +27,7 @@ function showVfx (openId = null) {
           ? `${v.life ?? 0.12}s, ${v.width ?? 0.04} wide`
           : `${v.attach ? `${v.rate ?? 40}/s attached` : `${v.count ?? 0} specks`} · ${v.life ?? 0.5}s · ${v.blend === 'alpha' ? 'alpha' : 'additive'}` })
       ]),
-      button('✕', async () => {
+      button(withIcon('action.close'), async () => {
         if (!await confirmDialog(`delete particle kind ${v.id}? Anything naming it draws nothing.`)) return
         S.module.vfx = S.module.vfx.filter((x) => x !== v)
         S.moduleChanged(); showVfx()
