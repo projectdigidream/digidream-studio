@@ -3043,6 +3043,23 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
 // <html>, the page in the skin's own background, and the map editor's
 // materials in the skin's canvas colours after a mode change.
 {
+  // EVERY CONTROL WEARS ITS KIT CLASS (phase 4): across the sections, no
+  // button, field or select the studio drew is without a ui-* class -- a
+  // control without one keeps the browser's look in every skin.
+  const bare = await page.evaluate(async () => {
+    const S = window.__studio
+    const out = []
+    for (const r of ['home', 'maps', 'map', 'monsters', 'player', 'weapons', 'screens', 'panels', 'settings', 'textures', 'controls', 'sounds', 'music', 'graphs', 'scripts', 'style', 'sky', 'particles', 'props']) {
+      await S.go(r); await new Promise((res) => setTimeout(res, 250))
+      for (const e of document.querySelectorAll('button, select, textarea, input:not([type=range]):not([type=color]):not([type=file]):not([type=checkbox]):not([type=hidden])')) {
+        if (!e.offsetParent || /(^|\s)ui-/.test(e.className) || e.closest('#boot, iframe, .dnp-ui, .dnp-hud, .pw-frame, .sc-frame')) continue
+        out.push(`${r}: <${e.tagName.toLowerCase()} class="${e.className}">${(e.textContent || e.value || '').trim().slice(0, 24)}`)
+      }
+    }
+    await S.go('map')
+    return [...new Set(out)]
+  })
+  check(bare.length === 0, `every control the studio draws wears a kit class (${bare.length} without: ${bare.slice(0, 6).join(' | ')})`)
   const list = await page.evaluate(() => window.__studio.skinList)
   check(list.length >= 4 && list[0].id === 'claude', `the shipped skins are listed (${list.map((s) => s.id).join(', ')})`)
   // A mode change, live: the map editor's colours and its lasting materials

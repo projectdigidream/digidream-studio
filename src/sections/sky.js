@@ -181,6 +181,6 @@ export function install (s) {
 document.head.appendChild(Object.assign(document.createElement('style'), { textContent: `
 .sd-sky-wrap{position:relative;max-width:480px;border-radius:10px;overflow:hidden;border:1px solid var(--dnp-color-line-main)}
 .sd-sky-view{display:block;width:100%;height:auto;aspect-ratio:16/9;cursor:grab}
-.sd-sky-facing{position:absolute;left:8px;bottom:6px;font:600 11px var(--dnp-font-ui);color:var(--dnp-color-text-primary);text-shadow:0 1px 2px var(--dnp-color-text-inverse);pointer-events:none}
+.sd-sky-facing{position:absolute;left:8px;bottom:6px;font-weight:600;font-size:11px;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-primary);text-shadow:0 1px 2px var(--dnp-color-text-inverse);pointer-events:none}
 .sd-sky-thumb{width:48px;height:32px;object-fit:cover;border-radius:4px;border:1px solid var(--dnp-color-line-main);image-rendering:pixelated;flex:0 0 auto}
 ` }))

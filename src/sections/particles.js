@@ -76,7 +76,7 @@ const STYLE = `
 .sd-vfx-view{position:sticky;top:0;z-index:3;background:var(--dnp-color-bg-app);padding-bottom:4px}
 .st-vfx-wrap{position:relative;width:100%}
 .sd-body.st-page .st-vfx-canvas,.st-vfx-canvas{display:block;width:100%;max-width:none;height:auto;aspect-ratio:16/10;max-height:38vh;cursor:grab;touch-action:none}
-.st-vfx-label{position:absolute;left:8px;bottom:6px;font:600 11px var(--dnp-font-ui);color:var(--dnp-color-text-secondary);text-shadow:0 1px 2px var(--dnp-color-text-inverse);pointer-events:none}
+.st-vfx-label{position:absolute;left:8px;bottom:6px;font-weight:600;font-size:11px;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-secondary);text-shadow:0 1px 2px var(--dnp-color-text-inverse);pointer-events:none}
 .st-vfx-tools{position:absolute;right:6px;top:6px;display:flex;gap:6px}
 .st-vfx-tools button{min-width:36px;height:32px;padding:0 6px}
 @media (orientation:landscape) and (min-width:640px){

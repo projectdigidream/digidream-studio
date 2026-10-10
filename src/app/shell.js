@@ -18,34 +18,33 @@ const STYLE = `
 :root{--rail-w:212px}
 @media (max-width:1100px){:root{--rail-w:68px}}
 @media (orientation:portrait) and (max-width:900px){:root{--rail-w:0px}}
-.sd-rail{position:fixed;left:0;top:0;bottom:0;width:var(--rail-w);z-index:70;display:flex;flex-direction:column;gap:2px;
-  background:var(--dnp-color-bg-rail);border-right:1px solid var(--dnp-color-line-main);padding:calc(8px + env(safe-area-inset-top)) 6px calc(8px + env(safe-area-inset-bottom));
-  padding-left:calc(6px + env(safe-area-inset-left));overflow-y:auto;font:13px/1.3 var(--dnp-font-ui);color:var(--dnp-color-text-primary);box-sizing:border-box}
+.sd-rail{position:fixed;left:0;top:0;bottom:0;width:var(--rail-w);z-index:70;display:flex;flex-direction:column;gap:2px;padding:calc(8px + env(safe-area-inset-top)) 6px calc(8px + env(safe-area-inset-bottom));
+  padding-left:calc(6px + env(safe-area-inset-left));overflow-y:auto;font-size:13px;line-height:1.3;box-sizing:border-box}
+/* The rail's width is the page's layout (--rail-w), whatever a skin's compact rail says. */
+.sd-rail.ui-rail,.sd-rail.ui-rail.ui-rail--compact{width:var(--rail-w);min-width:0;max-width:none}
 @media (orientation:portrait) and (max-width:900px){.sd-rail{display:none}}
-.sd-rail button{display:flex;align-items:center;gap:10px;min-height:40px;border:0;border-radius:8px;background:transparent;color:inherit;
-  font:inherit;text-align:left;padding:0 10px;cursor:pointer;flex:0 0 auto}
-.sd-rail button:hover{background:var(--dnp-color-bg-hover)}
-.sd-rail button[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 35%,transparent);color:var(--dnp-color-text-primary)}
+.sd-rail.ui-rail .ui-rail__item{display:flex;align-items:center;gap:10px;height:auto;min-height:40px;text-align:left;padding:0 10px;cursor:pointer;flex:0 0 auto}
+
 .sd-rail .ico{font-size:17px;width:22px;text-align:center;flex:0 0 auto;--icon-size:20px}
-.sd-rail .sd-mod{font-weight:700;color:var(--dnp-color-text-primary);min-height:48px}
+.sd-rail .sd-mod{font-weight:700;min-height:48px}
 .sd-rail .sd-gap{flex:1 1 auto;min-height:8px}
-.sd-rail .sd-badge{margin-left:auto;background:var(--dnp-color-error);color:var(--dnp-color-accentInk);border-radius:9px;padding:0 6px;font-size:11px}
-@media (max-width:1100px){.sd-rail .lbl,.sd-rail .sd-badge{display:none}.sd-rail button{justify-content:center;padding:0}}
+.sd-rail .sd-badge{margin-left:auto;padding:0 6px;font-size:11px}
+@media (max-width:1100px){.sd-rail .lbl,.sd-rail .sd-badge{display:none}.sd-rail.ui-rail .ui-rail__item{justify-content:center;padding:0}}
 .sd-page{position:fixed;left:var(--rail-w);right:0;top:0;bottom:0;z-index:65;background:var(--dnp-color-bg-app);color:var(--dnp-color-text-primary);display:flex;flex-direction:column;
-  font:14px/1.4 var(--dnp-font-ui)}
+  font-size:14px;line-height:1.4;font-family:var(--dnp-font-ui)}
 .sd-page[hidden]{display:none}
-.sd-head{display:flex;align-items:center;gap:8px;padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top));border-bottom:1px solid var(--dnp-color-line-main);flex:0 0 auto}
+.sd-head{display:flex;align-items:center;gap:8px;height:auto;min-height:0;padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top));flex:0 0 auto}
 .sd-head .sd-title{font-weight:700;flex:1 1 auto}
-.sd-head button{min-width:44px;height:40px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);
-  font:600 13px/1 var(--dnp-font-ui);cursor:pointer;padding:0 12px}
-.sd-head button[disabled]{opacity:.35}
+.sd-head button{min-width:44px;height:40px;
+  font-size:13px;line-height:1;cursor:pointer;padding:0 12px}
+
 .sd-back{display:none}
 @media (orientation:portrait) and (max-width:900px){.sd-back{display:inline-block}}
 .sd-body{position:relative;flex:1 1 auto;min-height:0;overflow:auto}
 /* A section that was a sheet: its rows as a page, a readable column. */
 .sd-body.st-page{padding:12px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;max-width:980px}
-.sd-body.st-page button{min-width:44px;height:40px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);
-  font:600 13px/1 var(--dnp-font-ui);cursor:pointer;padding:0 12px}
+.sd-body.st-page button:where(:not(.ui-switch)){min-width:44px;height:40px;
+  font-size:13px;line-height:1;cursor:pointer;padding:0 12px}
 /* A section that was a window fills the page. */
 .sd-body > .wk{position:absolute;inset:0;padding-top:0;z-index:auto}
 /* The map editor's chrome and its sheets sit right of the rail. */
@@ -56,8 +55,10 @@ const STYLE = `
 .st-layer[data-page="1"] .st-sheet:not([data-open="1"]){display:none}
 .st-home-btn{display:none}
 /* A script, edited on its page. */
-.sd-code{width:100%;min-height:50vh;box-sizing:border-box;background:var(--dnp-color-bg-code);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);border-radius:8px;padding:10px;font:13px/1.45 var(--dnp-font-mono);tab-size:2}
+.sd-code{width:100%;min-height:50vh;box-sizing:border-box;padding:10px;font-size:13px;line-height:1.45;tab-size:2}
 .sd-body.st-page .st-grid .st-tile{height:88px;padding:0}
+/* A row of buttons wraps on a narrow screen rather than running off it (a kit button does not shrink). */
+.sd-body.st-page .st-row{flex-wrap:wrap}
 /* A page has the room for a label to be read. */
 .sd-body.st-page .st-row label{flex:0 0 13em}
 /* The metamap's grid. */
@@ -66,7 +67,7 @@ const STYLE = `
 .sd-body.st-page .sd-cell[data-cell-map]{border-style:solid;background:color-mix(in srgb,var(--dnp-color-accent) 18%,transparent)}
 .sd-body.st-page .sd-cell[data-on="1"],.sd-body.st-page button[data-loose][data-on="1"]{border-color:var(--dnp-color-select);box-shadow:0 0 0 2px var(--dnp-color-select) inset}
 /* What is wrong, each a way to it. */
-.sd-body.st-page .sd-problem{height:auto;min-height:36px;text-align:left;padding:6px 10px;color:var(--dnp-color-error);border-color:color-mix(in srgb,var(--dnp-color-error) 40%,transparent);white-space:normal}
+.sd-body.st-page .sd-problem{height:auto;min-height:36px;text-align:left;padding:6px 10px;white-space:normal}
 /* The particle preview has the page's room. */
 .sd-body.st-page .st-vfx-canvas{max-width:640px}
 /* Map thumbnails: on Home, in the Maps list, in the metamap's cells. */
@@ -76,7 +77,7 @@ const STYLE = `
    explains (a note) or repeats (a window's own ‹ back, beside the rail and
    the page's ‹ module) is left out there. */
 .sd-rail .sd-hist{display:none}
-.sd-rail button[disabled]{opacity:.35}
+
 @media (max-height:560px) and (orientation:landscape), (max-width:600px) and (orientation:portrait){
   .sd-head{padding:3px 8px;padding-top:calc(3px + env(safe-area-inset-top));gap:6px}
   .sd-head button{height:34px;min-width:38px;padding:0 10px}
@@ -93,7 +94,7 @@ const STYLE = `
      scrolled off the end of the bar. */
   body .wk .wk-top .wk-tabs{order:-1}
   .sd-rail{gap:0}
-  .sd-rail button{min-height:32px}
+  .sd-rail.ui-rail .ui-rail__item{min-height:32px}
   .sd-rail .sd-mod{min-height:36px}
 }
 /* A phone on its side, in a window: the window's bar is the header. */
@@ -102,9 +103,9 @@ const STYLE = `
   .sd-rail .sd-hist{display:flex}
 }
 /* The Play log: the shells' and the studio's lines, the failures in red. */
-.sd-log{font:11px/1.45 var(--dnp-font-mono);background:var(--dnp-color-bg-code);border:1px solid var(--dnp-color-line-main);border-radius:8px;padding:6px 8px;max-height:46vh;overflow:auto;-webkit-overflow-scrolling:touch}
+.sd-log{font-size:11px;line-height:1.45;padding:6px 8px;max-height:46vh;overflow:auto;-webkit-overflow-scrolling:touch}
 .sd-log-line{white-space:pre-wrap;word-break:break-word}
-.sd-log-bad{color:var(--dnp-color-error)}
+
 .sd-thumb{display:block;width:100%;aspect-ratio:16/10;border-radius:6px;background:var(--dnp-color-bg-sunken)}
 .sd-thumb-row{width:96px;flex:0 0 96px}
 .sd-body.st-page .sd-cell{position:relative;overflow:hidden}
@@ -118,7 +119,7 @@ const STYLE = `
 .sd-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .sd-maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .sd-body.st-page .sd-tile,.sd-body.st-page .sd-map{height:auto;min-height:72px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;
-  padding:10px 12px;text-align:left;border-radius:10px}
+  padding:10px 12px;text-align:left}
 .sd-tile .ico{font-size:22px;--icon-size:24px}
 .sd-tile .lbl,.sd-map .lbl{font-weight:700}
 @media (orientation:portrait) and (max-width:900px){.st-home-btn{display:inline-block}}
@@ -133,15 +134,20 @@ export class Shell {
     this.router = router
     this.on = on
     document.head.appendChild(el('style', { text: STYLE }))
-    this.rail = el('nav', { class: 'sd-rail' })
-    this.title = el('span', { class: 'sd-title' })
+    this.rail = el('nav', { class: 'sd-rail ui-rail' })
+    // A narrow screen's rail is icons only: the kit's compact rail.
+    const narrow = matchMedia('(max-width:1100px)')
+    const compact = () => this.rail.classList.toggle('ui-rail--compact', narrow.matches)
+    narrow.addEventListener?.('change', compact)
+    compact()
+    this.title = el('span', { class: 'sd-title ui-topbar__title' })
     this.actions = el('span', { class: 'sd-actions' })
     this.back = el('button', { class: 'sd-back', onclick: () => router.go('home') }, withIcon('action.back', 'module'))
     // The module's own undo: what a page changes is the module document, which
     // has a history of its own beside each map's.
-    this.undoBtn = el('button', { title: 'undo (the module)', 'data-action': 'undo', onclick: () => on.undo?.() }, withIcon('action.undo'))
-    this.redoBtn = el('button', { title: 'redo (the module)', 'data-action': 'redo', onclick: () => on.redo?.() }, withIcon('action.redo'))
-    this.head = el('div', { class: 'sd-head' }, [this.back, this.title, this.actions, this.undoBtn, this.redoBtn])
+    this.undoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'undo (the module)', 'data-action': 'undo', onclick: () => on.undo?.() }, withIcon('action.undo'))
+    this.redoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'redo (the module)', 'data-action': 'redo', onclick: () => on.redo?.() }, withIcon('action.redo'))
+    this.head = el('div', { class: 'sd-head ui-topbar' }, [this.back, this.title, this.actions, this.undoBtn, this.redoBtn])
     this.body = el('div', { class: 'sd-body' })
     this.page = el('div', { class: 'sd-page' }, [this.head, this.body])
     this.page.hidden = true
@@ -155,22 +161,22 @@ export class Shell {
   drawRail () {
     const cur = this.router.current
     const lit = cur?.section.parent ?? cur?.id
-    const items = [el('button', { class: 'sd-mod', title: 'the module', 'data-section': 'home', 'data-on': lit === 'home' ? '1' : '0',
-      onclick: () => this.router.go('home') }, [el('span', { class: 'ico' }, withIcon('section.home')), el('span', { class: 'lbl', text: this.moduleName })])]
+    const items = [el('button', { class: 'sd-mod ui-rail__item', title: 'the module', 'data-section': 'home', 'data-on': lit === 'home' ? '1' : '0',
+      onclick: () => this.router.go('home') }, [el('span', { class: 'ico' }, withIcon('section.home')), el('span', { class: 'lbl ui-rail__label', text: this.moduleName })])]
     for (const s of this.router.rail) {
       if (s.id === 'home') continue
       const n = this.badges.get(s.id) ?? 0
-      items.push(el('button', { title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => this.router.go(s.id) },
-        [icon(s.icon, 'ico'), el('span', { class: 'lbl', text: s.label }), n ? el('span', { class: 'sd-badge', text: String(n) }) : null].filter(Boolean)))
+      items.push(el('button', { class: 'ui-rail__item', title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => this.router.go(s.id) },
+        [icon(s.icon, 'ico'), el('span', { class: 'lbl ui-rail__label', text: s.label }), n ? el('span', { class: 'sd-badge ui-rail__badge ui-badge ui-badge--error', text: String(n) }) : null].filter(Boolean)))
     }
     // Undo and redo, for a phone on its side, where a window's own bar is the
     // header and the page's row (which holds them) gives its height back.
-    this.railUndo = el('button', { class: 'sd-hist', title: 'undo (the module)', 'data-action': 'rail-undo', onclick: () => this.on.undo?.() }, [el('span', { class: 'ico' }, withIcon('action.undo')), el('span', { class: 'lbl', text: 'Undo' })])
-    this.railRedo = el('button', { class: 'sd-hist', title: 'redo (the module)', 'data-action': 'rail-redo', onclick: () => this.on.redo?.() }, [el('span', { class: 'ico' }, withIcon('action.redo')), el('span', { class: 'lbl', text: 'Redo' })])
+    this.railUndo = el('button', { class: 'sd-hist ui-rail__item', title: 'undo (the module)', 'data-action': 'rail-undo', onclick: () => this.on.undo?.() }, [el('span', { class: 'ico' }, withIcon('action.undo')), el('span', { class: 'lbl ui-rail__label', text: 'Undo' })])
+    this.railRedo = el('button', { class: 'sd-hist ui-rail__item', title: 'redo (the module)', 'data-action': 'rail-redo', onclick: () => this.on.redo?.() }, [el('span', { class: 'ico' }, withIcon('action.redo')), el('span', { class: 'lbl ui-rail__label', text: 'Redo' })])
     this.railUndo.disabled = this.undoBtn.disabled; this.railRedo.disabled = this.redoBtn.disabled
     items.push(el('div', { class: 'sd-gap' }), this.railUndo, this.railRedo,
-      el('button', { title: 'play the map being edited', 'data-action': 'play', onclick: () => this.on.play() }, [el('span', { class: 'ico' }, withIcon('transport.play')), el('span', { class: 'lbl', text: 'Play' })]),
-      el('button', { title: 'export the module as a pack', 'data-action': 'export', onclick: () => this.on.exportPack() }, [el('span', { class: 'ico' }, withIcon('action.export')), el('span', { class: 'lbl', text: 'Export' })]))
+      el('button', { class: 'ui-rail__item', title: 'play the map being edited', 'data-action': 'play', onclick: () => this.on.play() }, [el('span', { class: 'ico' }, withIcon('transport.play')), el('span', { class: 'lbl ui-rail__label', text: 'Play' })]),
+      el('button', { class: 'ui-rail__item', title: 'export the module as a pack', 'data-action': 'export', onclick: () => this.on.exportPack() }, [el('span', { class: 'ico' }, withIcon('action.export')), el('span', { class: 'lbl ui-rail__label', text: 'Export' })]))
     this.rail.replaceChildren(...items)
   }
 

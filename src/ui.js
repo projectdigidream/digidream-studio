@@ -9,52 +9,45 @@
 //
 const STYLE = `
 .st-layer{position:fixed;inset:0;pointer-events:none;z-index:50;
-  font:14px/1.4 var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
+  font-size:14px;line-height:1.4;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
 /* WRAPS, because the bar is eight buttons now and a narrow phone is 360 CSS
    pixels: eight at their 56px floor plus the gaps does not fit on one row, and
    a bar that overflows puts More off the edge of the screen. */
 .st-bar{position:absolute;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;gap:6px;padding:8px;
-  padding-bottom:calc(8px + env(safe-area-inset-bottom));justify-content:center;pointer-events:auto;
-  background:linear-gradient(transparent,color-mix(in srgb,var(--dnp-color-bg-app) 90%,transparent) 40%)}
-.st-bar button{flex:0 1 96px;min-width:56px;height:52px;border-radius:10px;
-  background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);
-  font:600 12px/1.1 var(--dnp-font-ui);cursor:pointer;display:flex;flex-direction:column;
+  padding-bottom:calc(8px + env(safe-area-inset-bottom));justify-content:center;pointer-events:auto}
+.st-bar.ui-toolbar .ui-toolbar__tool{flex:0 1 96px;min-width:56px;height:52px;
+  font-size:12px;line-height:1.1;cursor:pointer;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:3px}
 /* Icons (icon(id)): as tall as the text round them, unless a place says otherwise. */
 .ui-icon.st-i{--icon-size:1.25em;vertical-align:-.25em}
 .st-i-label{margin-left:.4em}
-.st-bar button .ico{font-size:18px;line-height:1;--icon-size:20px}
-.st-bar button[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 55%,transparent);border-color:color-mix(in srgb,var(--dnp-color-text-primary) 70%,transparent)}
+.st-bar.ui-toolbar .ui-toolbar__tool .ico{font-size:18px;line-height:1;--icon-size:20px}
+
 /* A phone held upright: the eight tools in ONE row of icon-first buttons
    (they fit at 390 CSS px once each takes an equal share), not three rows
    over the bottom third of the map. On its side: a lower bar. */
 @media (max-width:600px) and (orientation:portrait){
   .st-bar{flex-wrap:nowrap;gap:4px;padding:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
-  .st-bar button{flex:1 1 0;min-width:0;height:50px;font-size:9px;letter-spacing:-.2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
-  .st-bar button .ico{font-size:17px;--icon-size:19px}
+  .st-bar.ui-toolbar .ui-toolbar__tool{flex:1 1 0;min-width:0;height:50px;font-size:9px;letter-spacing:-.2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+  .st-bar.ui-toolbar .ui-toolbar__tool .ico{font-size:17px;--icon-size:19px}
 }
 @media (max-height:560px) and (orientation:landscape){
   .st-bar{padding:4px 6px;padding-bottom:calc(4px + env(safe-area-inset-bottom))}
-  .st-bar button{height:42px;font-size:10px;gap:2px}
-  .st-bar button .ico{font-size:15px;--icon-size:16px}
+  .st-bar.ui-toolbar .ui-toolbar__tool{height:42px;font-size:10px;gap:2px}
+  .st-bar.ui-toolbar .ui-toolbar__tool .ico{font-size:15px;--icon-size:16px}
 }
 .st-top{position:absolute;left:0;right:0;top:0;display:flex;gap:6px;align-items:flex-start;
   padding:8px;padding-top:calc(8px + env(safe-area-inset-top));padding-left:calc(8px + env(safe-area-inset-left));
   padding-right:calc(8px + env(safe-area-inset-right))}
-.st-status{flex:1 1 auto;pointer-events:auto;cursor:pointer;background:color-mix(in srgb,var(--dnp-color-bg-app) 70%,transparent);border-radius:8px;padding:6px 10px;
+.st-status{flex:1 1 auto;pointer-events:auto;cursor:pointer;padding:6px 10px;
   font-size:12px;white-space:pre-wrap;max-height:30vh;overflow:auto;min-height:20px}
-.st-status[data-level="error"]{color:var(--dnp-color-error)}
-.st-status[data-level="warn"]{color:var(--dnp-color-warn)}
-.st-status[data-level="ok"]{color:var(--dnp-color-ok)}
+
 .st-side{display:flex;gap:6px;pointer-events:auto}
-.st-side button,.st-sheet button,.st-row button{min-width:44px;height:44px;border-radius:8px;
-  background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);
-  font:600 13px/1 var(--dnp-font-ui);cursor:pointer;padding:0 12px}
-.st-side button[disabled]{opacity:.35}
-.st-side button[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 55%,transparent)}
+.st-side button,.st-sheet button:where(:not(.ui-switch)),.st-row button:where(:not(.ui-switch)){min-width:44px;height:44px;
+  font-size:13px;line-height:1;cursor:pointer;padding:0 12px}
+
 .st-sheet{position:absolute;left:0;right:0;bottom:0;max-height:62vh;display:flex;flex-direction:column;
-  pointer-events:auto;background:var(--dnp-color-bg-overlay);border-top:1px solid var(--dnp-color-line-strong);border-radius:14px 14px 0 0;
-  box-shadow:var(--dnp-shadow-raised);transform:translateY(100%);transition:transform 160ms ease-out}
+  pointer-events:auto;transform:translateY(100%);transition:transform 160ms ease-out}
 .st-sheet[data-open="1"]{transform:none}
 /* Closing, it must stop taking taps at once, not when the slide has finished:
    the tap that dismissed it is usually followed by one on the floor. */
@@ -62,13 +55,12 @@ const STYLE = `
 /* Landscape with room to spare: the sheet is a panel down the right side and
    the map keeps its full height; the bars step out of its way. */
 @media (orientation: landscape) and (min-width: 700px) {
-  .st-sheet{left:auto;top:0;bottom:0;right:0;width:min(420px,45vw);max-height:none;border-radius:14px 0 0 14px;
-    border-top:0;border-left:1px solid var(--dnp-color-line-strong);transform:translateX(100%);padding-top:env(safe-area-inset-top)}
+  .st-sheet{left:auto;top:0;bottom:0;right:0;width:min(420px,45vw);max-height:none;border-left:1px solid var(--dnp-color-line-strong);transform:translateX(100%);padding-top:env(safe-area-inset-top)}
   .st-sheet[data-open="1"]{transform:none}
   .st-layer[data-sheet="1"] .st-bar{right:min(420px,45vw)}
   .st-layer[data-sheet="1"] .st-top{right:min(420px,45vw)}
 }
-.st-sheet-title{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--dnp-color-line-strong);font-weight:600}
+.st-sheet-title{display:flex;align-items:center;gap:8px;padding:10px 14px}
 .st-sheet-title span{flex:1 1 auto}
 .st-sheet-body{padding:10px 14px;padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow:auto;
   display:flex;flex-direction:column;gap:10px}
@@ -79,38 +71,40 @@ const STYLE = `
 @keyframes st-sheet-v{from{background-position:0 0%}to{background-position:0 100%}}
 @keyframes st-sheet-h{from{background-position:0% 0}to{background-position:100% 0}}
 .st-row.st-has-help > input:not([type=checkbox]),.st-row.st-has-help > select:not([multiple]){min-width:0;flex:1 1 0}
-.st-help{flex:0 0 auto;width:26px;height:26px;min-width:0;min-height:0;padding:0;border-radius:50%;font-size:13px;line-height:24px;opacity:.7;background:transparent;border:1px solid color-mix(in srgb,var(--dnp-color-text-primary) 25%,transparent);color:var(--dnp-color-text-primary)}
-.st-help[data-on="1"]{opacity:1;border-color:var(--dnp-color-accent);background:color-mix(in srgb,var(--dnp-color-accent) 20%,transparent)}
-.st-help-text{flex:1 1 100%;font:12px/1.45 var(--dnp-font-ui);color:var(--dnp-color-text-secondary);white-space:pre-wrap;padding:2px 2px 6px}
+.st-help{flex:0 0 auto;width:26px;height:26px;min-width:0;min-height:0;padding:0;font-size:13px;line-height:24px}
+
+.st-help-text{flex:1 1 100%;font-size:12px;line-height:1.45;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-secondary);white-space:pre-wrap;padding:2px 2px 6px}
 .st-row label{flex:0 0 7em;opacity:.8;font-size:12px}
 .st-row input[type=range]{flex:1 1 auto;min-width:60px;height:44px}
+/* A slider row: the track across, the unseen range over it to take the finger. */
+.st-slide{position:relative;flex:1 1 auto;min-width:60px;height:44px;display:flex;align-items:center}
+.st-slide .ui-slider__track{width:100%}
+.st-slide-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
 .st-row input[type=number],.st-row input[type=text],.st-row select,.st-row textarea{
-  flex:1 1 auto;min-width:0;height:40px;border-radius:8px;background:var(--dnp-color-bg-input);color:var(--dnp-color-text-primary);
-  border:1px solid var(--dnp-color-line-strong);font:inherit;padding:0 10px}
+  flex:1 1 auto;min-width:0;height:40px;padding:0 10px}
 .st-row textarea{height:auto;min-height:80px;padding:8px}
 .st-val{flex:0 0 4em;text-align:right;opacity:.75;font-variant-numeric:tabular-nums}
 .st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
-.st-tile{height:72px;border-radius:8px;border:1px solid var(--dnp-color-line-strong);background:var(--dnp-color-bg-input) center/cover;
+/* the picture fills the tile, the kit draws the tile */
+.st-tile{background-position:center;background-size:cover;height:72px;
   display:flex;align-items:flex-end;justify-content:center;cursor:pointer;overflow:hidden;position:relative}
 .st-tile span{font-size:10px;background:color-mix(in srgb,var(--dnp-color-bg-app) 75%,transparent);width:100%;text-align:center;padding:2px 0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-tile[data-on="1"]{border-color:var(--dnp-color-select);box-shadow:0 0 0 2px var(--dnp-color-select) inset}
-.st-chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:18px;
-  background:var(--dnp-color-bg-hover);border:1px solid var(--dnp-color-line-strong);cursor:pointer;font-size:12px}
-.st-chip[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 55%,transparent);border-color:color-mix(in srgb,var(--dnp-color-text-primary) 70%,transparent)}
+
+.st-chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;cursor:pointer;font-size:12px}
+
 .st-chips{display:flex;flex-wrap:wrap;gap:6px}
-.st-card{border:1px solid var(--dnp-color-line-strong);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--dnp-color-bg-panel)}
+.st-card{padding:10px;display:flex;flex-direction:column;gap:8px}
 .st-card h4{margin:0;font-size:13px;display:flex;align-items:center;gap:8px}
 .st-card h4 span{flex:1 1 auto}
 .st-muted{opacity:.6;font-size:12px}
 .st-danger{color:var(--dnp-color-error)}
 .st-row select.st-sound[data-missing="1"]{border-color:var(--dnp-color-error);color:var(--dnp-color-error)}
-.st-problem{background:color-mix(in srgb,var(--dnp-color-error) 12%,transparent);border:1px solid color-mix(in srgb,var(--dnp-color-error) 45%,transparent);border-radius:8px;padding:8px 10px;white-space:pre-wrap;font-size:12px}
-.st-warn-box{color:var(--dnp-color-warn);background:color-mix(in srgb,var(--dnp-color-warn) 10%,transparent);border:1px solid color-mix(in srgb,var(--dnp-color-warn) 40%,transparent);border-radius:8px;padding:8px 10px;white-space:pre-wrap;font-size:12px}
-.st-trow{display:flex;gap:10px;align-items:center;min-height:56px;border:1px solid var(--dnp-color-line-strong);border-radius:10px;
-  padding:6px 12px;cursor:pointer;background:var(--dnp-color-bg-panel)}
-.st-trow:hover{background:var(--dnp-color-bg-hover)}
-.st-trow[data-on="1"]{border-color:var(--dnp-color-select)}
+.st-problem{padding:8px 10px;white-space:pre-wrap;font-size:12px}
+.st-warn-box{padding:8px 10px;white-space:pre-wrap;font-size:12px}
+.st-trow{display:flex;gap:10px;align-items:center;min-height:56px;
+  padding:6px 12px;cursor:pointer}
+
 /* The swing's two views, and the particle preview: both are pictures of
    numbers that are hard to read as numbers. */
 .st-swing-canvas{width:100%;max-width:336px;aspect-ratio:336/172;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-main);border-radius:10px;align-self:center}
@@ -119,25 +113,22 @@ const STYLE = `
   justify-content:center;overflow:hidden;image-rendering:pixelated;color:var(--dnp-color-text-dim);font-size:24px;flex:0 0 auto}
 .st-thumb img{max-width:100%;max-height:100%}
 .st-trow .st-thumb{width:48px;height:48px;font-size:14px}
-.st-trow-bad{border-color:var(--dnp-color-error)}
+
 .st-trow-text{flex:1 1 auto;min-width:0}
 .st-trow-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-mark{font-size:20px;line-height:1;flex:0 0 auto;width:28px;text-align:center}
-.st-section{border-left:4px solid var(--tone);border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:8px;
-  background:linear-gradient(90deg,color-mix(in srgb,var(--tone) 12%,transparent),transparent 60%)}
-.st-section-head{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.06em;font-size:12px;color:var(--tone)}
+.st-section{padding:8px 10px;display:flex;flex-direction:column;gap:8px}
+.st-section-head{display:flex;align-items:center;gap:8px;letter-spacing:.06em;font-size:12px}
 .st-when{--tone:var(--dnp-color-tone-when)}
 .st-if{--tone:var(--dnp-color-tone-if)}
 .st-then{--tone:var(--dnp-color-tone-then)}
 .st-entry{flex:1 1 auto;font-weight:600}
-.st-menu{position:absolute;right:8px;bottom:80px;display:flex;flex-direction:column;gap:4px;pointer-events:auto;
-  background:var(--dnp-color-bg-overlay);border:1px solid var(--dnp-color-line-strong);border-radius:10px;padding:6px;min-width:200px;
+.st-menu{position:absolute;right:8px;bottom:80px;display:flex;flex-direction:column;gap:4px;pointer-events:auto;padding:6px;min-width:200px;
   /* Taller than a phone on its side: it scrolls rather than running off the top. */
   max-height:calc(100vh - 96px - env(safe-area-inset-top));overflow-y:auto;overscroll-behavior:contain}
 .st-menu button{flex:0 0 auto}
-.st-menu button{height:44px;text-align:left;background:transparent;border:0;color:var(--dnp-color-text-primary);font:inherit;padding:0 12px;
-  border-radius:6px;cursor:pointer}
-.st-menu button:hover{background:var(--dnp-color-bg-hover)}
+.st-menu button{height:44px;text-align:left;padding:0 12px;cursor:pointer}
+
 /* The sheet is dense: a phone shows a few rows of a room's numbers beside the
    map, and 44px rows showed three. Still finger-sized, just not spread out. */
 .st-sheet{font-size:13px}
@@ -148,7 +139,8 @@ const STYLE = `
 .st-sheet .st-row input[type=number],.st-sheet .st-row input[type=text],.st-sheet .st-row select{height:30px;padding:0 8px;font-size:12px}
 .st-sheet .st-row textarea{min-height:64px;font-size:12px}
 .st-sheet .st-row input[type=range]{height:30px}
-.st-sheet button,.st-sheet .st-row button{min-width:34px;height:32px;padding:0 10px;font-size:12px}
+.st-sheet .st-slide{height:30px}
+.st-sheet button:where(:not(.ui-switch)),.st-sheet .st-row button:where(:not(.ui-switch)){min-width:34px;height:32px;padding:0 10px;font-size:12px}
 .st-sheet .st-chip{height:28px;padding:0 9px;font-size:11px}
 .st-sheet .st-tile{height:56px}
 .st-sheet .st-card{padding:6px 8px;gap:5px}
@@ -166,7 +158,7 @@ const STYLE = `
 .st-hidden{display:none!important}
 /* A question: window.prompt is not there in Electron, nor in a phone's WebView
    without native help on each platform, so the studio asks with its own. */
-.st-dialog{background:var(--dnp-color-bg-panel);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);border-radius:12px;padding:14px;width:min(360px,92vw);font:inherit}
+.st-dialog{padding:14px;width:min(360px,92vw)}
 .st-dialog::backdrop{background:var(--dnp-color-scrim)}
 .st-dialog form{display:flex;flex-direction:column;gap:10px}
 .st-dialog .st-row label{flex:1 1 auto}
@@ -177,13 +169,12 @@ const STYLE = `
 .wk[data-nograph="1"]{grid-template-columns:340px 1fr;grid-template-areas:"top top" "preview details"}
 .wk{position:fixed;inset:0;z-index:60;background:var(--dnp-color-bg-app);color:var(--dnp-color-text-primary);display:grid;
   grid-template-rows:auto 1fr;grid-template-columns:340px 1fr 400px;grid-template-areas:"top top top" "preview graph details";
-  font:14px/1.4 var(--dnp-font-ui);padding-top:env(safe-area-inset-top)}
+  font-size:14px;line-height:1.4;font-family:var(--dnp-font-ui);padding-top:env(safe-area-inset-top)}
 .wk[hidden]{display:none}
-.wk-top{grid-area:top;display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--dnp-color-line-main);flex-wrap:wrap}
-.wk-top button,.wk-bar button,.wk-details button,.wk-preview button{min-width:44px;height:40px;border-radius:8px;background:var(--dnp-color-bg-raised);
-  color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 12px/1 var(--dnp-font-ui);cursor:pointer;padding:0 12px}
+.wk-top{grid-area:top;display:flex;gap:8px;align-items:center;height:auto;padding:8px 12px;flex-wrap:wrap}
+.wk-top button:where(:not(.ui-switch)),.wk-bar button:where(:not(.ui-switch)),.wk-details button:where(:not(.ui-switch)),.wk-preview button:where(:not(.ui-switch)){min-width:44px;height:40px;font-size:12px;line-height:1;cursor:pointer;padding:0 12px}
 .wk-tabs{display:flex;gap:4px}
-.wk-tabs button[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 55%,transparent);border-color:color-mix(in srgb,var(--dnp-color-text-primary) 70%,transparent)}
+
 .wk-preview{grid-area:preview;border-right:1px solid var(--dnp-color-line-main);padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
 .wk-title{font-weight:700}
 .wk-canvas{width:100%;max-width:320px;aspect-ratio:1;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-main);border-radius:10px;touch-action:none;
@@ -195,15 +186,15 @@ const STYLE = `
 .wk-bar{flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;padding:8px}
 .wk-board{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;
   background-color:var(--cv-graph-board);background-image:radial-gradient(var(--cv-graph-dot-fill) 1px,transparent 1px);background-size:var(--cv-graph-dot-size) var(--cv-graph-dot-size)}
-.wk-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;background:color-mix(in srgb,var(--dnp-color-bg-app) 85%,transparent);border:1px solid var(--dnp-color-line-main);border-radius:10px;padding:4px}
-.wk-zoom button{min-width:36px;height:34px;padding:0 8px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 15px/1 var(--dnp-font-ui);cursor:pointer}
-.wk-zoom-pct{font:600 11px var(--dnp-font-mono);color:var(--dnp-color-text-secondary);min-width:42px;text-align:center}
+.wk-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;padding:4px}
+.wk-zoom button{min-width:36px;height:34px;padding:0 8px;font-size:15px;line-height:1;cursor:pointer}
+.wk-zoom-pct{font-size:11px;min-width:42px;text-align:center}
 .wk-world{position:absolute;left:0;top:0;width:4000px;height:4000px;transform-origin:0 0}
 .wk-edges{position:absolute;left:0;top:0;width:4000px;height:4000px;overflow:visible}
 .wk-edge{fill:none;stroke:var(--cv-graph-edge-transition);stroke-width:var(--cv-graph-edge-transition-width)}
 .wk-edge-next{stroke-dasharray:8 6;stroke:var(--cv-graph-edge-next);stroke-width:var(--cv-graph-edge-next-width)}
 .wk-edge-goto{stroke-dasharray:2 5;stroke:var(--cv-graph-edge-goto);stroke-width:var(--cv-graph-edge-goto-width)}
-.wk-label{font:var(--cv-graph-edge-label-font);fill:var(--cv-graph-edge-label);paint-order:stroke;stroke:var(--cv-graph-edge-label-fill);stroke-width:4px;cursor:pointer;pointer-events:auto}
+.wk-label{font:var(--cv-graph-edge-label-font);font-variant-ligatures:inherit;fill:var(--cv-graph-edge-label);paint-order:stroke;stroke:var(--cv-graph-edge-label-fill);stroke-width:4px;cursor:pointer;pointer-events:auto}
 .wk-node{position:absolute;width:168px;height:72px;box-sizing:border-box;border:var(--cv-graph-state-width) solid var(--cv-graph-state);border-radius:var(--cv-graph-state-radius);background:var(--cv-graph-state-fill);
   padding:8px 10px;cursor:grab;user-select:none;touch-action:none;display:flex;flex-direction:column;gap:2px;font-size:11px}
 .wk-node-name{font-weight:700;font-size:13px}
@@ -258,9 +249,67 @@ const el = (tag, attrs = {}, children = []) => {
     else if (v !== null && v !== undefined) e.setAttribute(k, v)
   }
   for (const c of [].concat(children)) if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c)
+  kitClass(e, attrs.type)
   return e
 }
 export { el }
+
+// --- the kit's classes (docs/STUDIO_SKINS.md, phase 4) ------------------------------
+// Every control the studio makes wears the uikit class for what it is, beside
+// the studio's own, so a skin styles the control and not only its colours. A
+// plain button is a ui-button and a text input a ui-field, unless it was
+// given a kit class of its own (a rail item, a tab, a tool…).
+const KIT_TAG = { button: 'ui-button', select: 'ui-field ui-field--select', textarea: 'ui-field ui-field--code' }
+const NOT_FIELDS = new Set(['range', 'checkbox', 'radio', 'color', 'file', 'hidden', 'submit', 'button'])
+// The studio's own classes, and the kit's for the same thing.
+const KIT_CLASS = {
+  'st-problem': 'ui-callout ui-callout--error', 'st-warn-box': 'ui-callout ui-callout--warn',
+  'st-trow': 'ui-row', 'st-trow-bad': 'is-bad', 'st-trow-name': 'ui-row__name',
+  'st-chip': 'ui-chip', 'st-tile': 'ui-tile', 'st-card': 'ui-card',
+  'st-section': 'ui-section', 'st-when': 'ui-section--when', 'st-if': 'ui-section--if', 'st-then': 'ui-section--then',
+  'st-section-head': 'ui-heading', 'st-help': 'ui-help',
+  'sd-log': 'ui-log', 'sd-log-line': 'ui-log__line', 'sd-log-bad': 'ui-log__bad',
+  'sd-code': 'ui-field ui-field--code', 'sd-key': 'ui-key', 'sd-key-wait': 'ui-key is-waiting',
+  'wk-top': 'ui-topbar', 'wk-title': 'ui-topbar__title', 'wk-tabs': 'ui-tabs',
+  'gw-menu': 'ui-menu', 'gw-menu-item': 'ui-menu__item', 'gw-menu-group': 'ui-menu__group',
+  'wk-zoom-pct': 'ui-pill', 'gw-zoom-pct': 'ui-pill', 'pw-zoom-pct': 'ui-pill'
+}
+const ZOOMS = ['wk-zoom', 'gw-zoom', 'pw-zoom']
+function kitClass (e, type) {
+  for (const c of [...e.classList]) if (KIT_CLASS[c]) e.classList.add(...KIT_CLASS[c].split(' '))
+  // A section's head is the section's; tabs and zoom bars style their buttons.
+  if (e.classList.contains('ui-section')) for (const h of e.querySelectorAll(':scope > .st-section-head')) h.classList.replace('ui-heading', 'ui-section__head')
+  if (e.classList.contains('ui-tabs')) for (const b of e.querySelectorAll(':scope > button')) { b.classList.remove('ui-button'); b.classList.add('ui-tabs__tab') }
+  if (ZOOMS.some((z) => e.classList.contains(z))) for (const b of e.querySelectorAll(':scope > button')) b.classList.add('ui-button--small')
+  if (!/(^|\s)ui-/.test(e.className)) {
+    const tag = e.tagName.toLowerCase()
+    const k = tag === 'input' ? (NOT_FIELDS.has(type ?? 'text') ? null : 'ui-field') : KIT_TAG[tag]
+    if (k) e.classList.add(...k.split(' '))
+  }
+  if (e.classList.contains('ui-button')) {
+    if (e.classList.contains('st-danger')) e.classList.add('ui-button--danger')
+    if (e.classList.contains('st-dim')) e.classList.add('is-disabled')
+  }
+  if (e.dataset.on !== undefined) syncOn(e)
+}
+
+/**
+ * The studio marks what is on (or picked) with data-on="1"; the kit with a
+ * state class: is-selected on a row or a tile, is-on on everything else.
+ * Kept in step for every element, however its data-on was set.
+ */
+function syncOn (e) {
+  const picked = e.classList.contains('ui-row') || e.classList.contains('ui-tile') || e.classList.contains('ui-strip__item')
+  e.classList.toggle(picked ? 'is-selected' : 'is-on', e.dataset.on === '1')
+}
+let watchingOn = false
+/** Start keeping is-on / is-selected in step with data-on, page-wide. */
+export function watchKitStates (root = document.documentElement) {
+  if (watchingOn) return
+  watchingOn = true
+  new MutationObserver((list) => { for (const m of list) if (m.target.dataset) syncOn(m.target) })
+    .observe(root, { subtree: true, attributes: true, attributeFilter: ['data-on'] })
+}
 
 // --- icons (docs/STUDIO_SKINS.md, phase 3) -----------------------------------------
 // Every icon the studio shows is a catalog id (vendor/uikit/catalog/icons.json):
@@ -324,30 +373,36 @@ export class Ui {
     this.on = on
     document.head.appendChild(el('style', { text: STYLE }))
     this.layer = el('div', { class: 'st-layer' })
-    this.status = el('div', { class: 'st-status', text: '' })
-    this.undoBtn = el('button', { title: 'undo', onclick: () => on.undo() }, [icon('action.undo')])
-    this.redoBtn = el('button', { title: 'redo', onclick: () => on.redo() }, [icon('action.redo')])
+    this.status = el('div', { class: 'st-status ui-pill', text: '' })
+    this.undoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'undo', onclick: () => on.undo() }, [icon('action.undo')])
+    this.redoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'redo', onclick: () => on.redo() }, [icon('action.redo')])
     this.viewBtn = el('button', { text: 'PLAN', title: 'plan / game view', onclick: () => on.view() })
-    this.rotL = el('button', { title: 'rotate', onclick: () => on.rotate(-1) }, [icon('action.rotateleft')])
-    this.rotR = el('button', { title: 'rotate', onclick: () => on.rotate(1) }, [icon('action.rotate')])
+    this.rotL = el('button', { class: 'ui-button ui-button--icon', title: 'rotate', onclick: () => on.rotate(-1) }, [icon('action.rotateleft')])
+    this.rotR = el('button', { class: 'ui-button ui-button--icon', title: 'rotate', onclick: () => on.rotate(1) }, [icon('action.rotate')])
     // Back to the module, on a phone held upright where there is no rail.
-    this.homeBtn = el('button', { class: 'st-home-btn', title: 'the module', onclick: () => on.home?.() }, [icon('action.back')])
+    this.homeBtn = el('button', { class: 'st-home-btn ui-button ui-button--icon', title: 'the module', onclick: () => on.home?.() }, [icon('action.back')])
     this.side = el('div', { class: 'st-side' }, [this.homeBtn, this.undoBtn, this.redoBtn, this.rotL, this.rotR, this.viewBtn])
     this.top = el('div', { class: 'st-top' }, [this.status, this.side])
-    this.bar = el('div', { class: 'st-bar' })
+    this.bar = el('div', { class: 'st-bar ui-toolbar' })
     this.buttons = {}
     for (const t of TOOLS) {
-      const b = el('button', { onclick: () => on.tool(t.id) }, [icon(t.ico, 'ico'), el('span', { text: t.label })])
+      const b = el('button', { class: 'ui-toolbar__tool', onclick: () => on.tool(t.id) }, [icon(t.ico, 'ico'), el('span', { class: 'ui-toolbar__label', text: t.label })])
       this.buttons[t.id] = b
       this.bar.appendChild(b)
     }
-    this.sheetTitle = el('span')
-    this.sheetBody = el('div', { class: 'st-sheet-body' })
-    this.sheet = el('div', { class: 'st-sheet' }, [
-      el('div', { class: 'st-sheet-title' }, [this.sheetTitle, el('button', { title: 'close', onclick: () => this.hideSheet() }, [icon('action.close')])]),
+    this.sheetTitle = el('span', { class: 'ui-sheet__title' })
+    this.sheetBody = el('div', { class: 'st-sheet-body ui-sheet__body' })
+    this.sheet = el('div', { class: 'st-sheet ui-sheet' }, [
+      el('div', { class: 'st-sheet-title ui-sheet__head' }, [this.sheetTitle, el('button', { class: 'ui-button ui-button--icon', title: 'close', onclick: () => this.hideSheet() }, [icon('action.close')])]),
       this.sheetBody
     ])
-    this.menu = el('div', { class: 'st-menu st-hidden' })
+    // On its side with room to spare the sheet is a panel down the right: the kit's side sheet.
+    const side = matchMedia('(orientation: landscape) and (min-width: 700px)')
+    const sideSheet = () => this.sheet.classList.toggle('ui-sheet--side', side.matches)
+    side.addEventListener?.('change', sideSheet)
+    sideSheet()
+    this.menu = el('div', { class: 'st-menu ui-menu st-hidden' })
+    watchKitStates()
     this.layer.append(this.top, this.sheet, this.menu, this.bar)
     document.body.appendChild(this.layer)
     this.onSheetClose = null
@@ -371,6 +426,7 @@ export class Ui {
   setStatus (text, level = '') {
     this.status.textContent = text
     this.status.dataset.level = level
+    for (const l of ['ok', 'warn', 'error']) this.status.classList.toggle(`ui-pill--${l}`, level === l)
     this.status.classList.toggle('st-hidden', !text)
   }
 
@@ -403,7 +459,7 @@ export class Ui {
   get sheetOpen () { return this.sheet.dataset.open === '1' }
 
   showMenu (items) {
-    this.menu.replaceChildren(...items.map(([label, fn]) => el('button', { text: label, onclick: () => { this.hideMenu(); fn() } })))
+    this.menu.replaceChildren(...items.map(([label, fn]) => el('button', { class: 'ui-menu__item', text: label, onclick: () => { this.hideMenu(); fn() } })))
     this.menu.classList.remove('st-hidden')
     const off = (e) => { if (!this.menu.contains(e.target)) { this.hideMenu(); removeEventListener('pointerdown', off, true) } }
     setTimeout(() => addEventListener('pointerdown', off, true), 0)
@@ -426,7 +482,7 @@ export function addHelp (rowEl, doc) {
   if (!doc || !rowEl?.appendChild || rowEl.querySelector(':scope > .st-help')) return rowEl
   const text = el('div', { class: 'st-help-text', text: doc })
   text.hidden = !helpOpen.has(doc)
-  const b = el('button', { class: 'st-help', type: 'button', title: doc, 'aria-label': 'what is this?', 'data-on': text.hidden ? '0' : '1' })
+  const b = el('button', { class: 'st-help ui-help', type: 'button', title: doc, 'aria-label': 'what is this?', 'data-on': text.hidden ? '0' : '1' })
   b.append(icon('action.help'))
   b.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation()
@@ -446,11 +502,25 @@ export function row (label, ...controls) {
 
 /** A number with a slider and an exact readout. `step` keeps it on the grid. */
 export function slider (label, value, { min, max, step = 0.25 }, onChange) {
-  const val = el('span', { class: 'st-val', text: String(value) })
-  const input = el('input', { type: 'range', min, max, step, value })
-  input.addEventListener('input', () => { val.textContent = input.value; onChange(Number(input.value), false) })
-  input.addEventListener('change', () => onChange(Number(input.value), true))
-  return row(label, input, val)
+  // The kit's slider (track, fill, thumb, value), drawn by the skin; the
+  // native range lies over it, unseen, so a finger, a key and a test all
+  // move the same input they always did.
+  const val = el('span', { class: 'st-val ui-slider__value', text: String(value) })
+  const input = el('input', { class: 'st-slide-input', type: 'range', min, max, step, value })
+  const fill = el('span', { class: 'ui-slider__fill' })
+  const thumb = el('span', { class: 'ui-slider__thumb' })
+  const paint = () => {
+    const f = Math.max(0, Math.min(1, (Number(input.value) - Number(min)) / ((Number(max) - Number(min)) || 1)))
+    fill.style.width = `${f * 100}%`
+    thumb.style.left = `${f * 100}%`
+  }
+  input.addEventListener('input', () => { val.textContent = input.value; paint(); onChange(Number(input.value), false) })
+  input.addEventListener('change', () => { paint(); onChange(Number(input.value), true) })
+  paint()
+  const r = row(label, el('span', { class: 'st-slide' }, [el('span', { class: 'ui-slider__track' }, [fill, thumb]), input]), val)
+  r.classList.add('ui-slider')
+  r.querySelector('label').classList.add('ui-slider__label')
+  return r
 }
 
 export function number (label, value, { min, max, step = 0.25 }, onChange) {
@@ -467,8 +537,9 @@ export function text (label, value, onChange, { placeholder = '', multiline = fa
 }
 
 export function toggle (label, value, onChange) {
-  const b = el('button', { text: value ? 'on' : 'off', 'data-on': value ? '1' : '0' })
-  b.addEventListener('click', () => { const v = b.dataset.on !== '1'; b.dataset.on = v ? '1' : '0'; b.textContent = v ? 'on' : 'off'; onChange(v) })
+  // The kit's switch: a thumb that slides; is-on follows data-on.
+  const b = el('button', { class: 'ui-switch', type: 'button', role: 'switch', 'aria-checked': String(!!value), 'data-on': value ? '1' : '0' }, [el('span', { class: 'ui-switch__thumb' })])
+  b.addEventListener('click', () => { const v = b.dataset.on !== '1'; b.dataset.on = v ? '1' : '0'; b.setAttribute('aria-checked', String(v)); onChange(v) })
   return row(label, b)
 }
 
@@ -490,7 +561,7 @@ export function button (label, onClick, cls = '') {
 
 export function chips (items, onPick) {
   return el('div', { class: 'st-chips' }, items.map((it) => {
-    const c = el('div', { class: 'st-chip', 'data-on': it.on ? '1' : '0' }, it.icon ? withIcon(it.icon, it.label) : [it.label])
+    const c = el('div', { class: 'st-chip ui-chip', 'data-on': it.on ? '1' : '0' }, it.icon ? withIcon(it.icon, it.label) : [it.label])
     c.addEventListener('click', () => onPick(it))
     return c
   }))
@@ -514,7 +585,7 @@ export function pictureBackground (t, image, sheet = null) {
 /** A grid of picture tiles; `items`: [{ id, label, image?, sheet?, on? }]. */
 export function tiles (items, onPick) {
   return el('div', { class: 'st-grid' }, items.map((it) => {
-    const t = el('div', { class: 'st-tile', 'data-on': it.on ? '1' : '0' }, [el('span', { text: it.label })])
+    const t = el('div', { class: 'st-tile ui-tile', 'data-on': it.on ? '1' : '0' }, [el('span', { class: 'ui-tile__caption', text: it.label })])
     if (it.image) pictureBackground(t, it.image, it.sheet)
     t.addEventListener('click', () => onPick(it))
     return t
@@ -522,7 +593,7 @@ export function tiles (items, onPick) {
 }
 
 export function card (title, body, actions = []) {
-  return el('div', { class: 'st-card' }, [el('h4', {}, [el('span', { text: title }), ...actions]), ...[].concat(body)])
+  return el('div', { class: 'st-card ui-card' }, [el('h4', { class: 'ui-card__head' }, [el('span', { class: 'ui-card__title', text: title }), ...actions]), ...[].concat(body)])
 }
 
 export function muted (t) { return el('div', { class: 'st-muted', text: t }) }
@@ -532,9 +603,9 @@ export function muted (t) { return el('div', { class: 'st-muted', text: t }) }
 // on each platform -- one <dialog> is the same everywhere.
 function dialog (body, okLabel) {
   return new Promise((resolve) => {
-    const cancel = el('button', { type: 'button', text: 'cancel', onclick: () => dlg.close('') })
-    const ok = el('button', { type: 'submit', value: 'ok', text: okLabel })
-    const dlg = el('dialog', { class: 'st-dialog' }, [el('form', { method: 'dialog' }, [...body, el('div', { class: 'st-row st-actions' }, [cancel, ok])])])
+    const cancel = el('button', { class: 'ui-button', type: 'button', text: 'cancel', onclick: () => dlg.close('') })
+    const ok = el('button', { class: 'ui-button ui-button--primary', type: 'submit', value: 'ok', text: okLabel })
+    const dlg = el('dialog', { class: 'st-dialog ui-dialog' }, [el('form', { method: 'dialog' }, [...body, el('div', { class: 'st-row st-actions' }, [cancel, ok])])])
     dlg.addEventListener('close', () => { resolve(dlg.returnValue === 'ok'); dlg.remove() })
     document.body.appendChild(dlg)
     dlg.showModal()

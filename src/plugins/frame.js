@@ -76,11 +76,11 @@ class EditorSession {
     this.statusEl = el('span', { class: 'sx-status' })
     this.iframe = el('iframe', { class: 'sx-frame', title: this.editor.label, allow: 'autoplay; clipboard-read; clipboard-write; fullscreen' })
     this.root = el('div', { class: 'sx-editor', 'data-editor': this.editor.key, 'data-kind': this.kindId }, [
-      el('div', { class: 'sx-bar' }, [
-        el('button', { class: 'sx-back', 'data-action': 'editor-back', title: 'back to the studio, saving', onclick: () => this.finish(true) }, withIcon('action.back', 'studio')),
-        el('span', { class: 'sx-title', text: `${this.editor.label} · ${this.kind.label} ${name}` }),
+      el('div', { class: 'sx-bar ui-topbar' }, [
+        el('button', { class: 'sx-back ui-button ui-button--primary ui-button--small', 'data-action': 'editor-back', title: 'back to the studio, saving', onclick: () => this.finish(true) }, withIcon('action.back', 'studio')),
+        el('span', { class: 'sx-title ui-topbar__title', text: `${this.editor.label} · ${this.kind.label} ${name}` }),
         this.statusEl,
-        el('button', { class: 'st-danger sx-discard', 'data-action': 'editor-discard', title: 'discard: back without saving', onclick: () => this.finish(false) }, withIcon('action.close'))
+        el('button', { class: 'st-danger sx-discard ui-button ui-button--danger ui-button--small ui-button--icon', 'data-action': 'editor-discard', title: 'discard: back without saving', onclick: () => this.finish(false) }, withIcon('action.close'))
       ]),
       this.iframe
     ])
@@ -245,11 +245,11 @@ const CSS = `
 .sx-editor{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;background:var(--dnp-color-bg-app)}
 /* One slim line: the editor's own header sits under it, and on a phone held
    sideways every row of chrome is a slice of the editor. */
-.sx-bar{display:flex;align-items:center;gap:8px;padding:3px 6px;padding-top:max(3px,env(safe-area-inset-top));border-bottom:1px solid var(--dnp-color-line-main);background:var(--dnp-color-bg-panel);flex:0 0 auto;white-space:nowrap;font-size:12px}
-.sx-bar button{height:26px;padding:0 10px;border-radius:6px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-main);font:600 12px var(--dnp-font-ui);flex:none}
+.sx-bar{display:flex;align-items:center;gap:8px;height:auto;padding:3px 6px;padding-top:max(3px,env(safe-area-inset-top));flex:0 0 auto;white-space:nowrap;font-size:12px}
+.sx-bar .ui-button{height:26px;padding:0 10px;font-size:12px;flex:none}
 .sx-bar .sx-discard{padding:0 9px}
-@media (max-height:520px){.sx-bar{padding-top:max(2px,env(safe-area-inset-top));padding-bottom:2px}.sx-bar button{height:22px;padding:0 8px;font-size:11px}.sx-title{font-size:11px}}
-.sx-bar .sx-back{background:var(--dnp-color-accent);border-color:var(--dnp-color-accentHover);color:var(--dnp-color-accentInk)}
+@media (max-height:520px){.sx-bar{padding-top:max(2px,env(safe-area-inset-top));padding-bottom:2px}.sx-bar .ui-button{height:22px;padding:0 8px;font-size:11px}.sx-title{font-size:11px}}
+
 .sx-title{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dnp-color-text-primary)}
 .sx-status{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dnp-color-text-secondary);font-size:12px}
 .sx-status[data-tone=error]{color:var(--dnp-color-error)}.sx-status[data-tone=warn]{color:var(--dnp-color-warn)}

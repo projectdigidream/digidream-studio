@@ -476,14 +476,14 @@ const STYLE = `
 .sc-hit{position:absolute;cursor:grab;touch-action:none;outline:1px dashed var(--cv-designer-hit)}
 .sc-hit[data-on="1"]{outline:var(--cv-common-selected-width) solid var(--cv-common-selected)}
 .sc-zone{position:absolute;border:1px dashed var(--cv-designer-stick);border-radius:12px;pointer-events:none}
-.sc-btn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font:var(--cv-designer-touchbtn-font);
+.sc-btn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font:var(--cv-designer-touchbtn-font);font-variant-ligatures:inherit;
   color:var(--dnp-color-text-primary);background:var(--cv-designer-touchbtn-fill);border:2px solid var(--cv-designer-touchbtn);box-sizing:border-box}
 .sc-btn[data-on="1"]{border-color:var(--cv-common-selected)}
 .sc .wk-top .sc-tabs{display:flex}
 .sc .wk-details>*{flex:0 0 auto}
 .sc .st-trow{padding:4px 10px;min-height:0;gap:4px}
-.sc .wk-top select{height:40px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 12px/1 var(--dnp-font-ui);padding:0 8px}
-.sc .st-trow[data-on="1"]{background:color-mix(in srgb,var(--dnp-color-accent) 25%,transparent)}
+.sc .wk-top select{height:40px;font-size:12px;line-height:1;padding:0 8px}
+
 /* A phone on its side: the frame beside the list, each scrolling on its own. */
 @media (max-width:1100px) and (orientation:landscape){
   .sc{grid-template-columns:minmax(0,1fr) minmax(300px,46%);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"top top" "stage details"}

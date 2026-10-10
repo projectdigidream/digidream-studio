@@ -18,28 +18,31 @@
   :root { color-scheme: dark; }
   html, body {
     margin: 0; height: 100%; overflow: hidden; background: var(--dnp-color-bg-app, #0b0d12); color: var(--dnp-color-text-primary, #cfe3ff);
-    font: 14px/1.4 var(--dnp-font-ui, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 14px; line-height: 1.4; font-family: var(--dnp-font-ui, ui-monospace, SFMono-Regular, Menlo, monospace);
     touch-action: none; overscroll-behavior: none;
     -webkit-user-select: none; user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
   canvas { display: block; }
-  #boot {
-    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 10px; background: var(--dnp-color-bg-app, #0b0d12); z-index: 200;
-  }
-  #boot .bar { width: min(60vw, 320px); height: 4px; background: var(--dnp-color-bg-raised, #1b2230); border-radius: 2px; overflow: hidden; }
-  #boot .fill { height: 100%; width: 0; background: var(--dnp-color-accent, #5b8fd6); transition: width 120ms linear; }
+  /* THE BOOT SCREEN is the kit's ui-boot: these rules are its first paint,
+     before the skin arrives. Their look sits under :where(), so the skin's
+     boot (any skin) takes over once it is worn; layout keeps the id. */
+  #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 200; }
   #boot[hidden] { display: none; }
+  :where(#boot) { gap: 10px; background: var(--dnp-color-bg-app, #0b0d12); }
+  :where(#boot .bar) { width: min(60vw, 320px); height: 4px; background: var(--dnp-color-bg-raised, #1b2230); border-radius: 2px; }
+  #boot .bar { overflow: hidden; max-width: 92vw; }
+  #boot .fill { height: 100%; width: 0; transition: width 120ms linear; }
+  :where(#boot .fill) { background: var(--dnp-color-accent, #5b8fd6); }
   /* What loading is doing, step by step, and what went wrong: for the person
      looking at it, and for whoever they send it to. */
-  #bootlog { margin: 6px 0 0; width: min(92vw, 680px); max-height: 38vh; overflow: auto; font: 11px/1.45 var(--dnp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-             color: var(--dnp-color-text-dim, #6f7e96); white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; text-align: left; }
+  #bootlog { margin: 6px 0 0; width: min(92vw, 680px); max-height: 38vh; overflow: auto; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; text-align: left; height: auto; }
+  :where(#bootlog) { font-size: 11px; line-height: 1.45; font-family: var(--dnp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); color: var(--dnp-color-text-dim, #6f7e96); }
   #bootlog .bad { color: var(--dnp-color-error, #ff8a8a); }
   #bootlog .slow { color: var(--dnp-color-warn, #ffd27a); }
   #bootactions { display: flex; gap: 8px; }
   #bootactions[hidden] { display: none; }
-  #bootactions button { height: 34px; padding: 0 14px; border-radius: 8px; background: var(--dnp-color-bg-raised, #1b2230); color: var(--dnp-color-text-primary, #cfe3ff); border: 1px solid var(--dnp-color-line-main, #2a3446); font: 600 13px var(--dnp-font-ui, ui-monospace, Menlo, monospace); }
+  :where(#bootactions button) { height: 34px; padding: 0 14px; border-radius: 8px; background: var(--dnp-color-bg-raised, #1b2230); color: var(--dnp-color-text-primary, #cfe3ff); border: 1px solid var(--dnp-color-line-main, #2a3446); font-size: 13px; font-weight: 600; font-family: var(--dnp-font-ui, ui-monospace, Menlo, monospace); }
 </style>
 <script type="importmap">
 {
@@ -55,9 +58,9 @@
 <script type="module" src="./src/main.js"></script>
 </head>
 <body>
-  <div id="boot"><div>Studio</div><div class="bar"><div class="fill" id="bootfill"></div></div><div id="bootmsg">starting</div>
-    <pre id="bootlog"></pre>
-    <div id="bootactions" hidden><button id="bootcopy">copy this</button><button id="bootreload">reload</button></div></div>
+  <div id="boot" class="ui-boot"><div class="ui-boot__title">Studio</div><div class="bar ui-boot__track"><div class="fill ui-boot__fill" id="bootfill"></div></div><div id="bootmsg" class="ui-boot__status">starting</div>
+    <pre id="bootlog" class="ui-boot__log"></pre>
+    <div id="bootactions" hidden><button id="bootcopy" class="ui-button">copy this</button><button id="bootreload" class="ui-button">reload</button></div></div>
 <script>
 // THE LOADING LOG, before any module runs: so a module that fails to load at
 // all (a 404, a syntax error, an error thrown at the top of main.js) is said
@@ -72,7 +75,7 @@
   var since = function () { return ((performance.now() - t0) / 1000).toFixed(2) + 's' }
   window.__bootLog = function (line, kind) {
     var row = document.createElement('div')
-    if (kind) row.className = kind
+    row.className = 'ui-boot__line' + (kind ? ' ' + kind : '')
     row.textContent = since() + '  ' + line
     log.appendChild(row)
     log.scrollTop = log.scrollHeight

@@ -1407,15 +1407,15 @@ function curve (a, b) {
 const STYLE = `
 .gw{grid-template-columns:1fr 400px;grid-template-areas:"top top" "graph details"}
 .gw .wk-graph{grid-area:graph}
-.gw .wk-top select{height:40px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 12px/1 var(--dnp-font-ui);padding:0 8px}
+.gw .wk-top select{height:40px;font-size:12px;line-height:1;padding:0 8px}
 .gw .gw-panes{display:none}
-.gw-node{position:absolute;width:${NODE_W}px;box-sizing:border-box;border:1px solid var(--cv-graph-node);border-radius:var(--cv-graph-node-radius);background:var(--cv-graph-node-fill);font:var(--cv-graph-node-text-font);color:var(--cv-graph-node-text);user-select:none}
+.gw-node{position:absolute;width:${NODE_W}px;box-sizing:border-box;border:1px solid var(--cv-graph-node);border-radius:var(--cv-graph-node-radius);background:var(--cv-graph-node-fill);font:var(--cv-graph-node-text-font);font-variant-ligatures:inherit;color:var(--cv-graph-node-text);user-select:none}
 .gw-node.gw-on{box-shadow:0 0 0 var(--cv-graph-node-selected-width) var(--cv-graph-node-selected)}
-.gw-head{padding:6px 10px;font:var(--cv-graph-node-title-font);color:var(--cv-graph-node-title);border-radius:calc(var(--cv-graph-node-radius) - 1px) calc(var(--cv-graph-node-radius) - 1px) 0 0;cursor:grab;touch-action:none;display:flex;align-items:center;gap:6px}
+.gw-head{padding:6px 10px;font:var(--cv-graph-node-title-font);font-variant-ligatures:inherit;color:var(--cv-graph-node-title);border-radius:calc(var(--cv-graph-node-radius) - 1px) calc(var(--cv-graph-node-radius) - 1px) 0 0;cursor:grab;touch-action:none;display:flex;align-items:center;gap:6px}
 .gw-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gw-note{position:absolute;border:1px solid var(--cv-note-slate);border-radius:12px;background:var(--cv-note-slate-body);pointer-events:none;box-sizing:border-box}
 .gw-note-on{border-color:var(--cv-graph-node-selected);box-shadow:0 0 0 1px var(--cv-graph-node-selected)}
-.gw-note-head{pointer-events:auto;display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-radius:11px 11px 0 0;background:var(--cv-note-slate-head);cursor:grab;touch-action:none;font:700 13px var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
+.gw-note-head{pointer-events:auto;display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-radius:11px 11px 0 0;background:var(--cv-note-slate-head);cursor:grab;touch-action:none;font-weight:700;font-size:13px;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
 .gw-note-text{flex:1 1 auto;min-width:0;white-space:pre-wrap;word-break:break-word}
 .gw-note-size{pointer-events:auto;position:absolute;right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,color-mix(in srgb,var(--dnp-color-text-primary) 35%,transparent) 50%);border-radius:0 0 11px 0}
 .gw-note-blue{border-color:var(--cv-note-blue);background:var(--cv-note-blue-body)}.gw-note-blue .gw-note-head{background:var(--cv-note-blue-head)}
@@ -1438,21 +1438,21 @@ const STYLE = `
 .gw-var-row{min-height:34px;gap:6px}
 .gw-var-type{font-size:11px;color:var(--dnp-color-text-secondary);white-space:nowrap}
 .gw-var-drop{min-width:0;height:28px;padding:0 8px;font-size:11px}
-.gw-menu{position:absolute;z-index:40;top:52px;left:8px;width:min(420px,calc(100% - 16px));max-height:calc(100% - 64px);display:flex;flex-direction:column;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-main);border-radius:12px;box-shadow:var(--dnp-shadow-raised);overflow:hidden}
+.gw-menu{position:absolute;z-index:40;top:52px;left:8px;width:min(420px,calc(100% - 16px));max-height:calc(100% - 64px);display:flex;flex-direction:column;overflow:hidden}
 .gw-menu-top{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--dnp-color-line-main)}
 .gw-menu-find{flex:1 1 auto;min-width:0;height:36px;font-size:14px}
 .gw-menu-list{overflow:auto;-webkit-overflow-scrolling:touch;padding:4px 6px 8px}
-.gw-menu-group{font:700 11px var(--dnp-font-ui);color:var(--dnp-color-text-secondary);padding:10px 6px 4px;text-transform:none}
-.gw-menu-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;height:auto;min-height:34px;padding:6px 8px;text-align:left;border:0;border-radius:8px;background:transparent}
-.gw-menu-item:hover,.gw-menu-item:focus{background:var(--dnp-color-bg-raised)}
-.gw-menu-label{font-weight:700;color:var(--dnp-color-text-primary)}
+.gw-menu-group{font-size:11px;padding:10px 6px 4px;text-transform:none}
+.gw-menu-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;height:auto;min-height:34px;padding:6px 8px;text-align:left}
+
+.gw-menu-label{font-weight:700}
 .gw-menu-in{font-size:10px;color:var(--dnp-color-text-secondary)}
 .gw-menu-doc{flex:1 1 100%;font-size:11px;color:var(--dnp-color-text-secondary);white-space:normal}
 .gw-del{flex:0 0 auto;width:22px;height:22px;min-width:0;min-height:0;padding:0;border-radius:6px;font-size:11px;line-height:20px;background:color-mix(in srgb,var(--dnp-color-bg-sunken) 45%,transparent);border:1px solid color-mix(in srgb,var(--dnp-color-text-primary) 18%,transparent);color:var(--dnp-color-text-primary);opacity:.7;cursor:pointer}
 .gw-del:hover,.gw-del:active{opacity:1;background:var(--dnp-color-node-event);border-color:var(--dnp-color-error)}
 .gw-info{flex:0 0 auto;width:22px;height:22px;min-width:0;min-height:0;padding:0;border-radius:50%;font-size:12px;line-height:20px;background:color-mix(in srgb,var(--dnp-color-bg-sunken) 45%,transparent);border:1px solid color-mix(in srgb,var(--dnp-color-text-primary) 18%,transparent);color:var(--dnp-color-text-primary);opacity:.7;cursor:pointer}
 .gw-info:hover,.gw-info:active,.gw-info[data-on="1"]{opacity:1;background:color-mix(in srgb,var(--dnp-color-accent) 35%,transparent);border-color:var(--dnp-color-accent)}
-.gw-doc{padding:6px 10px;font:11px/1.45 var(--dnp-font-ui);color:var(--dnp-color-text-primary);background:color-mix(in srgb,var(--dnp-color-bg-sunken) 45%,transparent);white-space:pre-wrap;border-bottom:1px solid color-mix(in srgb,var(--dnp-color-text-primary) 12%,transparent)}
+.gw-doc{padding:6px 10px;font-size:11px;line-height:1.45;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-primary);background:color-mix(in srgb,var(--dnp-color-bg-sunken) 45%,transparent);white-space:pre-wrap;border-bottom:1px solid color-mix(in srgb,var(--dnp-color-text-primary) 12%,transparent)}
 .gw-ev .gw-head{background:var(--cv-graph-head-event)}.gw-cond .gw-head{background:var(--cv-graph-head-condition)}.gw-act .gw-head{background:var(--cv-graph-head-action)}
 .gw-flow .gw-head{background:var(--cv-graph-head-flow)}.gw-data .gw-head{background:var(--cv-graph-head-data)}
 .gw-cine .gw-head{background:var(--cv-graph-head-camera)}
@@ -1473,9 +1473,9 @@ const STYLE = `
 .wk-world[data-linking="exec"] .gw-pin.gw-in.gw-exec .gw-dot{background:var(--cv-graph-pin-valid);transform:scale(1.45)}
 .wk-world[data-linking="data"] .gw-pin.gw-in.gw-data .gw-dot{border-color:var(--cv-graph-pin-valid);background:var(--cv-graph-head-data);transform:scale(1.45)}
 .gw-pname{color:var(--cv-graph-node-text)}
-.gw-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;background:color-mix(in srgb,var(--dnp-color-bg-app) 85%,transparent);border:1px solid var(--dnp-color-line-main);border-radius:10px;padding:4px}
-.gw .gw-zoom button{min-width:36px;height:34px;padding:0 8px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 15px/1 var(--dnp-font-ui);cursor:pointer}
-.gw-zoom-pct{font:600 11px var(--dnp-font-mono);color:var(--dnp-color-text-secondary);min-width:42px;text-align:center}
+.gw-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;padding:4px}
+.gw .gw-zoom button{min-width:36px;height:34px;padding:0 8px;font-size:15px;line-height:1;cursor:pointer}
+.gw-zoom-pct{font-size:11px;min-width:42px;text-align:center}
 .gw-link{fill:none;stroke:transparent;stroke-width:18;pointer-events:stroke;cursor:pointer}
 .gw-exec-link{stroke:var(--cv-graph-wire-exec);stroke-width:var(--cv-graph-wire-exec-width)}
 .gw-data-link{stroke:var(--cv-graph-wire-data);stroke-width:var(--cv-graph-wire-data-width)}

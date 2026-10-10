@@ -60,7 +60,7 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
   const hudHost = el('div', { class: 'sc-hud' })
   const clock = el('span', { class: 'sc-clock', text: '0.0 s' })
   const log = el('div', { class: 'sc-log' })
-  const strip = el('div', { class: 'sc-strip' }, [
+  const strip = el('div', { class: 'sc-strip ui-toolbar' }, [
     el('span', { class: 'sc-title' }, withIcon('transport.play', `${startId}`)), clock,
     el('button', { text: '↻', title: 'again', 'data-scene': 'again', onclick: () => restart() }),
     el('button', { title: 'back to the graph', 'data-scene': 'stop', onclick: () => stop() }, withIcon('transport.stop'))
@@ -159,14 +159,14 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
 
 const STYLE = `
 body[data-scene="1"] .sd-rail,body[data-scene="1"] .st-layer{display:none}
-.sc-scene{position:fixed;inset:0;z-index:95;pointer-events:none;font:13px/1.4 var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
+.sc-scene{position:fixed;inset:0;z-index:95;pointer-events:none;font-size:13px;line-height:1.4;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
 .sc-bar{position:absolute;left:0;right:0;height:0;background:#000} /* the game's letterbox: content, not the skin */
 .sc-bar-top{top:0}.sc-bar-bottom{bottom:0}
 .sc-fade{position:absolute;inset:0;background:#000;opacity:0} /* the game's fade: content */
 .sc-hud{position:absolute;inset:0}
 .sc-strip{position:absolute;top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));display:flex;gap:6px;align-items:center;pointer-events:auto;
   background:color-mix(in srgb,var(--dnp-color-bg-app) 85%,transparent);border:1px solid var(--dnp-color-line-main);border-radius:10px;padding:4px 6px 4px 10px;z-index:3}
-.sc-strip button{min-width:40px;height:36px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 15px/1 var(--dnp-font-ui);cursor:pointer}
+.sc-strip button{min-width:40px;height:36px;font-size:15px;line-height:1;cursor:pointer}
 .sc-title{font-weight:700}
 .sc-clock{color:var(--dnp-color-text-secondary);min-width:7em;text-align:right}
 .sc-log{position:absolute;left:calc(8px + env(safe-area-inset-left));top:calc(8px + env(safe-area-inset-top));max-width:55%;background:color-mix(in srgb,var(--dnp-color-bg-app) 75%,transparent);border-radius:8px;padding:4px 10px;color:var(--dnp-color-warn);z-index:3}
