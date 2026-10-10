@@ -875,7 +875,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   })
   check(opened.open && opened.kind === 'weapon', `the arsenal opens as its own window (${JSON.stringify(opened)})`)
   check(opened.vocab, 'the weapon vocabulary is served to the studio')
-  check(/monsters/.test(opened.sibling), 'and it links across to the monsters')
+  check(!/monsters/.test(opened.sibling), `and it has no button across to the monsters, as asked (${opened.sibling})`)
   const made = await page.evaluate(async () => {
     const S = window.__studio
     const { newWeapon } = await import('/studio/src/weapons_emit.js')
@@ -1649,6 +1649,29 @@ await page.keyboard.press('Escape')
   await page.mouse.move(noted.head.x + 80, noted.head.y + 60, { steps: 4 })
   await page.mouse.up()
   await new Promise((r) => setTimeout(r, 200))
+  // ...and resized from a side, and its text edited in place: two taps on
+  // its title, type, Enter.
+  const handle = await page.evaluate((id) => {
+    const h = document.querySelector(`.gw-note[data-note="${id}"] .gw-note-h-e`)
+    const r = h?.getBoundingClientRect()
+    const n = window.__studio.doc.graphs.main.notes.find((x) => x.id === id)
+    return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2, was: { x: n.x, w: n.w } } : null
+  }, noted.id)
+  if (handle) {
+    await page.mouse.move(handle.x, handle.y); await page.mouse.down()
+    await page.mouse.move(handle.x + 30, handle.y, { steps: 4 }); await page.mouse.move(handle.x + 60, handle.y, { steps: 4 }); await page.mouse.up()
+    await new Promise((r) => setTimeout(r, 200))
+  }
+  const sized = await page.evaluate((id) => { const n = window.__studio.doc.graphs.main.notes.find((x) => x.id === id); return { x: n.x, w: n.w } }, noted.id)
+  const title = await page.evaluate((id) => { const r = document.querySelector(`.gw-note[data-note="${id}"] .gw-note-text`).getBoundingClientRect(); return { x: r.x + 10, y: r.y + r.height / 2 } }, noted.id)
+  await page.mouse.click(title.x, title.y); await new Promise((r) => setTimeout(r, 120))
+  await page.mouse.click(title.x, title.y); await new Promise((r) => setTimeout(r, 300))
+  const editing = await page.evaluate(() => !!document.querySelector('.gw-note-editing'))
+  await page.keyboard.type('Gate puzzle'); await page.keyboard.press('Enter'); await new Promise((r) => setTimeout(r, 300))
+  const retitled = await page.evaluate((id) => window.__studio.doc.graphs.main.notes.find((x) => x.id === id).text, noted.id)
+  check(handle && sized.w > handle.was.w + 40 && sized.x === handle.was.x,
+        `a picked note resizes from its side, the other side staying put (${JSON.stringify({ was: handle?.was, now: sized })})`)
+  check(editing && retitled === 'Gate puzzle', `two taps on a note's title edit its text in place (${JSON.stringify({ editing, retitled })})`)
   const bent = await page.evaluate(async (id) => {
     const S = window.__studio
     const w = S.window
@@ -3118,7 +3141,7 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
     const mob = Object.keys(S.module.mobs?.mobs ?? {})[0]
     await S.go('monsters', mob); await new Promise((r) => setTimeout(r, 400))
     const tab = (t) => [...document.querySelectorAll('.wk-details .wk-tabs button')].find((b) => b.textContent.trim().endsWith(t))
-    tab('swing')?.click(); await new Promise((r) => setTimeout(r, 300))
+    tab('slash')?.click(); await new Promise((r) => setTimeout(r, 300))
     const rows = [...document.querySelectorAll('.wk-details .st-row label')].map((l) => l.textContent)
     const blend = [...document.querySelectorAll('.wk-details .st-row')].find((r) => /^blend/.test(r.querySelector('label')?.textContent ?? ''))?.querySelector('select')
     if (blend) { blend.value = 'normal'; blend.dispatchEvent(new Event('change')) }

@@ -61,7 +61,6 @@ const SPECS = {
     word: 'monster',
     node: 'state',
     shape: MOB_SHAPE,
-    sibling: { label: 'player', icon: 'section.player', kind: 'player' },
     home: (S) => { S.module.mobs ??= { missiles: {}, mobs: {} }; return S.module.mobs.mobs },
     layoutKey: (name) => name,
     vocab: (S) => S.vocab.mob,
@@ -72,14 +71,13 @@ const SPECS = {
     remove: (S, name) => deleteMonster(S, name),
     // The body that draws it: its own prop record.
     prop: (S, name, subject) => (S.module.props ?? []).find((p) => p.name === (subject?.prop ?? name)),
-    tabs: [['node', '', 'workshop.state'], ['brain', 'brain', 'workshop.brain'], ['swing', 'swing', 'workshop.swing'], ['body', 'body', 'workshop.body'], ['vars', 'vars', 'workshop.vars'], ['missiles', 'missiles', 'workshop.missiles']]
+    tabs: [['node', '', 'workshop.state'], ['brain', 'brain', 'workshop.brain'], ['swing', 'swing', 'workshop.swing'], ['slash', 'slash', 'sfx.whoosh'], ['body', 'body', 'workshop.body'], ['vars', 'vars', 'workshop.vars'], ['missiles', 'missiles', 'workshop.missiles']]
   },
   weapon: {
     kind: 'weapon',
     word: 'weapon',
     node: 'phase',
     shape: WEAPON_SHAPE,
-    sibling: { label: 'monsters', icon: 'section.monsters', kind: 'mob' },
     home: (S) => { S.module.weapons ??= newArsenal(); return S.module.weapons.weapons },
     // Namespaced, because a weapon and a monster may share a name and their
     // graphs are laid out separately.
@@ -92,7 +90,7 @@ const SPECS = {
     remove: (S, name) => deleteWeapon(S.module, name),
     // A weapon is held by the PLAYER, so the preview shows the player's art.
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['node', '', 'workshop.state'], ['weapon', 'weapon', 'workshop.weapon'], ['swing', 'swing', 'workshop.swing'], ['vars', 'vars', 'workshop.vars'], ['arsenal', 'arsenal', 'workshop.arsenal']]
+    tabs: [['node', '', 'workshop.state'], ['weapon', 'weapon', 'workshop.weapon'], ['swing', 'swing', 'workshop.swing'], ['slash', 'slash', 'sfx.whoosh'], ['vars', 'vars', 'workshop.vars'], ['arsenal', 'arsenal', 'workshop.arsenal']]
   },
   // The player, who has no graph: nothing about them is a state machine, so
   // the window is its preview and its forms.
@@ -112,7 +110,7 @@ const SPECS = {
     make: () => null,
     remove: () => {},
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds'], ['slash', 'slash', 'workshop.swing']]
+    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds'], ['slash', 'slash', 'sfx.whoosh']]
   }
 }
 
@@ -201,7 +199,7 @@ class Workshop {
       // Across to the sibling window. A monster's claw and a player's fist are
       // the same facility, so moving between them should not be a trip out to
       // the level and back in again.
-      button(withIcon(sp.sibling.icon, sp.sibling.label), () => (S.go ? S.go({ mob: 'monsters', weapon: 'weapons', player: 'player' }[sp.sibling.kind]) : this.open(sp.sibling.kind, null))),
+      sp.sibling ? button(withIcon(sp.sibling.icon, sp.sibling.label), () => (S.go ? S.go({ mob: 'monsters', weapon: 'weapons', player: 'player' }[sp.sibling.kind]) : this.open(sp.sibling.kind, null))) : null,
       sp.graph === false ? el('span', { class: 'st-muted wk-note', text: 'one player for the module; a map may override parts' }) : null,
       sp.graph === false ? null : chips([...names.map((n) => ({ id: n, label: n, on: n === this.mob })), { id: '+', label: `+ new ${sp.word}` }], async (it) => {
         if (it.id === '+') {
@@ -668,9 +666,12 @@ class Workshop {
     else if (this.tab === 'weapon') body.push(...weaponRows(S, this.mob, m, ctx))
     else if (this.tab === 'swing') {
       body.push(...this.#swingSection(m, `every ${sp.node}`, ctx))
-      // And how it is drawn in the game: the slash streak (docs/SWINGS.md).
-      if (this.mob) body.push(...slashRows(S, weapon ? 'weapon' : 'monster', this.mob, changed))
-    } else if (this.tab === 'slash') body.push(...slashRows(S, 'default', null, changed))
+      body.push(muted('How the swing is drawn in the game -- its slash streak -- is in the slash tab.'))
+    } else if (this.tab === 'slash') {
+      // How the swing is drawn in the game: the slash streak (docs/SWINGS.md),
+      // this monster's or weapon's own, or the player's default for every swing.
+      body.push(...slashRows(S, this.kind === 'player' ? 'default' : weapon ? 'weapon' : 'monster', this.mob, changed))
+    }
     else if (this.tab === 'body') body.push(...(weapon ? avatarRows(S, { changed }) : bodyRows(S, this.prop, changed)))
     else if (this.tab === 'vars') body.push(...varsRows(m, changed))
     else if (this.tab === 'missiles') body.push(...missilesSection(S, changed))

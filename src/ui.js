@@ -65,6 +65,10 @@ const STYLE = `
 .st-sheet-body{padding:10px 14px;padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow:auto;
   display:flex;flex-direction:column;gap:10px}
 .st-row{display:flex;align-items:center;gap:8px;min-height:44px}
+/* A row in a scrolling column keeps its whole height: its own min-height would
+   otherwise let the column squeeze a tall row (a long list of chips) to 44px,
+   and the rows under it draw over it. */
+.wk-details>*,.st-sheet-body>*,.st-card>*,.st-section>*{flex-shrink:0}
 .st-has-help{flex-wrap:wrap}
 .st-sheet-v{background-size:100% calc(var(--frames) * 100%) !important;background-repeat:no-repeat;animation:st-sheet-v var(--sheet-s) steps(var(--frames), jump-none) infinite}
 .st-sheet-h{background-size:calc(var(--frames) * 100%) 100% !important;background-repeat:no-repeat;animation:st-sheet-h var(--sheet-s) steps(var(--frames), jump-none) infinite}
@@ -94,6 +98,15 @@ const STYLE = `
 .st-chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;cursor:pointer;font-size:12px}
 
 .st-chips{display:flex;flex-wrap:wrap;gap:6px}
+.st-chips-wrap{display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-width:0}
+.st-chips-find{width:100%;box-sizing:border-box}
+.st-chips-long{max-height:11.5em;overflow-y:auto;overscroll-behavior:contain;align-content:flex-start;padding:4px;
+  border:1px solid var(--dnp-color-line-soft);border-radius:var(--dnp-radius-control)}
+.st-chips>[hidden]{display:none!important}
+.st-grid>[hidden]{display:none!important}
+/* A sprite's tile: its frame drawn, its name under it. */
+.st-sprite-thumb{position:absolute;inset:4px 4px 18px;width:calc(100% - 8px);height:calc(100% - 22px);object-fit:contain;image-rendering:pixelated}
+.st-sprite-tile>span{position:absolute;left:0;right:0;bottom:2px;z-index:1;font-size:10px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-card{padding:10px;display:flex;flex-direction:column;gap:8px}
 .st-card h4{margin:0;font-size:13px;display:flex;align-items:center;gap:8px}
 .st-card h4 span{flex:1 1 auto}
@@ -190,7 +203,8 @@ const STYLE = `
 .wk-zoom button{min-width:36px;height:34px;padding:0 8px;font-size:15px;line-height:1;cursor:pointer}
 .wk-zoom-pct{font-size:11px;min-width:42px;text-align:center}
 .wk-world{position:absolute;left:0;top:0;width:4000px;height:4000px;transform-origin:0 0}
-.wk-edges{position:absolute;left:0;top:0;width:4000px;height:4000px;overflow:visible}
+.wk-edges{position:absolute;left:0;top:0;width:4000px;height:4000px;overflow:visible;pointer-events:none}
+/* The links layer takes taps only where something on it says so (a link's stroke, a bend, a label): a note under it stays tappable. */
 .wk-edge{fill:none;stroke:var(--cv-graph-edge-transition);stroke-width:var(--cv-graph-edge-transition-width)}
 .wk-edge-next{stroke-dasharray:8 6;stroke:var(--cv-graph-edge-next);stroke-width:var(--cv-graph-edge-next-width)}
 .wk-edge-goto{stroke-dasharray:2 5;stroke:var(--cv-graph-edge-goto);stroke-width:var(--cv-graph-edge-goto-width)}
@@ -559,12 +573,28 @@ export function button (label, onClick, cls = '') {
   return Array.isArray(label) ? el('button', { class: cls, onclick: onClick }, label) : el('button', { text: label, class: cls, onclick: onClick })
 }
 
-export function chips (items, onPick) {
-  return el('div', { class: 'st-chips' }, items.map((it) => {
+/**
+ * Chips to pick from. A long list (more than `search`) gets a find field
+ * and scrolls in a box of its own height, instead of pushing the page down a
+ * screen per row: a module can have a hundred sprites. The picked chip and the
+ * "+ …" ones (import, new) always show.
+ */
+export function chips (items, onPick, { search = 12 } = {}) {
+  const box = el('div', { class: 'st-chips' }, items.map((it) => {
     const c = el('div', { class: 'st-chip ui-chip', 'data-on': it.on ? '1' : '0' }, it.icon ? withIcon(it.icon, it.label) : [it.label])
     c.addEventListener('click', () => onPick(it))
     return c
   }))
+  if (items.length <= search) return box
+  box.classList.add('st-chips-long')
+  const find = el('input', { class: 'st-chips-find', type: 'search', placeholder: `find among ${items.length}…`, autocomplete: 'off' })
+  find.addEventListener('input', () => {
+    const q = find.value.trim().toLowerCase()
+    for (const c of box.children) c.hidden = !!q && c.dataset.on !== '1' && !/^\+/.test(c.textContent.trim()) && !c.textContent.toLowerCase().includes(q)
+  })
+  // The picked one in view when the list is drawn.
+  requestAnimationFrame(() => { const on = box.querySelector('[data-on="1"]'); if (on) box.scrollTop = on.offsetTop - box.offsetTop - 8 })
+  return el('div', { class: 'st-chips-wrap' }, [find, box])
 }
 
 /**
