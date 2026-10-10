@@ -50,6 +50,21 @@ const warned = new Set();
 function warnOnce (what) { if (!warned.has(what)) { warned.add(what); console.warn(`skin: no ${what}`); } }
 
 /**
+ * The mode 'auto' picks: the skin's first light mode when the system prefers
+ * light, its first dark one otherwise -- judged by how dark the mode's
+ * color.bg.app is, so mode names are free (day/night, classic/night…).
+ */
+export function autoMode (compiled, prefersLight) {
+  const dark = (mode) => {
+    const t = compiled.tokens?.[`${mode}/mouse`] ?? compiled.tokens?.[`${mode}/${compiled.pointers?.[0] ?? 'mouse'}`] ?? {};
+    const { hex } = colorParts(t['color.bg.app'] ?? '#000');
+    const r = (hex >> 16) & 255; const g = (hex >> 8) & 255; const b = hex & 255;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+  };
+  return compiled.modes.find((m) => dark(m) !== prefersLight) ?? compiled.modes[0];
+}
+
+/**
  * Wear a skin on a page. mode 'auto' follows prefers-color-scheme (when the
  * skin has a light mode); pointer 'auto' follows (pointer: coarse).
  */
@@ -61,7 +76,7 @@ export function applySkin (compiled, { root = document.documentElement, mode = '
   let want = { mode, pointer };
   let view;
   const set = () => {
-    const m = want.mode === 'auto' ? (mqDark.matches && compiled.modes.includes('light') ? 'light' : compiled.modes[0]) : want.mode;
+    const m = want.mode === 'auto' ? autoMode(compiled, mqDark.matches) : want.mode;
     const p = want.pointer === 'auto' ? (mqTouch.matches ? 'touch' : 'mouse') : want.pointer;
     view = skinView(compiled, m, p);
     root.dataset.dnpMode = view.mode;

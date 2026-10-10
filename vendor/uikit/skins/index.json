@@ -54,5 +54,19 @@
       "touch"
     ],
     "file": "ps1.skin.js"
+  },
+  {
+    "id": "aero",
+    "name": "Frutiger Aero",
+    "about": "Mid-2000s optimism: frosted glass panes over a bright sky, glossy aqua buttons, lime-green progress, soft glows, bubbles and orbs, humanist sans. Modes: day (sky and grass) and night (deep ocean glass).",
+    "modes": [
+      "day",
+      "night"
+    ],
+    "pointers": [
+      "mouse",
+      "touch"
+    ],
+    "file": "aero.skin.js"
   }
 ]

@@ -7,7 +7,7 @@
 // The choice is the person's, not the module's: three prefs on this device,
 // never written into a module.
 //
-//   skin           claude | paper | 90s | ps1         (vendor/uikit/skins/index.json)
+//   skin           claude | paper | 90s | ps1 | aero  (vendor/uikit/skins/index.json)
 //   skin.mode      auto | one of the skin's modes      (auto follows the system)
 //   skin.pointer   touch | mouse | auto                (touch: the studio is touch-first)
 //
