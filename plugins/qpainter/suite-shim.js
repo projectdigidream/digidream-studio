@@ -19,7 +19,8 @@
     if (window.qpainterEmbed) return resolve(window.qpainterEmbed)
     window.addEventListener('qpainter-embed', () => resolve(window.qpainterEmbed), { once: true })
   })
-  import(new URL('suite-sdk.js', document.currentScript.src).href).then(async ({ inSuite, connectSuite }) => {
+  const here = document.currentScript.src
+  import(new URL('suite-sdk.js', here).href).then(async ({ inSuite, connectSuite }) => {
     if (!inSuite()) return
     let timer = null
     const suite = await connectSuite({
@@ -32,7 +33,9 @@
           timer = setTimeout(async () => { timer = null; suite.draft(await q.bytes()) }, 2500)
         })
       },
-      onSave: async () => (await embed()).bytes()
+      onSave: async () => (await embed()).bytes(),
+      // The studio's skin over the tool's own colours (suite-skin.js): its variables, given the skin's tokens.
+      onSkin: async (bundle, mode, pointer) => (await import(new URL('suite-skin.js', here).href)).wearSkin(bundle, mode, pointer, { vars: { '--bg': 'color.bg.app', '--panel': 'color.bg.panel', '--line': 'color.line.main', '--fg': 'color.text.primary', '--dim': 'color.text.secondary', '--acc': 'color.accent', '--stage': 'color.bg.sunken' } })
     })
   })
 })()

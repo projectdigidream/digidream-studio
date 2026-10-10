@@ -180,6 +180,33 @@ check(parseEditArg('nope') === null, 'anything else is no edit route')
     const copy = join(HERE, '..', 'plugins', id, 'suite-sdk.js')
     if (existsSync(copy)) check(readFileSync(copy, 'utf8') === sdk, `plugins/${id}/suite-sdk.js is the suite's sdk.js (vendor_plugins.mjs copies it; copy it again)`)
   }
+  // Every editor that has a shim wears the studio's skin, with the studio's
+  // own helper beside it (suite-skin.js, a byte copy of src/plugins/skinwear.js).
+  const wear = readFileSync(join(HERE, '..', 'src', 'plugins', 'skinwear.js'), 'utf8')
+  for (const id of readdirSync(join(HERE, '..', 'plugins'))) {
+    const dir = join(HERE, '..', 'plugins', id)
+    const shim = ['suite-shim.js', 'code.js'].map((f) => join(dir, f)).find((f) => existsSync(f))
+    if (!shim) continue
+    check(existsSync(join(dir, 'suite-skin.js')) && readFileSync(join(dir, 'suite-skin.js'), 'utf8') === wear, `plugins/${id}/suite-skin.js is the studio's skinwear.js`)
+    check(/onSkin/.test(readFileSync(shim, 'utf8')), `plugins/${id} asks for the studio's skin (onSkin in its shim)`)
+  }
+}
+// wearSkin, on a page of its own: the editor's variables take the skin's tokens.
+{
+  const { wearSkin, tokenVar } = await import('../src/plugins/skinwear.js')
+  const els = new Map()
+  const doc = {
+    documentElement: { dataset: {} },
+    getElementById: (id) => els.get(id) ?? null,
+    createElement: () => ({ id: '', textContent: '' }),
+    head: { appendChild: (e) => els.set(e.id, e) }
+  }
+  const bundle = { css: { 'dark/touch': ':where(x){--dnp-color-bg-app:#0b0d12}' }, tokens: { 'dark/touch': { 'color.bg.app': '#0b0d12' }, 'light/touch': { 'color.bg.app': '#f4f5f8' } } }
+  wearSkin(bundle, 'light', 'touch', { vars: { '--bg': 'color.bg.app', '--gap': '4px' }, mono: ['pre'], doc })
+  const map = els.get('dnp-skin-map')?.textContent ?? ''
+  check(doc.documentElement.dataset.dnpMode === 'light' && els.get('dnp-skin-css')?.textContent.includes('--dnp-color-bg-app'), 'wearSkin puts the bundle on the page and marks the mode')
+  check(map.includes(`--bg:${tokenVar('color.bg.app')} !important`) && map.includes('--gap:4px !important') && map.includes('color-scheme:light') && /pre\{font-family:var\(--dnp-font-mono\)/.test(map),
+        `and maps the editor's variables onto the tokens (${map.slice(0, 160)})`)
 }
 
 // --- the Code plugin's block check ------------------------------------------------------------

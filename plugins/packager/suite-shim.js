@@ -34,6 +34,9 @@
   }
   import(new URL('suite-sdk.js', here).href).then(async ({ inSuite, connectSuite }) => {
     if (!inSuite()) return
-    connected(await connectSuite({}))
+    connected(await connectSuite({
+      // The studio's skin over the tool's own colours (suite-skin.js): its variables, given the skin's tokens.
+      onSkin: async (bundle, mode, pointer) => (await import(new URL('suite-skin.js', here).href)).wearSkin(bundle, mode, pointer, { vars: { '--bg': 'color.bg.app', '--panel': 'color.bg.panel', '--ink': 'color.text.primary', '--dim': 'color.text.secondary', '--line': 'color.line.main', '--accent': 'color.accent', '--accent-ink': 'color.accentInk', '--ok': 'color.ok', '--warn': 'color.warn', '--bad': 'color.error', '--mono': 'font.mono' }, mono: ['code', 'pre', '.mono'] })
+    }))
   })
 })()

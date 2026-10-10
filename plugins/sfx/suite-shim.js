@@ -14,6 +14,7 @@
 // before the tool looks.
 //
 (function () {
+  const here = document.currentScript.src
   let suite = null
   let openPath = null
   let launched = null
@@ -77,6 +78,8 @@
       },
       onSaved () { globalThis.__sfx?.store.markSaved(globalThis.__sfx.store.path) },
       onDispose () { globalThis.__sfx?.store.markSaved(globalThis.__sfx.store.path) },
+      // The studio's skin over the tool's own colours (suite-skin.js): its variables, given the skin's tokens.
+      onSkin: async (bundle, mode, pointer) => (await import(new URL('suite-skin.js', here).href)).wearSkin(bundle, mode, pointer, { vars: { '--bg': 'color.bg.app', '--panel': 'color.bg.panel', '--panel2': 'color.bg.raised', '--panel3': 'color.bg.hover', '--edge': 'color.line.main', '--text': 'color.text.primary', '--dim': 'color.text.secondary', '--faint': 'color.text.dim', '--accent': 'color.accent', '--accent-ink': 'color.accentInk', '--accent2': 'color.wave', '--good': 'color.ok', '--warn': 'color.warn', '--bad': 'color.error', '--wave': 'color.wave', '--r': 'radius.card' } }),
       onUndo () { globalThis.__sfx?.store.undo() },
       onRedo () { globalThis.__sfx?.store.redo() }
     })

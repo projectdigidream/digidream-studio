@@ -57,7 +57,8 @@
     }
   }
 
-  import(new URL('suite-sdk.js', document.currentScript.src).href).then(async ({ inSuite, connectSuite }) => {
+  const here = document.currentScript.src
+  import(new URL('suite-sdk.js', here).href).then(async ({ inSuite, connectSuite }) => {
     if (!inSuite()) { gotInit({ name: '', text: '' }); return }
     suite = await connectSuite({
       onInit ({ name, payload }) {
@@ -72,7 +73,9 @@
       onSaved () { if (daw()?.store) daw().store.dirty = false },
       onDispose () { if (daw()?.store) daw().store.dirty = false },
       onUndo () { daw()?.store.undo?.() },
-      onRedo () { daw()?.store.redo?.() }
+      onRedo () { daw()?.store.redo?.() },
+      // The studio's skin over the tool's own colours (suite-skin.js): its variables, given the skin's tokens.
+      onSkin: async (bundle, mode, pointer) => (await import(new URL('suite-skin.js', here).href)).wearSkin(bundle, mode, pointer, { vars: { '--bg': 'color.bg.app', '--panel': 'color.bg.panel', '--panel2': 'color.bg.raised', '--edge': 'color.line.main', '--text': 'color.text.primary', '--dim': 'color.text.secondary', '--accent': 'color.accent', '--accent2': 'color.accentHover', '--good': 'color.ok', '--warn': 'color.warn', '--bad': 'color.error', '--wave': 'color.wave', '--rec': 'color.error' } })
     })
   })
 })()

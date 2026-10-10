@@ -96,7 +96,9 @@
       onRevert ({ payload }) { toApp({ type: 'revert', body: b64(payload) }) },
       onUndo () { toApp({ type: 'undo' }) },
       onRedo () { toApp({ type: 'redo' }) },
-      onSaved () { toApp({ type: 'saved' }); suite.dirty(false) }
+      onSaved () { toApp({ type: 'saved' }); suite.dirty(false) },
+      // The studio's skin over the tool's own colours (suite-skin.js): its variables, given the skin's tokens.
+      onSkin: async (bundle, mode, pointer) => (await import(new URL('suite-skin.js', here).href)).wearSkin(bundle, mode, pointer, { vars: { '--bg': 'color.bg.app', '--bg-2': 'color.bg.panel', '--bg-3': 'color.bg.raised', '--bg-4': 'color.bg.hover', '--fg': 'color.text.primary', '--fg-dim': 'color.text.secondary', '--accent': 'color.accent', '--accent-2': 'color.info', '--danger': 'color.error', '--border': 'color.line.main', '--radius': 'radius.control' } })
     })
   })
 

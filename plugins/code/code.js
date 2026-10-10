@@ -2,6 +2,7 @@
 // the example of a record editor in docs/PLUGINS.md. No dependencies: one
 // tokenizer drives both the highlighting and the block check.
 import { inSuite, connectSuite } from './suite-sdk.js'
+import { wearSkin } from './suite-skin.js'
 
 const KEYWORDS = new Set(['and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'goto', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while'])
 
@@ -117,7 +118,14 @@ if (typeof document !== 'undefined') {
         suite.dirty(false)
       },
       onSave: () => ta.value,
-      onSaved () { given = ta.value; suite.dirty(false) }
+      onSaved () { given = ta.value; suite.dirty(false) },
+      // The studio's skin: the page's colours from its tokens; code stays monospace,
+      // its highlighting in the skin's info / ok / warn colours.
+      onSkin: (bundle, mode, pointer) => wearSkin(bundle, mode, pointer, {
+        vars: { '--bg': 'color.bg.app', '--panel': 'color.bg.code', '--line': 'color.line.main', '--fg': 'color.text.primary', '--dim': 'color.text.dim',
+          '--kw': 'color.info', '--str': 'color.ok', '--com': 'color.text.dim', '--num': 'color.warn', '--bad': 'color.error' },
+        font: false, mono: ['body']
+      })
     })
   } else update()
   globalThis.__code = { ta, check }

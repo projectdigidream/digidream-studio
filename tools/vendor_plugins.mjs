@@ -8,7 +8,8 @@
 // what version. Each one's built output lands in studio/plugins/<id>/app/; what
 // is written by hand beside it (plugin.json, the shim that speaks the studio's
 // protocol, a baker) is never touched. The studio's SDK is copied in as
-// suite-sdk.js, because an editor must not import the studio's own files.
+// suite-sdk.js, and its skin helper as suite-skin.js, because an editor must not
+// import the studio's own files.
 //
 //   { "git":  "/path/to/repo", "commit": "abc1234", "install": "pnpm install --frozen-lockfile",
 //     "build": "pnpm build:web", "out": "dist-web" }
@@ -106,6 +107,7 @@ for (const [id, spec] of Object.entries(lock.plugins)) {
       writeFileSync(join(app, pg.to), out)
     }
     cpSync(join(SUITE, 'src', 'plugins', 'sdk.js'), join(dir, 'suite-sdk.js'))
+    cpSync(join(SUITE, 'src', 'plugins', 'skinwear.js'), join(dir, 'suite-skin.js'))
     const tree = hashTree(app)
     writeFileSync(join(app, 'VENDORED.json'), JSON.stringify({ ...source, tree, files: walk(app).length }, null, 1) + '\n')
     console.log(`${walk(app).length} files, ${(walk(app).reduce((n, f) => n + statSync(join(app, f)).size, 0) / 1024).toFixed(0)} KB`)
