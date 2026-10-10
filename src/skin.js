@@ -11,7 +11,7 @@
 //   skin.mode      auto | one of the skin's modes      (auto follows the system)
 //   skin.pointer   touch | mouse | auto                (touch: the studio is touch-first)
 //
-import { applySkin } from '../vendor/uikit/runtime.js'
+import { applySkin, colorParts } from '../vendor/uikit/runtime.js'
 
 export const DEFAULT_SKIN = 'claude'
 export const DEFAULT_MODE = 'auto'
@@ -66,6 +66,9 @@ export async function wearSkin (prefs, root = document.documentElement) {
   }
   skin.onChange(follow)
   follow()
+  // The canvas colours as CSS variables too, for the boards drawn in DOM and SVG.
+  skin.onChange(() => canvasVars(skin, root.ownerDocument))
+  canvasVars(skin, root.ownerDocument)
   /** Switch any of skin / mode / pointer, and remember it on this device. */
   skin.use = async ({ skin: id, mode, pointer } = {}) => {
     if (id && id !== skin.id) {
@@ -93,4 +96,46 @@ export function isLight (css) {
   const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
   const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)
   return L > 0.5
+}
+
+/**
+ * THE CANVAS KEYS AS CSS VARIABLES. The graph board, the state graph and the
+ * panels/screens designers are drawn in DOM and SVG, not on a canvas: they
+ * ask the skin through these, written on every change of skin or mode.
+ *
+ *   --cv-<group>-<key>          the entry's colour (dots in the key become dashes)
+ *   --cv-<group>-<key>-fill     its fill
+ *   --cv-<group>-<key>-width    its line width, px
+ *   --cv-<group>-<key>-radius   its corner radius, px
+ *   --cv-<group>-<key>-size     its size, px
+ *   --cv-<group>-<key>-font     its font
+ *   --cv-note-<name>            a graph note colour (palette 'notes'), and
+ *   --cv-note-<name>-head       the same at graph.note.alpha, for its title strip
+ *   --cv-note-<name>-body       and at a third of that, for its body
+ */
+export const CANVAS_VAR_GROUPS = ['common', 'map', 'graph', 'preview', 'designer']
+export function canvasVars (skin, doc = document) {
+  const all = skin.view.compiled.canvas?.[skin.view.key] ?? {}
+  const out = []
+  const name = (g, k) => `--cv-${g}-${k.replace(/\./g, '-')}`
+  for (const g of CANVAS_VAR_GROUPS) {
+    for (const [k, spec] of Object.entries(all[g] ?? {})) {
+      const n = name(g, k)
+      if (spec.color !== undefined) out.push(`${n}:${spec.color}`)
+      if (spec.fill !== undefined) out.push(`${n}-fill:${spec.fill}`)
+      for (const p of ['width', 'radius', 'size']) if (typeof spec[p] === 'number') out.push(`${n}-${p}:${spec[p]}px`)
+      if (spec.font) out.push(`${n}-font:${spec.font}`)
+    }
+  }
+  const alpha = skin.canvas('graph', 'note.alpha').alpha ?? 0.28
+  for (const [n, c] of Object.entries(skin.palette('notes') ?? {})) out.push(`--cv-note-${n}:${c}`, `--cv-note-${n}-head:${withAlpha(c, alpha)}`, `--cv-note-${n}-body:${withAlpha(c, alpha / 3)}`)
+  let el = doc.getElementById('dnp-canvas-vars')
+  if (!el) { el = doc.createElement('style'); el.id = 'dnp-canvas-vars'; doc.head.append(el) }
+  el.textContent = `:root{${out.join(';')}}`
+}
+
+/** A skin colour at `a` times its own opacity, as rgba(): for fades drawn on a canvas. */
+export function withAlpha (css, a = 1) {
+  const c = colorParts(css)
+  return `rgba(${c.hex >> 16},${(c.hex >> 8) & 255},${c.hex & 255},${+(c.alpha * a).toFixed(3)})`
 }

@@ -65,6 +65,8 @@ export function install (s) {
   document.head.appendChild(el('style', { text: STYLE }))
   S = s
   S.vfxPreview = vfxPreview
+  vfxPreview.skin = () => S.skin
+  S.onSkin?.(() => vfxPreview.reskin())
   S.showVfx = S.sectionAlias('particles', showVfx)
 }
 

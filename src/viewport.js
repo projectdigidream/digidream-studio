@@ -24,22 +24,52 @@ import * as THREE from 'three'
 import { makeCamera, resizeCamera } from '/src/render/scene.js'
 import { cameraOffset, ISO_ELEVATION, distanceForFraming } from '/src/camera.js'
 import { toThreeX, toThreeY, toThreeZ } from '/src/mapgeom.js'
+import { colorParts } from '../vendor/uikit/runtime.js'
 
 const FOV = 50
 const MIN_VIEW = 4
 const MAX_VIEW = 300
 
-export const COLORS = {
-  grid: 0x1b2230, gridMajor: 0x2a3446, outline: 0xffe066, handle: 0xffe066, handleHot: 0xffffff,
-  rubber: 0x5b8fd6, corner: 0x5f7fa8, pickable: 0x5b8fd6, when: 0xffcc66, if: 0x5b8fd6, then: 0x7ad48a, spawn: 0x66ff99, light: 0xffcc66, mob: 0xff6b6b, prop: 0x8fd0ff, edgeHot: 0x5b8fd6,
+// The furniture's colours, as three.js numbers, from the skin (docs/STUDIO_SKINS.md):
+// wearSkin() fills them from S.skin.canvas, and again on every change of skin
+// or mode. ALPHA holds the opacity the skin gives each (1 when solid); FILL
+// the fill alpha of the keys that fill (a room marked wrong, a neighbour).
+// Each key names its canvas entry and which part of it: [group, key, part].
+export const SKIN_KEYS = {
+  stage: ['common', 'stage'],
+  grid: ['common', 'grid.minor'], gridMajor: ['common', 'grid.major'],
+  outline: ['common', 'selected'], handle: ['common', 'handle', 'fill'], handleHot: ['common', 'handle.hot', 'fill'],
+  rubber: ['map', 'draw'], corner: ['map', 'corner.snap', 'fill'], pickable: ['map', 'pick'], edgeHot: ['map', 'wall.selected'],
+  when: ['map', 'trigger.when'], if: ['map', 'trigger.if'], then: ['map', 'trigger.then'],
+  spawn: ['map', 'marker.spawn'], light: ['map', 'marker.light'], mob: ['map', 'marker.monster'], prop: ['map', 'marker.prop'],
   // Camera paths: the curve the camera rides, and the polyline that was typed.
-  path: 0x9a7bd6, pathHot: 0xd0a6ff, pathChord: 0x4a3f66,
+  path: ['map', 'path'], pathHot: ['map', 'path.active'], pathChord: ['map', 'path.chord'],
   // A room the bake refused or a check complained about.
-  problem: 0xff4d4d, problemWarn: 0xffa94d,
+  problem: ['common', 'problem'], problemWarn: ['common', 'warning'],
   // A side that climbs (climb.js).
-  climb: 0x7ad48a,
+  climb: ['map', 'climb'],
   // The metamap: a map's cell, and how its boundary sides meet a neighbour's.
-  cell: 0x8fa6c4, neighbourShade: 0x0b0d12, seam_joined: 0x66ff99, seam_oneway: 0xffa94d, seam_walls: 0x5f7fa8, seam_loose: 0xff6b6b
+  cell: ['map', 'cell'], neighbourShade: ['map', 'neighbour', 'fill'],
+  seam_joined: ['map', 'seam.joined'], seam_oneway: ['map', 'seam.oneway'], seam_walls: ['map', 'seam.walls'], seam_loose: ['map', 'seam.loose']
+}
+export const COLORS = {}
+export const ALPHA = {}
+export const FILL = {}
+// The badge a marker without a picture is drawn as: map.marker's fill, text colour, border, corner and font.
+export const BADGE = {}
+// Until a skin is worn: the loud magenta of a missing key (runtime.js).
+for (const k of Object.keys(SKIN_KEYS)) { COLORS[k] = colorParts('').hex; ALPHA[k] = 1; FILL[k] = 1 }
+
+/** Take the skin's canvas colours into COLORS / ALPHA / FILL / BADGE. */
+export function wearSkin (skin) {
+  for (const [k, [group, key, part]] of Object.entries(SKIN_KEYS)) {
+    const spec = skin.canvas(group, key)
+    const c = colorParts(part ? spec[part] ?? spec.color : spec.color)
+    COLORS[k] = c.hex
+    ALPHA[k] = c.alpha * (spec.alpha ?? 1)
+    FILL[k] = colorParts(spec.fill ?? spec.color).alpha
+  }
+  Object.assign(BADGE, skin.canvas('map', 'marker'))
 }
 
 export class Viewport {
@@ -47,7 +77,7 @@ export class Viewport {
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
     this.renderer.setPixelRatio(Math.min(2, devicePixelRatio))
     this.renderer.setSize(innerWidth, innerHeight)
-    this.renderer.setClearColor(0x0b0d12)
+    this.renderer.setClearColor(COLORS.stage, ALPHA.stage)
     host.appendChild(this.renderer.domElement)
     this.canvas = this.renderer.domElement
 
@@ -65,9 +95,8 @@ export class Viewport {
     const minor = new THREE.GridHelper(512, 512, COLORS.gridMajor, COLORS.grid)
     const major = new THREE.GridHelper(512, 64, COLORS.gridMajor, COLORS.gridMajor)
     minor.material.transparent = major.material.transparent = true
-    minor.material.opacity = 0.55
-    major.material.opacity = 0.7
     this.grid.add(minor, major)
+    this.gridLines = { minor, major }
     this.scene.add(this.grid)
 
     this.view = null
@@ -76,7 +105,7 @@ export class Viewport {
     this.lines = new THREE.Group()
     // One geometry for the many thin lines a pick offers (every wall, every
     // room outline): a Line per edge would be thousands of draw calls.
-    this.segments = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: COLORS.pickable, depthTest: false, transparent: true, opacity: 0.85 }))
+    this.segments = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: COLORS.pickable, depthTest: false, transparent: true, opacity: ALPHA.pickable }))
     this.segments.renderOrder = 8
     this.segments.visible = false
     // The neighbouring maps on the metamap, drawn where they sit; never picked.
@@ -89,9 +118,38 @@ export class Viewport {
 
     addEventListener('resize', () => this.resize())
     this.resize()
+    this.reskin()
   }
 
   get camera () { return this.mode === 'plan' ? this.plan : this.iso }
+
+  /**
+   * The skin changed (wearSkin ran): the lasting materials take the new
+   * colours in place -- the stage, the grid, the pick lines -- and the
+   * badges are drawn again. The furniture itself is rebuilt by the next
+   * redraw, as it is on every edit.
+   */
+  reskin () {
+    this.renderer.setClearColor(COLORS.stage, ALPHA.stage)
+    const { minor, major } = this.gridLines
+    // GridHelper colours its vertices: four per division (a line each way),
+    // the middle division in the first colour, every other in the second.
+    const paint = (g, centre, lines) => {
+      const col = g.geometry.attributes.color
+      const a = new THREE.Color(centre); const b = new THREE.Color(lines)
+      const mid = (col.count / 4 - 1) / 2
+      for (let v = 0; v < col.count; v++) (Math.floor(v / 4) === mid ? a : b).toArray(col.array, v * 3)
+      col.needsUpdate = true
+    }
+    paint(minor, COLORS.gridMajor, COLORS.grid)
+    paint(major, COLORS.gridMajor, COLORS.gridMajor)
+    minor.material.opacity = ALPHA.grid
+    major.material.opacity = ALPHA.gridMajor
+    this.segments.material.opacity = ALPHA.pickable
+    for (const t of this.labelCache.values()) t.dispose()
+    this.labelCache.clear()
+    this.dirty = true
+  }
 
   resize () {
     this.renderer.setSize(innerWidth, innerHeight)
@@ -285,7 +343,7 @@ export class Viewport {
     const size = this.viewHeight / 90
     for (const p of points) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size),
-                               new THREE.MeshBasicMaterial({ color: p.color ?? (p.hot ? COLORS.handleHot : COLORS.handle), depthTest: false }))
+                               new THREE.MeshBasicMaterial({ color: p.color ?? (p.hot ? COLORS.handleHot : COLORS.handle), depthTest: false, ...opacity(p.alpha) }))
       m.position.set(toThreeX(p.x), toThreeY(p.z) + size / 2, toThreeZ(p.y))
       m.renderOrder = 10
       // A handle says what it belongs to: a sector's corner and a camera
@@ -304,7 +362,7 @@ export class Viewport {
       const pts = l.points.map((p) => new THREE.Vector3(toThreeX(p.x), toThreeY(p.z) + 0.02, toThreeZ(p.y)))
       if (l.closed && pts.length) pts.push(pts[0].clone())
       const geo = new THREE.BufferGeometry().setFromPoints(pts)
-      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: l.color ?? COLORS.outline, depthTest: false }))
+      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: l.color ?? COLORS.outline, depthTest: false, ...opacity(l.alpha) }))
       line.renderOrder = 9
       this.lines.add(line)
       // A closed line may be filled, translucent, on its own plane: how a room
@@ -345,7 +403,7 @@ export class Viewport {
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + m.icon.dy, toThreeZ(m.y))
         sprite.userData = { kind: m.kind, id: m.id, own: true, h: m.icon.h }
       } else {
-        sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.#label(m.label, m.color), depthTest: false, transparent: true }))
+        sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.#label(m.label, m.color), depthTest: false, transparent: true, opacity: m.alpha ?? 1 }))
         sprite.scale.set(h * 3, h, 1)
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + h / 2, toThreeZ(m.y))
         sprite.userData = { kind: m.kind, id: m.id, own: true, label: m.label }
@@ -361,7 +419,7 @@ export class Viewport {
         const tip = { x: m.x + Math.cos(a) * L, y: m.y + Math.sin(a) * L }
         const side = (s) => ({ x: tip.x - Math.cos(a + s) * L * 0.35, y: tip.y - Math.sin(a + s) * L * 0.35 })
         const pts = [m, tip, tip, side(0.5), tip, side(-0.5)].map((p) => new THREE.Vector3(toThreeX(p.x), toThreeY(m.z) + 0.05, toThreeZ(p.y)))
-        const arrow = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: m.color, depthTest: false, transparent: true }))
+        const arrow = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: m.color, depthTest: false, transparent: true, opacity: m.alpha ?? 1 }))
         arrow.renderOrder = 12
         arrow.userData = { kind: 'heading', own: true }
         this.markers.add(arrow)
@@ -376,12 +434,14 @@ export class Viewport {
     const c = document.createElement('canvas')
     c.width = 192; c.height = 64
     const g = c.getContext('2d')
-    g.fillStyle = 'rgba(11,13,18,.78)'
-    g.beginPath(); g.roundRect(4, 8, 184, 48, 12); g.fill()
+    // map.marker, drawn at the canvas's scale (the sprite is ~2.2x the skin's px)
+    const K = 2.2
+    g.fillStyle = BADGE.fill
+    g.beginPath(); g.roundRect(4, 8, 184, 48, (BADGE.radius ?? 6) * K); g.fill()
     g.strokeStyle = `#${color.toString(16).padStart(6, '0')}`
-    g.lineWidth = 4; g.stroke()
-    g.fillStyle = '#e8f0ff'
-    g.font = '600 26px ui-monospace, Menlo, monospace'
+    g.lineWidth = Math.max(1, (BADGE.width ?? 2) * 4 / 3); g.stroke()
+    g.fillStyle = BADGE.color
+    g.font = String(BADGE.font ?? '600 11px sans-serif').replace(/(\d+(?:\.\d+)?)px/, (_, n) => `${Math.round(n * K)}px`)
     g.textAlign = 'center'; g.textBaseline = 'middle'
     g.fillText(text.slice(0, 12), 96, 33)
     const tex = new THREE.CanvasTexture(c)
@@ -389,3 +449,6 @@ export class Viewport {
     return tex
   }
 }
+
+/** A material's opacity, when the skin gives the colour one. */
+const opacity = (alpha) => (alpha !== undefined && alpha < 1 ? { transparent: true, opacity: alpha } : {})

@@ -3044,6 +3044,28 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
 {
   const list = await page.evaluate(() => window.__studio.skinList)
   check(list.length >= 4 && list[0].id === 'claude', `the shipped skins are listed (${list.map((s) => s.id).join(', ')})`)
+  // A mode change, live: the map editor's colours and its lasting materials
+  // (the grid) take the skin's canvas colours in place, no reload.
+  const live = await page.evaluate(async () => {
+    const S = window.__studio
+    const { COLORS } = await import('/studio/src/viewport.js')
+    const { colorParts } = await import('/studio/vendor/uikit/runtime.js')
+    const THREE = await import('three')
+    const read = () => {
+      // vertex colours are linear; back to the sRGB number the skin wrote
+      const col = S.viewport.gridLines.major.geometry.attributes.color
+      const grid = new THREE.Color().setRGB(col.array[0], col.array[1], col.array[2], THREE.LinearSRGBColorSpace).getHex()
+      return { path: COLORS.path, wantPath: colorParts(S.skin.canvas('map', 'path').color).hex, grid, wantGrid: colorParts(S.skin.canvas('common', 'grid.major').color).hex }
+    }
+    const was = read()
+    S.skin.setMode('light')
+    const lit = read()
+    const r = { mode: document.documentElement.dataset.dnpMode, was, lit, bg: S.skin.token('color.bg.app') }
+    S.skin.setMode('auto')
+    return r
+  })
+  check(live.mode === 'light' && live.lit.path === live.lit.wantPath && live.lit.grid === live.lit.wantGrid && live.was.grid === live.was.wantGrid && live.was.grid !== live.lit.grid,
+        `a mode change recolours the map editor in place: paths and grid in the skin's colours (${JSON.stringify(live)})`)
   for (const s of list) {
     for (const mode of s.modes) {
       const p = await browser.newPage()

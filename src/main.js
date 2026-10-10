@@ -48,7 +48,7 @@ import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
 import { Vocab } from './vocab.js'
-import { Viewport, COLORS } from './viewport.js'
+import { Viewport, COLORS, ALPHA, FILL, wearSkin as wearCanvasSkin } from './viewport.js'
 import { Preview } from './preview.js'
 import { TextureCache } from './textures.js'
 import { SpriteLibrary } from './sprites.js'
@@ -79,6 +79,7 @@ import { install as installSprites } from './sections/sprites.js'
 import { installBaking } from './bake/apply.js'
 import { ensureServiceWorker, loadInstalled } from './plugins/install.js'
 import { wearSkin, skinList } from './skin.js'
+import { redrawThumbs } from './thumbs.js'
 
 const boot = document.getElementById('boot')
 const bootMsg = document.getElementById('bootmsg')
@@ -220,7 +221,19 @@ await seedFromShell()
 }
 
 stage('the picture', 0.85)
+wearCanvasSkin(S.skin)
 S.viewport = new Viewport(document.body)
+// A new skin or mode: the map editor's colours in place, then every drawing
+// that asks the skin draws again (S.onSkin listeners: graph, previews, …).
+S.skinListeners = new Set()
+S.onSkin = (fn) => { S.skinListeners.add(fn); return () => S.skinListeners.delete(fn) }
+S.onSkin((skin) => redrawThumbs(skin))
+S.skin.onChange(() => {
+  wearCanvasSkin(S.skin)
+  S.viewport.reskin()
+  redraw()
+  for (const fn of S.skinListeners) { try { fn(S.skin) } catch (e) { console.warn('[studio] a drawing did not take the skin:', e) } }
+})
 // The sky, before any map is drawn: a sky flat takes its material when it is built.
 installSky(S)
 // The module's own pictures come from the record's blobs; everything else the
@@ -948,6 +961,9 @@ function deleteSelection () {
 }
 
 // --- drawing the furniture ------------------------------------------------------------------
+/** A furniture colour and its opacity, as the skin gives them (viewport.js SKIN_KEYS). */
+function tint (k) { return { color: COLORS[k], alpha: ALPHA[k] } }
+
 function redraw () {
   const d = S.doc
   const sel = S.selection
@@ -962,15 +978,15 @@ function redraw () {
     for (const oid of d.order) {
       if (S.drag?.kind === 'vertex' && oid === S.drag.s.id) continue
       const o = d.sectors[oid]
-      for (const v of o.verts) handles.push({ id: v.id, x: v.x, y: v.y, z: o.floor, color: COLORS.corner })
+      for (const v of o.verts) handles.push({ id: v.id, x: v.x, y: v.y, z: o.floor, ...tint('corner') })
     }
   }
   if (s) {
-    lines.push({ points: s.verts.map((v) => ({ x: v.x, y: v.y, z: s.floor })), closed: true, color: COLORS.outline })
+    lines.push({ points: s.verts.map((v) => ({ x: v.x, y: v.y, z: s.floor })), closed: true, ...tint('outline') })
     handles.push(...s.verts.map((v) => ({ id: v.id, x: v.x, y: v.y, z: s.floor, hot: sel.kind === 'vertex' && sel.id === v.id })))
     if (sel.kind === 'edge') {
       const e = findEdge(d, sel.id)
-      if (e) lines.push({ points: insetEdge(e, 0.2, s.floor + 0.05), color: COLORS.edgeHot })
+      if (e) lines.push({ points: insetEdge(e, 0.2, s.floor + 0.05), ...tint('edgeHot') })
     }
   }
   // While a pick is pending, everything that could be tapped is shown thin
@@ -1022,22 +1038,23 @@ function redraw () {
   const mm = S.module.metamap
   if (mm?.enabled && mm.pitch && mm.cells?.[S.docName]) {
     const [pw, ph] = mm.pitch
-    lines.push({ points: [{ x: 0, y: 0, z: 0 }, { x: pw, y: 0, z: 0 }, { x: pw, y: ph, z: 0 }, { x: 0, y: ph, z: 0 }], closed: true, color: COLORS.cell })
+    lines.push({ points: [{ x: 0, y: 0, z: 0 }, { x: pw, y: 0, z: 0 }, { x: pw, y: ph, z: 0 }, { x: 0, y: ph, z: 0 }], closed: true, ...tint('cell') })
     for (const nb of S.neighbourInfo ?? []) {
-      badges.push({ x: nb.offset.x + pw / 2, y: nb.offset.y + ph / 2, z: 0, label: `${nb.name}${nb.failed ? ' (does not bake)' : ''}`, color: COLORS.cell })
+      badges.push({ x: nb.offset.x + pw / 2, y: nb.offset.y + ph / 2, z: 0, label: `${nb.name}${nb.failed ? ' (does not bake)' : ''}`, ...tint('cell') })
       // Dimmed, so the one map under a finger is the one that looks it.
-      for (const p of nb.polys ?? []) lines.push({ points: p.pts.map((v) => ({ x: v.x + nb.offset.x, y: v.y + nb.offset.y, z: p.floor + 0.04 })), closed: true, color: COLORS.neighbourShade, fill: 0.5 })
+      for (const p of nb.polys ?? []) lines.push({ points: p.pts.map((v) => ({ x: v.x + nb.offset.x, y: v.y + nb.offset.y, z: p.floor + 0.04 })), closed: true, color: COLORS.neighbourShade, fill: FILL.neighbourShade })
     }
     for (const sm of S.seams ?? []) {
       const e = findEdge(d, sm.edgeId)
       if (!e) continue
-      lines.push({ points: insetEdge(e, 0.15, e.sector.floor + 0.12), color: COLORS[`seam_${sm.state.replace('-', '')}`] ?? COLORS.cell })
+      const seam = `seam_${sm.state.replace('-', '')}`
+      lines.push({ points: insetEdge(e, 0.15, e.sector.floor + 0.12), ...tint(seam in COLORS ? seam : 'cell') })
     }
   }
   // What climbs (climb.js): a green line just inside each climbable side.
   for (const c of S.climbs ?? []) {
     const e = findEdge(d, c.edge.id)
-    if (e) lines.push({ points: insetEdge(e, 0.1, e.sector.floor + 0.09), color: COLORS.climb })
+    if (e) lines.push({ points: insetEdge(e, 0.1, e.sector.floor + 0.09), ...tint('climb') })
   }
   // WHAT IS WRONG, on the map: each room a bake or a check complained about,
   // outlined in red (amber for a warning) with a badge, and the wall itself
@@ -1046,14 +1063,15 @@ function redraw () {
   for (const p of S.problems ?? []) {
     const o = d.sectors[p.sector]
     if (!o) continue
-    const color = p.level === 'warn' ? COLORS.problemWarn : COLORS.problem
+    const tone = p.level === 'warn' ? 'problemWarn' : 'problem'
+    const color = COLORS[tone]
     if (p.edge) {
       const e = findEdge(d, p.edge)
       if (e) lines.push({ points: insetEdge(e, 0.2, o.floor + 0.1), color })
     }
     if (marked.has(p.sector)) continue
     marked.add(p.sector)
-    lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor + 0.08 })), closed: true, color, fill: p.level === 'warn' ? 0.18 : 0.3 })
+    lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor + 0.08 })), closed: true, color, fill: FILL[tone] })
     const n = o.verts.length
     badges.push({ x: o.verts.reduce((a, v) => a + v.x, 0) / n, y: o.verts.reduce((a, v) => a + v.y, 0) / n, z: o.floor, label: p.level === 'warn' ? '⚠' : '✖ wrong', color })
   }
@@ -1064,31 +1082,31 @@ function redraw () {
   for (const p of d.paths ?? []) {
     const hot = p.id === S.pathEdit
     const curve = S.pathCurve(p)
-    if (curve) lines.push({ points: curve.points, color: hot ? COLORS.pathHot : COLORS.path })
+    if (curve) lines.push({ points: curve.points, ...tint(hot ? 'pathHot' : 'path') })
     if (hot) {
-      if (curve) lines.push({ points: p.points.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })), closed: p.loop, color: COLORS.pathChord })
+      if (curve) lines.push({ points: p.points.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })), closed: p.loop, ...tint('pathChord') })
       handles.push(...p.points.map((pt) => ({ id: pt.id, kind: 'pathpoint', x: pt.x, y: pt.y, z: pt.z,
                                              hot: pt.id === S.pathPointSel, color: pt.id === S.pathPointSel ? undefined : COLORS.pathHot })))
       // NUMBERED, because the order is the shape and moving a waypoint along
       // the curve has no visible effect otherwise.
-      p.points.forEach((pt, n) => badges.push({ x: pt.x, y: pt.y, z: pt.z, label: String(n + 1), color: COLORS.pathHot }))
+      p.points.forEach((pt, n) => badges.push({ x: pt.x, y: pt.y, z: pt.z, label: String(n + 1), ...tint('pathHot') }))
     }
   }
   if (S.draw.corners.length) {
     const z = S.workZ()
-    lines.push({ points: S.draw.corners.map((c) => ({ ...c, z })), closed: false, color: COLORS.rubber })
+    lines.push({ points: S.draw.corners.map((c) => ({ ...c, z })), closed: false, ...tint('rubber') })
     handles.push(...S.draw.corners.map((c, i) => ({ id: `draw${i}`, x: c.x, y: c.y, z, hot: i === 0 })))
   }
   S.viewport.setHandles(handles)
   if (S.draw.rect) {
     const r = S.draw.rect; const z = S.workZ()
-    lines.push({ points: [{ x: r.x0, y: r.y0, z }, { x: r.x1, y: r.y0, z }, { x: r.x1, y: r.y1, z }, { x: r.x0, y: r.y1, z }], closed: true, color: COLORS.rubber })
+    lines.push({ points: [{ x: r.x0, y: r.y0, z }, { x: r.x1, y: r.y0, z }, { x: r.x1, y: r.y1, z }, { x: r.x0, y: r.y1, z }], closed: true, ...tint('rubber') })
   }
   S.viewport.setLines(lines)
   const markers = []
-  for (const p of d.spawns) markers.push({ id: p.id, kind: 'spawn', x: p.x, y: p.y, z: p.z, label: `⚑ ${p.tag}`, color: COLORS.spawn })
-  for (const l of d.lights) markers.push({ id: l.id, kind: 'light', x: l.x, y: l.y, z: l.z, label: '☀ light', color: COLORS.light })
-  for (const e of d.entities) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, color: e.kind === 'mob' ? COLORS.mob : COLORS.prop, icon: S.sprites?.iconFor(e.name), heading: e.angle ?? 0 })
+  for (const p of d.spawns) markers.push({ id: p.id, kind: 'spawn', x: p.x, y: p.y, z: p.z, label: `⚑ ${p.tag}`, ...tint('spawn') })
+  for (const l of d.lights) markers.push({ id: l.id, kind: 'light', x: l.x, y: l.y, z: l.z, label: '☀ light', ...tint('light') })
+  for (const e of d.entities) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, ...tint(e.kind === 'mob' ? 'mob' : 'prop'), icon: S.sprites?.iconFor(e.name), heading: e.angle ?? 0 })
   badges.forEach((b, i) => markers.push({ id: `badge${i}`, kind: 'badge', x: b.x, y: b.y, z: b.z + 0.6, label: b.label, color: b.color }))
   S.viewport.setMarkers(markers)
 }

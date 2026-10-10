@@ -17,6 +17,8 @@
 import { el, muted } from './ui.js'
 import { sweepOffset, pitchOffset } from '/src/render/swing.js'
 import { argFields } from './argform.js'
+import { useStroke, useText } from '../vendor/uikit/runtime.js'
+import { withAlpha } from './skin.js'
 
 /** A vocabulary `fx` value as a plain number: 12, "0.125" or [1, 8]. */
 export function fxValue (v, fallback = 0) {
@@ -48,7 +50,9 @@ const TAU = Math.PI * 2
  * and the side panel says so rather than drawing a lie.
  */
 export class SwingPreview {
-  constructor () {
+  /** @param skin  () => the studio's skin (S.skin), asked for every colour each frame */
+  constructor (skin) {
+    this.skin = skin
     this.canvas = el('canvas', { class: 'st-swing-canvas', width: 336, height: 172 })
     this.swing = null
     this.radius = 0.35
@@ -75,9 +79,10 @@ export class SwingPreview {
     const c = this.canvas
     const g = c.getContext('2d')
     g.clearRect(0, 0, c.width, c.height)
-    g.fillStyle = '#12161e'
-    g.fillRect(0, 0, c.width, c.height)
     if (!sw) return
+    // The skin's colours, asked each frame, so a new skin shows at once.
+    const k = (key) => this.skin().canvas('preview', `swing.${key}`)
+    const range = k('range'); const current = k('current')
 
     const ticks = Math.max(1, Math.round(Number(sw.ticks) || 12))
     // The gap between swings is the cooldown, so the loop shows the real
@@ -107,7 +112,7 @@ export class SwingPreview {
     const cx = pane / 2; const cy = c.height / 2 + 6
     this.#grid(g, cx, cy, scale, reach)
     const nowOffset = live ? sweepOffset({ from, to, ticks, left }) : null
-    this.#wedge(g, cx, cy, Math.min(from, to) - halfArc, Math.max(from, to) + halfArc, r0, r1, 'rgba(122,212,138,.13)')
+    this.#wedge(g, cx, cy, Math.min(from, to) - halfArc, Math.max(from, to) + halfArc, r0, r1, range.fill)
     if (nowOffset !== null) {
       // A short trail, so the direction of travel is visible in a still frame.
       for (let back = 1; back <= 4; back++) {
@@ -115,9 +120,9 @@ export class SwingPreview {
         if (l > ticks) break
         const o = sweepOffset({ from, to, ticks, left: l })
         if (o === null) continue
-        this.#wedge(g, cx, cy, o - halfArc, o + halfArc, r0, r1, `rgba(255,224,102,${0.16 - back * 0.03})`)
+        this.#wedge(g, cx, cy, o - halfArc, o + halfArc, r0, r1, withAlpha(current.fill, (0.16 - back * 0.03) / 0.42))
       }
-      this.#wedge(g, cx, cy, nowOffset - halfArc, nowOffset + halfArc, r0, r1, 'rgba(255,224,102,.42)', '#ffe066')
+      this.#wedge(g, cx, cy, nowOffset - halfArc, nowOffset + halfArc, r0, r1, current.fill, current.color)
     }
     this.#body(g, cx, cy, scale)
     this.#label(g, 6, 14, 'from above')
@@ -125,17 +130,17 @@ export class SwingPreview {
 
     // --- from the side -----------------------------------------------------
     const sx = pane + pane / 2
-    g.strokeStyle = '#2a3446'
+    g.strokeStyle = k('ring').color
     g.beginPath(); g.moveTo(pane + 0.5, 8); g.lineTo(pane + 0.5, c.height - 8); g.stroke()
     this.#grid(g, sx, cy, scale, reach)
     if (halfPitch > 0) {
-      this.#wedge(g, sx, cy, Math.min(pitchFrom, pitchTo) - halfPitch, Math.max(pitchFrom, pitchTo) + halfPitch, r0, r1, 'rgba(122,212,138,.13)')
+      this.#wedge(g, sx, cy, Math.min(pitchFrom, pitchTo) - halfPitch, Math.max(pitchFrom, pitchTo) + halfPitch, r0, r1, range.fill)
       const p = live ? pitchOffset({ pitchFrom, pitchTo, ticks, left }) : null
-      if (p !== null) this.#wedge(g, sx, cy, p - halfPitch, p + halfPitch, r0, r1, 'rgba(255,224,102,.42)', '#ffe066')
+      if (p !== null) this.#wedge(g, sx, cy, p - halfPitch, p + halfPitch, r0, r1, current.fill, current.color)
     } else {
-      this.#wedge(g, sx, cy, -0.012, 0.012, r0, r1, 'rgba(122,212,138,.30)')
+      this.#wedge(g, sx, cy, -0.012, 0.012, r0, r1, range.color)
     }
-    g.strokeStyle = '#2a3446'
+    g.strokeStyle = k('ring').color
     g.beginPath(); g.moveTo(pane + 8, cy + 0.5); g.lineTo(c.width - 8, cy + 0.5); g.stroke()
     this.#body(g, sx, cy, scale)
     this.#label(g, pane + 6, 14, halfPitch > 0 ? 'from the side' : 'from the side · no height check')
@@ -163,25 +168,23 @@ export class SwingPreview {
 
   /** A ring every world unit, so reach is read off the picture rather than trusted. */
   #grid (g, cx, cy, scale, reach) {
-    g.strokeStyle = '#1b2230'
+    const skin = this.skin()
+    useStroke(g, skin.canvas('preview', 'swing.ring'))
     for (let u = 1; u <= Math.ceil(reach + this.radius); u++) {
       g.beginPath(); g.arc(cx, cy, u * scale, 0, TAU); g.stroke()
     }
-    g.strokeStyle = '#2a3446'
-    g.setLineDash([2, 3])
+    useStroke(g, skin.canvas('preview', 'swing.reach'))
     g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + (this.radius + reach) * scale + 8, cy); g.stroke()
     g.setLineDash([])
   }
 
   #body (g, cx, cy, scale) {
-    g.fillStyle = '#0b0d12'
-    g.strokeStyle = '#3a4454'
-    g.beginPath(); g.arc(cx, cy, Math.max(2, this.radius * scale), 0, TAU); g.fill(); g.stroke()
+    g.fillStyle = this.skin().canvas('preview', 'swing.body').fill
+    g.beginPath(); g.arc(cx, cy, Math.max(2, this.radius * scale), 0, TAU); g.fill()
   }
 
   #label (g, x, y, t) {
-    g.fillStyle = '#5f7fa8'
-    g.font = '10px ui-monospace, Menlo, monospace'
+    useText(g, this.skin().canvas('common', 'text'))
     g.fillText(t, x, y)
   }
 }

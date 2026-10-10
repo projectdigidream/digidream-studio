@@ -191,21 +191,21 @@ const STYLE = `
    went for the state (the button's touch-action is scrolling's). */
 .wk-bar{flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;padding:8px}
 .wk-board{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;touch-action:none;
-  background-image:radial-gradient(var(--dnp-color-bg-raised) 1px,transparent 1px);background-size:24px 24px}
+  background-color:var(--cv-graph-board);background-image:radial-gradient(var(--cv-graph-dot-fill) 1px,transparent 1px);background-size:var(--cv-graph-dot-size) var(--cv-graph-dot-size)}
 .wk-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;background:color-mix(in srgb,var(--dnp-color-bg-app) 85%,transparent);border:1px solid var(--dnp-color-line-main);border-radius:10px;padding:4px}
 .wk-zoom button{min-width:36px;height:34px;padding:0 8px;border-radius:8px;background:var(--dnp-color-bg-raised);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);font:600 15px/1 var(--dnp-font-ui);cursor:pointer}
 .wk-zoom-pct{font:600 11px var(--dnp-font-mono);color:var(--dnp-color-text-secondary);min-width:42px;text-align:center}
 .wk-world{position:absolute;left:0;top:0;width:4000px;height:4000px;transform-origin:0 0}
 .wk-edges{position:absolute;left:0;top:0;width:4000px;height:4000px;overflow:visible}
-.wk-edge{fill:none;stroke:var(--dnp-color-text-secondary);stroke-width:2}
-.wk-edge-next{stroke-dasharray:8 6;stroke:var(--dnp-color-tone-when)}
-.wk-edge-goto{stroke-dasharray:2 5;stroke:var(--dnp-color-ok)}
-.wk-label{font:11px var(--dnp-font-ui);fill:var(--dnp-color-text-primary);paint-order:stroke;stroke:var(--dnp-color-bg-app);stroke-width:4px;cursor:pointer;pointer-events:auto}
-.wk-node{position:absolute;width:168px;height:72px;box-sizing:border-box;border:1px solid var(--dnp-color-line-strong);border-radius:10px;background:var(--dnp-color-bg-panel);
+.wk-edge{fill:none;stroke:var(--cv-graph-edge-transition);stroke-width:var(--cv-graph-edge-transition-width)}
+.wk-edge-next{stroke-dasharray:8 6;stroke:var(--cv-graph-edge-next);stroke-width:var(--cv-graph-edge-next-width)}
+.wk-edge-goto{stroke-dasharray:2 5;stroke:var(--cv-graph-edge-goto);stroke-width:var(--cv-graph-edge-goto-width)}
+.wk-label{font:var(--cv-graph-edge-label-font);fill:var(--cv-graph-edge-label);paint-order:stroke;stroke:var(--cv-graph-edge-label-fill);stroke-width:4px;cursor:pointer;pointer-events:auto}
+.wk-node{position:absolute;width:168px;height:72px;box-sizing:border-box;border:var(--cv-graph-state-width) solid var(--cv-graph-state);border-radius:var(--cv-graph-state-radius);background:var(--cv-graph-state-fill);
   padding:8px 10px;cursor:grab;user-select:none;touch-action:none;display:flex;flex-direction:column;gap:2px;font-size:11px}
 .wk-node-name{font-weight:700;font-size:13px}
-.wk-node-on{border-color:var(--dnp-color-select);box-shadow:0 0 0 2px var(--dnp-color-select) inset}
-.wk-node-bad{border-color:var(--dnp-color-error)}
+.wk-node-on{border-color:var(--cv-graph-state-selected);box-shadow:0 0 0 var(--cv-graph-state-selected-width) var(--cv-graph-state-selected) inset}
+.wk-node-bad{border-color:var(--cv-graph-state-bad)}
 .wk-details{grid-area:details;border-left:1px solid var(--dnp-color-line-main);padding:10px;display:flex;flex-direction:column;gap:10px;overflow:auto;
   padding-bottom:calc(20px + env(safe-area-inset-bottom))}
 .wk-flash{outline:2px solid var(--dnp-color-select)}

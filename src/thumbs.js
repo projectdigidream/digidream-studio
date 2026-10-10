@@ -9,6 +9,8 @@
 // is drawn over it -- with the start and the placed things as dots.
 //
 
+import { withAlpha } from './skin.js'
+
 /**
  * How the map fits a w x h canvas with `pad` pixels round it: canvas x = ox +
  * k * x, canvas y = oy - k * y (north up). Null for a map with no rooms.
@@ -52,22 +54,24 @@ function imageAt (url, onLoad) {
 /**
  * Draw `doc` into `canvas`.
  * @param imageFor  (texture name) -> URL
+ * @param skin      the studio's skin (S.skin): the stage, room, line and dot colours (preview.thumb.*)
  * @param bounds    [x0, y0, x1, y1] to frame instead of the map's own extent
  */
-export function drawThumb (canvas, doc, { imageFor = (n) => `/textures/${n}.png`, bounds = null } = {}) {
+export function drawThumb (canvas, doc, { imageFor = (n) => `/textures/${n}.png`, bounds = null, skin } = {}) {
   const dpr = Math.min(2, globalThis.devicePixelRatio || 1)
   const w = canvas.clientWidth || Number(canvas.getAttribute('width')) || 160
   const h = canvas.clientHeight || Number(canvas.getAttribute('height')) || 100
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
   const g = canvas.getContext('2d')
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
-  g.fillStyle = '#0e1219'
+  const cv = (key) => skin.canvas('preview', `thumb.${key}`)
+  g.fillStyle = skin.canvas('common', 'stage').fill
   g.fillRect(0, 0, w, h)
   const t = thumbTransform(doc, w, h, 4, bounds)
   if (!t) return
   const X = (x) => t.ox + t.k * x
   const Y = (y) => t.oy - t.k * y
-  const redraw = () => drawThumb(canvas, doc, { imageFor, bounds })
+  const redraw = () => drawThumb(canvas, doc, { imageFor, bounds, skin })
   const floors = (doc.order ?? []).map((sid) => doc.sectors[sid]).filter((s) => s && s.verts?.length >= 3)
   const lo = Math.min(...floors.map((s) => s.floor)); const hi = Math.max(...floors.map((s) => s.floor))
   floors.sort((a, b) => area(b.verts) - area(a.verts))
@@ -82,20 +86,23 @@ export function drawThumb (canvas, doc, { imageFor = (n) => `/textures/${n}.png`
       pat.setTransform(new DOMMatrix().translate(t.ox, t.oy).scale(t.k / (doc.texscale || 32)))
       g.fillStyle = pat
       g.fill()
-      g.fillStyle = `rgba(0,0,0,${0.55 - 0.55 * (s.light ?? 255) / 255})`
+      g.fillStyle = `rgba(0,0,0,${0.55 - 0.55 * (s.light ?? 255) / 255})` // the room's own light: content, as the game darkens it
       g.fill()
     } else {
+      // The skin's room colour, lighter the higher the floor.
       const f = hi > lo ? (s.floor - lo) / (hi - lo) : 0.5
-      g.fillStyle = `hsl(215, 22%, ${18 + 22 * f}%)`
+      g.fillStyle = cv('room').fill
+      g.fill()
+      g.fillStyle = withAlpha(skin.canvas('common', 'stage').fill, 0.5 * (1 - f))
       g.fill()
     }
-    g.strokeStyle = 'rgba(207,227,255,.55)'
+    g.strokeStyle = cv('line').color
     g.lineWidth = 1
     g.stroke()
   }
   const dot = (x, y, color, r = 2.5) => { g.beginPath(); g.arc(X(x), Y(y), r, 0, Math.PI * 2); g.fillStyle = color; g.fill() }
-  for (const e of doc.entities ?? []) dot(e.x, e.y, e.kind === 'mob' ? '#ff6b6b' : '#8fd0ff', 2)
-  for (const p of doc.spawns ?? []) dot(p.x, p.y, '#66ff99', 3)
+  for (const e of doc.entities ?? []) dot(e.x, e.y, cv(e.kind === 'mob' ? 'monster' : 'prop').fill, 2)
+  for (const p of doc.spawns ?? []) dot(p.x, p.y, cv('spawn').fill, 3)
 }
 
 /** A canvas showing `doc`, drawn once it is in the page and has a size. */
@@ -103,6 +110,12 @@ export function thumbCanvas (doc, opts = {}, cls = 'sd-thumb') {
   const c = document.createElement('canvas')
   c.className = cls
   c.dataset.thumb = doc.name ?? ''
+  c.thumb = { doc, opts }
   requestAnimationFrame(() => drawThumb(c, doc, opts))
   return c
+}
+
+/** Draw every thumbnail on the page again (the skin changed). */
+export function redrawThumbs (skin, root = document) {
+  for (const c of root.querySelectorAll('canvas[data-thumb]')) if (c.thumb) drawThumb(c, c.thumb.doc, { ...c.thumb.opts, skin })
 }

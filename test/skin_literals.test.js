@@ -26,12 +26,10 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 // Files whose every colour is the module's: they write the module's files.
 const CONTENT = new Set(['style_emit.js', 'props_emit.js'])
 // Not yet migrated (later phases of the brief): shrink as each lands.
-const NOT_YET = new Set([
-  'viewport.js', 'swing.js', 'thumbs.js', 'vfxlib.js', 'workshop.js', 'graphwin.js',
-  'sections/textures.js', 'sections/style.js'
-])
+const NOT_YET = new Set([])
 
-const LITERAL = /(^|[^&\w])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b|\brgba?\(|\b0x[0-9a-fA-F]{6}\b/
+// rgba(${…}) built wholly from a value (a skin colour taken apart) is not a literal.
+const LITERAL = /(^|[^&\w])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b|\brgba?\((?!\$\{)|\b0x[0-9a-fA-F]{6}\b/
 // A line that holds the module's colour, not the studio's.
 const MODULE_COLOUR = /type: 'color'|colou?rRow\(|placeholder: '[^']*(#|rgba?\()|\bfill: '#|\bcolour(End)?: 0x|edit\('bg'\)|low = \[\{|\/[/*][^\n]*\bcontent\b/
 

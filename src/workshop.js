@@ -17,6 +17,7 @@
 // of the graph is kept in the module too (module.layouts), outside the table
 // mobs.load{} reads.
 //
+import { useStroke, useText } from '../vendor/uikit/runtime.js'
 import { el, row, slider, select, button, chips, muted, text, ask, confirmDialog } from './ui.js'
 import { parseAtlas, frameKey, quadFor } from '/src/render/atlas.js'
 import { rotationFor, frameAt } from '/src/render/props.js'
@@ -128,7 +129,7 @@ class Workshop {
     this.play = { anim: 0, animName: null, playing: true, facing: 0, t0: performance.now(), frame: 0 }
     // The swing, played rather than drawn still: a volume moving through time
     // is the one thing a still picture cannot show.
-    this.swingPreview = new SwingPreview()
+    this.swingPreview = new SwingPreview(() => S.skin)
     this.images = new Map()        // url -> HTMLImageElement
     this.atlases = new Map()       // sheet -> parsed atlas (served ones)
     this.raf = 0
@@ -339,16 +340,20 @@ class Workshop {
     const scale = Number(prop?.scale) > 0 ? Number(prop.scale) : 1
     const tall = (src ? src.atlas.worldHeight : (kind?.size ?? 1)) * scale
     const ppu = (floor - 8) / Math.max(2.5, tall * 1.15)
-    ctx.font = '10px ui-monospace, Menlo, monospace'
+    // The skin's ruler (half units on its minor grid), and its floor line.
+    const skin = this.S.skin
+    const ruler = skin.canvas('common', 'ruler')
+    ctx.font = ruler.font
     ctx.textAlign = 'left'
     for (let u = 0.5; u * ppu < floor - 8; u += 0.5) {
       const y = Math.round(floor - u * ppu) + 0.5
-      ctx.strokeStyle = u % 1 ? '#1a2230' : '#2a3446'
+      useStroke(ctx, u % 1 ? skin.canvas('common', 'grid.minor') : skin.canvas('common', 'grid.major'))
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(c.width, y); ctx.stroke()
-      if (!(u % 1)) { ctx.fillStyle = '#5f7fa8'; ctx.fillText(`${u}`, 4, y - 2) }
+      if (!(u % 1)) { ctx.fillStyle = ruler.color; ctx.fillText(`${u}`, 4, y - 2) }
     }
-    ctx.strokeStyle = '#3a4a62'
+    useStroke(ctx, skin.canvas('preview', 'floor'))
     ctx.beginPath(); ctx.moveTo(0, floor); ctx.lineTo(c.width, floor); ctx.stroke()
+    ctx.setLineDash([])
     let drew = false
     if (src) {
       if (src.atlas) this.#fillAnims(prop.art.sheet, src.atlas.animations.map((a) => a.name))
@@ -389,8 +394,7 @@ class Workshop {
       }
     }
     if (!drew) {
-      ctx.fillStyle = '#5f7fa8'
-      ctx.font = '13px ui-monospace, Menlo, monospace'
+      useText(ctx, this.S.skin.canvas('common', 'text'))
       ctx.textAlign = 'center'
       ctx.fillText(this.mob ? 'no picture: give the body a sheet' : 'no monster', c.width / 2, c.height / 2)
     }
@@ -440,7 +444,7 @@ class Workshop {
     const edges = edgesOf(m, this.spec.shape)
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('class', 'wk-edges')
-    svg.innerHTML = '<defs><marker id="wk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8fa6c4"/></marker></defs>'
+    svg.innerHTML = '<defs><marker id="wk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--cv-graph-edge-transition)"/></marker></defs>'
     const centre = (n) => ({ x: (layout[n]?.x ?? 0) + NODE_W / 2, y: (layout[n]?.y ?? 0) + NODE_H / 2 })
     for (const e of edges) {
       if (!layout[e.to]) continue

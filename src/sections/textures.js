@@ -7,6 +7,7 @@
 // in their floor and ceiling and walls in their three bands, so renaming one
 // follows every reference in every map, and deleting one in use asks first.
 //
+import { useStroke } from '../../vendor/uikit/runtime.js'
 import { shell } from '../bridge.js'
 import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, pictureBackground } from '../ui.js'
 import { guessSheet, frameRect, frameSize, sheetProblems, MAX_FRAMES, DEFAULT_FPS } from '../texsheet.js'
@@ -84,18 +85,18 @@ function sheetDialog ({ name, url, w, h, sheet, okLabel = 'save', nameEditable =
       const frame = spec ? (playing ? Math.floor(((performance.now() - t0) / 1000) * spec.fps) % spec.frames : 0) : 0
       const r = spec ? frameRect(spec, w, h, frame) : { x: 0, y: 0, w, h }
       if (spec) {
-        g.strokeStyle = 'rgba(255,224,102,.85)'; g.lineWidth = 1
+        useStroke(g, S.skin.canvas('preview', 'cutter.divider'))
         for (let i = 1; i < spec.frames; i++) {
           const c = frameRect(spec, w, h, i)
           g.beginPath()
           if (spec.layout === 'horizontal') { g.moveTo(c.x * k + 0.5, 0); g.lineTo(c.x * k + 0.5, ch) } else { g.moveTo(0, c.y * k + 0.5); g.lineTo(cw, c.y * k + 0.5) }
           g.stroke()
         }
-        g.strokeStyle = '#5b8fd6'; g.lineWidth = 2
+        useStroke(g, S.skin.canvas('preview', 'cutter.current'))
         g.strokeRect(r.x * k + 1, r.y * k + 1, r.w * k - 2, r.h * k - 2)
         // What is left over, shaded: the client does not show it.
         const spare = frameSize(spec, w, h).spare
-        if (spare) { g.fillStyle = 'rgba(255,77,77,.4)'; if (spec.layout === 'horizontal') g.fillRect((w - spare) * k, 0, spare * k, ch); else g.fillRect(0, (h - spare) * k, cw, spare * k) }
+        if (spare) { g.fillStyle = S.skin.canvas('preview', 'cutter.leftover').fill; if (spec.layout === 'horizontal') g.fillRect((w - spare) * k, 0, spare * k, ch); else g.fillRect(0, (h - spare) * k, cw, spare * k) }
       }
       const t = tileCv.getContext('2d')
       t.imageSmoothingEnabled = false
@@ -277,7 +278,7 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 .sd-sheet-ctl{flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px}
 .sd-sheet-pics{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin:6px 0}
 .sd-sheet-col{display:flex;flex-direction:column;align-items:center;gap:4px}
-.sd-sheet-cv,.sd-sheet-tile{image-rendering:pixelated;background:repeating-conic-gradient(var(--dnp-color-bg-raised) 0 25%,var(--dnp-color-bg-panel) 0 50%) 0 0/16px 16px;border:1px solid var(--dnp-color-line-main);border-radius:6px;max-width:100%}
+.sd-sheet-cv,.sd-sheet-tile{image-rendering:pixelated;background:repeating-conic-gradient(var(--cv-common-checker-a-fill) 0 25%,var(--cv-common-checker-b-fill) 0 50%) 0 0/16px 16px;border:1px solid var(--dnp-color-line-main);border-radius:6px;max-width:100%}
 .sd-sheet-tile{width:min(192px,45vh);height:min(192px,45vh)}
 .sd-sheet-thumb{width:56px;height:56px;flex:0 0 auto;border-radius:6px;border:1px solid var(--dnp-color-line-main);background-size:cover;image-rendering:pixelated}
 ` }))

@@ -15,6 +15,7 @@
 // slice lines -- rather than pretending.
 //
 import { shell } from '../bridge.js'
+import { useStroke } from '../../vendor/uikit/runtime.js'
 import { el, row, text, number, select, toggle, button, muted, ask, confirmDialog } from '../ui.js'
 import {
   newStyle, fontFromFile, families, fontList, withStyle, panelStyleRef, styleProblems, SHADOWS, SUBTITLE_DEFAULTS, STYLE_NAME_RE, FONT_EXTS
@@ -232,7 +233,7 @@ function sliceRows (label, part, pics) {
       g.imageSmoothingEnabled = false
       g.drawImage(img, 0, 0, c.width, c.height)
       const [t, r, b, l] = part.slice ?? [0, 0, 0, 0]
-      g.strokeStyle = '#ffe066'; g.setLineDash([4, 3]); g.lineWidth = 1
+      useStroke(g, S.skin.canvas('preview', 'slice.guide'))
       for (const [x0, y0, x1, y1] of [[0, t * k, c.width, t * k], [0, c.height - b * k, c.width, c.height - b * k], [l * k, 0, l * k, c.height], [c.width - r * k, 0, c.width - r * k, c.height]]) {
         g.beginPath(); g.moveTo(x0 + 0.5, y0 + 0.5); g.lineTo(x1 + 0.5, y1 + 0.5); g.stroke()
       }
@@ -370,9 +371,9 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 .sd-sub{display:flex;flex-direction:column;gap:10px}
 .sd-pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
 .sd-pic{display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid var(--dnp-color-line-main);border-radius:8px;padding:6px}
-.sd-pic img{max-width:100%;max-height:80px;image-rendering:pixelated;background:repeating-conic-gradient(var(--dnp-color-bg-raised) 0 25%,var(--dnp-color-bg-panel) 0 50%) 0 0/12px 12px}
+.sd-pic img{max-width:100%;max-height:80px;image-rendering:pixelated;background:repeating-conic-gradient(var(--cv-common-checker-a-fill) 0 25%,var(--cv-common-checker-b-fill) 0 50%) 0 0/12px 12px}
 .sd-slice-row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
-.sd-slice{border:1px solid var(--dnp-color-line-main);background:repeating-conic-gradient(var(--dnp-color-bg-raised) 0 25%,var(--dnp-color-bg-panel) 0 50%) 0 0/12px 12px;image-rendering:pixelated}
+.sd-slice{border:1px solid var(--dnp-color-line-main);background:repeating-conic-gradient(var(--cv-common-checker-a-fill) 0 25%,var(--cv-common-checker-b-fill) 0 50%) 0 0/12px 12px;image-rendering:pixelated}
 .sd-slice-nums{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;flex:1 1 200px}
 .sd-style-preview{position:relative;height:210px;max-width:320px;border:1px dashed var(--dnp-color-line-strong);border-radius:8px;overflow:hidden;background:linear-gradient(160deg,var(--dnp-color-bg-hover),var(--dnp-color-bg-sunken))}
 .sd-sub-preview{position:relative;height:200px;max-width:640px;border:1px dashed var(--dnp-color-line-strong);border-radius:8px;overflow:hidden;background:linear-gradient(160deg,var(--dnp-color-line-strong),var(--dnp-color-bg-panel))}

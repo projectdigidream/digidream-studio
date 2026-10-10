@@ -20,7 +20,7 @@ function showMaps () {
     const d = S.docs[n]
     const on = n === S.docName
     const r = el('div', { class: 'st-trow', 'data-on': on ? '1' : '0', 'data-map': n }, [
-      thumbCanvas(d, { imageFor: S.imageFor }, 'sd-thumb sd-thumb-row'),
+      thumbCanvas(d, { imageFor: S.imageFor, skin: S.skin }, 'sd-thumb sd-thumb-row'),
       el('div', { class: 'st-trow-text' }, [
         el('div', { class: 'st-trow-name', text: `${on ? '▶ ' : ''}${n}` }),
         el('div', { class: 'st-muted', text: `${d.order.length} sectors · ${d.entities.length} things · ${d.triggers.length} triggers${overrides(d).length ? ` · own player ${overrides(d).join(', ')}` : ''}${on ? ' · editing' : ''}` })
@@ -95,7 +95,7 @@ function metamapRows () {
         title: `cell ${x} ${y}`, onclick: () => cellTapped(x, y) }, [
           // In one shared world every cell is drawn at the cell's own scale, so
           // the grid reads as the world; otherwise each map fills its cell.
-          name ? thumbCanvas(S.docs[name], { imageFor: S.imageFor, bounds: mm.pitch ? [0, 0, mm.pitch[0], mm.pitch[1]] : null }, 'sd-thumb sd-thumb-cell') : null,
+          name ? thumbCanvas(S.docs[name], { imageFor: S.imageFor, skin: S.skin, bounds: mm.pitch ? [0, 0, mm.pitch[0], mm.pitch[1]] : null }, 'sd-thumb sd-thumb-cell') : null,
           el('span', { class: 'sd-cell-name', text: name ?? (S.mmPicked ? '↓ here' : '+') }), el('span', { class: 'st-muted sd-cell-xy', text: `${x},${y}` })].filter(Boolean)))
     }
   }

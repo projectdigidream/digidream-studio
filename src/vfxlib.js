@@ -12,6 +12,7 @@
 // vocabulary. That is why one editor here serves all of them and why the
 // pickers elsewhere only have to offer an id.
 //
+import { colorParts } from '../vendor/uikit/runtime.js'
 import { el, row, number, select, muted, button, text, addHelp } from './ui.js'
 import * as THREE from 'three'
 import { emitBurst, stepParticles, VfxView } from '/src/render/vfx.js'
@@ -111,7 +112,9 @@ function colourRow (label, value, onChange) {
  * round it, pinch or wheel to come closer.
  */
 export class VfxPreview {
-  constructor () {
+  /** @param skin  () => the studio's skin (S.skin): the stage, grid and figure colours */
+  constructor (skin = null) {
+    this.skin = skin
     this.wrap = el('div', { class: 'st-vfx-wrap' })
     this.renderer = null
     this.def = null
@@ -145,7 +148,7 @@ export class VfxPreview {
     if (this.renderer) return
     const r = new THREE.WebGLRenderer({ antialias: true })
     r.setPixelRatio(Math.min(2, devicePixelRatio))
-    r.setClearColor(0x0b0d12)
+    r.setClearColor(colorParts(this.skin().canvas('common', 'stage').color).hex)
     this.renderer = r
     const c = r.domElement
     c.classList.add('st-vfx-canvas')
@@ -181,14 +184,20 @@ export class VfxPreview {
     const old = this.scene
     if (old) old.traverse((o) => { o.geometry?.dispose(); o.material?.dispose?.() })
     const scene = new THREE.Scene()
-    const grid = new THREE.GridHelper(24, 24, 0x2a3446, 0x1b2230)
+    const skin = this.skin()
+    const major = colorParts(skin.canvas('common', 'grid.major').color)
+    const minor = colorParts(skin.canvas('common', 'grid.minor').color)
+    const grid = new THREE.GridHelper(24, 24, major.hex, minor.hex)
+    grid.material.transparent = true
+    grid.material.opacity = minor.alpha
     scene.add(grid)
+    const figure = colorParts(skin.canvas('preview', 'figure').color)
     // A player: 0.5 radius, 2 tall, a little behind and to the side of the event.
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2, 16, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0x5b8fd6, wireframe: true, transparent: true, opacity: 0.35 }))
+      new THREE.MeshBasicMaterial({ color: figure.hex, wireframe: true, transparent: true, opacity: figure.alpha }))
     body.position.set(-1, 1, 0.9)
     scene.add(body)
-    const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), 0.8, 0x5f7fa8, 0.18, 0.1)
+    const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), 0.8, figure.hex, 0.18, 0.1)
     scene.add(arrow)
     this.scene = scene
     this.view = new VfxView({ THREE, scene, catalogue: { kinds: new Map([[this.def.id ?? 0, this.def]]) }, poolSize: 4 })
@@ -215,6 +224,13 @@ export class VfxPreview {
     const r = dist.length ? dist[Math.floor(dist.length * 0.8)] : 0.5
     // An attached emitter's body goes round a circle as well.
     return Math.max(0.6, def.attach ? r + 1.2 : r) + (def.sizeEnd ?? def.size ?? 0.1)
+  }
+
+  /** The skin changed: the stage colour, and the scene drawn again in the new one. */
+  reskin () {
+    if (!this.renderer) return
+    this.renderer.setClearColor(colorParts(this.skin().canvas('common', 'stage').color).hex)
+    if (this.def) this.#scene()
   }
 
   show (def, { radius = 0 } = {}) {
