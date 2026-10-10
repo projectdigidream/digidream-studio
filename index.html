@@ -11,9 +11,11 @@
 <link rel="icon" type="image/png" href="./src/app/icon.png">
 <title>Digidream Studio</title>
 <style>
+  /* Colours come from the skin (src/skin.js); the fallbacks are the first
+     paint, before its bundle arrives, and look like the default skin. */
   :root { color-scheme: dark; }
   html, body {
-    margin: 0; height: 100%; overflow: hidden; background: #0b0d12; color: #cfe3ff;
+    margin: 0; height: 100%; overflow: hidden; background: var(--dnp-color-bg-app, #0b0d12); color: var(--dnp-color-text-primary, #cfe3ff);
     font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
     touch-action: none; overscroll-behavior: none;
     -webkit-user-select: none; user-select: none;
@@ -22,20 +24,20 @@
   canvas { display: block; }
   #boot {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 10px; background: #0b0d12; z-index: 200;
+    flex-direction: column; gap: 10px; background: var(--dnp-color-bg-app, #0b0d12); z-index: 200;
   }
-  #boot .bar { width: min(60vw, 320px); height: 4px; background: #1b2230; border-radius: 2px; overflow: hidden; }
-  #boot .fill { height: 100%; width: 0; background: #5b8fd6; transition: width 120ms linear; }
+  #boot .bar { width: min(60vw, 320px); height: 4px; background: var(--dnp-color-bg-raised, #1b2230); border-radius: 2px; overflow: hidden; }
+  #boot .fill { height: 100%; width: 0; background: var(--dnp-color-accent, #5b8fd6); transition: width 120ms linear; }
   #boot[hidden] { display: none; }
   /* What loading is doing, step by step, and what went wrong: for the person
      looking at it, and for whoever they send it to. */
   #bootlog { margin: 6px 0 0; width: min(92vw, 680px); max-height: 38vh; overflow: auto; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-             color: #6f7e96; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; text-align: left; }
-  #bootlog .bad { color: #ff8a8a; }
-  #bootlog .slow { color: #ffd27a; }
+             color: var(--dnp-color-text-dim, #6f7e96); white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; text-align: left; }
+  #bootlog .bad { color: var(--dnp-color-error, #ff8a8a); }
+  #bootlog .slow { color: var(--dnp-color-warn, #ffd27a); }
   #bootactions { display: flex; gap: 8px; }
   #bootactions[hidden] { display: none; }
-  #bootactions button { height: 34px; padding: 0 14px; border-radius: 8px; background: #1b2230; color: #cfe3ff; border: 1px solid #2a3446; font: 600 13px ui-monospace, Menlo, monospace; }
+  #bootactions button { height: 34px; padding: 0 14px; border-radius: 8px; background: var(--dnp-color-bg-raised, #1b2230); color: var(--dnp-color-text-primary, #cfe3ff); border: 1px solid var(--dnp-color-line-main, #2a3446); font: 600 13px ui-monospace, Menlo, monospace; }
 </style>
 <script type="importmap">
 {

@@ -1,0 +1,116 @@
+/* Structure only: layout, boxes, cursors. No colour, no font, no size that a
+   skin might want; those come from the skin's compiled CSS, which loads after
+   this file and wins on equal specificity. */
+
+[class^="ui-"], [class*=" ui-"] { box-sizing: border-box; }
+.ui-button, .ui-chip, .ui-seg__item, .ui-switch, .ui-mini, .ui-help, .ui-key, .ui-pad,
+.ui-rail__item, .ui-tabs__tab, .ui-bottomtabs__tab, .ui-toolbar__tool, .ui-menu__item, .ui-transport__button,
+.ui-stepper__step, .ui-colorwell, .ui-strip__item, .ui-fold__head, .ui-tile {
+  cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  font: inherit; color: inherit; background: none; border: 0; margin: 0; padding: 0; text-decoration: none;
+}
+.ui-button { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; flex: none; line-height: 1; }
+.ui-chip { display: inline-flex; align-items: center; white-space: nowrap; flex: none; line-height: 1; }
+.ui-chip__remove { cursor: pointer; }
+.ui-seg { display: inline-flex; align-items: stretch; }
+.ui-seg__item { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+.ui-switch { display: inline-flex; align-items: center; justify-content: flex-start; flex: none; }
+.ui-switch.is-on { justify-content: flex-end; }
+.ui-switch__thumb { display: block; flex: none; }
+.ui-mini, .ui-help { display: inline-flex; align-items: center; justify-content: center; flex: none; line-height: 1; }
+
+.ui-field { display: inline-flex; align-items: center; min-width: 0; }
+.ui-field input, .ui-field select, .ui-field textarea { all: unset; flex: 1; min-width: 0; font: inherit; color: inherit; }
+.ui-field--code { align-items: stretch; }
+.ui-field--code textarea { white-space: pre; }
+.ui-field--select::after { content: "▾"; opacity: .6; font-size: .8em; }
+.ui-stepper { display: inline-flex; align-items: stretch; overflow: hidden; flex: none; }
+.ui-stepper__step { display: inline-flex; align-items: center; justify-content: center; }
+.ui-stepper__input { all: unset; box-sizing: border-box; }
+.ui-stepper__unit { display: inline-flex; align-items: center; }
+.ui-slider { display: grid; grid-template-columns: minmax(70px, 120px) 1fr auto; align-items: center; }
+.ui-slider__track { position: relative; cursor: pointer; touch-action: none; }
+.ui-slider__fill { position: absolute; left: 0; top: 0; bottom: 0; }
+.ui-slider__thumb { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.ui-colorwell { display: inline-block; flex: none; }
+.ui-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+.ui-card, .ui-section, .ui-fold { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.ui-card__head, .ui-fold__head { display: flex; align-items: center; }
+.ui-card__body, .ui-section__body, .ui-fold__body { display: flex; flex-direction: column; }
+.ui-card__title, .ui-fold__title { flex: 1; min-width: 0; }
+.ui-fold__head { width: 100%; text-align: left; }
+.ui-fold__body { display: none; }
+.ui-fold.is-open .ui-fold__body { display: flex; }
+.ui-fold.is-open .ui-fold__chevron { transform: rotate(90deg); }
+.ui-fold__chevron { display: inline-block; }
+.ui-heading { display: flex; align-items: center; }
+.ui-row { display: flex; align-items: center; cursor: pointer; }
+.ui-row__thumb { flex: none; background-size: cover; background-position: center; image-rendering: pixelated; }
+.ui-row__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ui-row__name, .ui-row__sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-tile { display: inline-flex; flex-direction: column; overflow: hidden; }
+.ui-tile__pic { background-size: cover; background-position: center; image-rendering: pixelated; }
+.ui-tile__caption { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ui-strip { display: flex; overflow-x: auto; }
+.ui-strip__item { flex: none; background-size: cover; image-rendering: pixelated; }
+
+.ui-rail { display: flex; flex-direction: column; flex: none; overflow-y: auto; }
+.ui-rail__item { display: flex; align-items: center; width: 100%; text-align: left; white-space: nowrap; }
+.ui-rail__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-rail--compact .ui-rail__item { justify-content: center; }
+.ui-rail--compact .ui-rail__label, .ui-rail--compact .ui-rail__badge { display: none; }
+.ui-topbar { display: flex; align-items: center; flex: none; }
+.ui-tabs { display: flex; overflow-x: auto; }
+.ui-tabs__tab { display: inline-flex; align-items: center; white-space: nowrap; }
+.ui-bottomtabs { display: flex; }
+.ui-bottomtabs__tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ui-toolbar { display: inline-flex; }
+.ui-toolbar__tool { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; }
+.ui-sheet, .ui-drawer { display: flex; flex-direction: column; overflow: hidden; }
+.ui-sheet__head, .ui-drawer__head { display: flex; align-items: center; }
+.ui-sheet__title { flex: 1; }
+.ui-sheet__body { display: flex; flex-direction: column; overflow-y: auto; }
+.ui-sheet__grip { align-self: center; margin-top: 6px; }
+
+.ui-scrim { display: flex; align-items: center; justify-content: center; }
+.ui-dialog { display: flex; flex-direction: column; max-width: 100%; }
+.ui-dialog__body { display: flex; flex-direction: column; }
+.ui-dialog__foot { display: flex; justify-content: flex-end; }
+.ui-menu { display: inline-flex; flex-direction: column; }
+.ui-menu__item { display: flex; align-items: center; width: 100%; text-align: left; }
+.ui-menu__label { flex: 1; }
+.ui-toast { display: inline-flex; align-items: center; }
+.ui-tooltip { display: inline-block; }
+
+.ui-pill, .ui-badge { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; flex: none; line-height: 1; }
+.ui-callout { display: flex; align-items: flex-start; }
+.ui-dot { display: inline-block; flex: none; }
+.ui-progress { display: flex; flex-direction: column; }
+.ui-progress__track, .ui-boot__track { position: relative; overflow: hidden; }
+.ui-progress__fill, .ui-boot__fill { position: absolute; left: 0; top: 0; bottom: 0; }
+.ui-progress--loop .ui-progress__fill { width: 34% !important; animation: ui-loop 1.4s ease-in-out infinite alternate; }
+@keyframes ui-loop { from { left: 0; } to { left: 66%; } }
+.ui-boot { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; align-self: stretch; }
+.ui-boot__log { overflow: hidden; }
+.ui-log { overflow: auto; }
+.ui-log__line { white-space: pre-wrap; }
+.ui-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ui-kbd { display: inline-block; line-height: 1.4; }
+
+.ui-transport { display: inline-flex; align-items: center; }
+.ui-transport__button { display: inline-flex; align-items: center; justify-content: center; }
+.ui-transport__display { display: inline-flex; align-items: center; }
+.ui-meter { position: relative; overflow: hidden; }
+.ui-meter__fill { position: absolute; left: 0; top: 0; bottom: 0; background-size: var(--meter-w, 100%) 100% !important; }
+.ui-meter__peak { position: absolute; top: 0; bottom: 0; }
+.ui-keys { position: relative; display: flex; overflow: hidden; }
+.ui-keys__white { flex: 1; height: 100%; cursor: pointer; }
+.ui-keys__black { position: absolute; top: 0; height: 60%; cursor: pointer; }
+.ui-pad { display: inline-flex; flex-direction: column; justify-content: space-between; text-align: left; }
+
+.ui-icon { display: inline-block; flex: none; width: var(--icon-size, 18px); height: var(--icon-size, 18px);
+  background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+.ui-icon.is-img { background: var(--icon) center / contain no-repeat; -webkit-mask: none; mask: none; }
+.ui-icon.is-glyph { background: none; -webkit-mask: none; mask: none; display: inline-flex; align-items: center; justify-content: center;
+  font-size: calc(var(--icon-size, 18px) * .82); line-height: 1; font-family: system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif; }

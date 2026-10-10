@@ -3035,6 +3035,37 @@ check(exported.ok && exported.hasDnpm && exported.hasTriggers, `the module emits
 
 check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' | ')})`)
 
+// THE SKINS (src/skin.js, docs/STUDIO_SKINS.md): every shipped skin, in each
+// of its modes, chosen in the prefs and booted from cold -- clean, worn on
+// <html>, the page in the skin's own background, and the map editor's
+// materials in the skin's canvas colours after a mode change.
+{
+  const list = await page.evaluate(() => window.__studio.skinList)
+  check(list.length >= 4 && list[0].id === 'claude', `the shipped skins are listed (${list.map((s) => s.id).join(', ')})`)
+  for (const s of list) {
+    for (const mode of s.modes) {
+      const p = await browser.newPage()
+      await p.setViewport({ width: 1000, height: 700 })
+      const errs = []
+      p.on('pageerror', (e) => errs.push(String(e)))
+      p.on('console', (m) => { if ((m.type() === 'error' && !/Failed to load resource/.test(m.text())) || /^skin: no /.test(m.text())) errs.push(m.text()) })
+      await p.goto(URL_, { waitUntil: 'domcontentloaded' })
+      await p.evaluate((id, m) => { localStorage.setItem('dnp.studio.skin', id); localStorage.setItem('dnp.studio.skin.mode', m) }, s.id, mode)
+      await p.reload({ waitUntil: 'networkidle0' })
+      await p.waitForFunction(() => document.getElementById('boot')?.hidden === true, { timeout: 60000 }).catch(() => {})
+      const r = await p.evaluate(() => {
+        const S = window.__studio
+        const rgb = (c) => { const d = document.createElement('div'); d.style.color = c; document.body.append(d); const v = getComputedStyle(d).color; d.remove(); return v }
+        return { id: S?.skin?.id, mode: document.documentElement.dataset.dnpMode, bg: getComputedStyle(document.body).backgroundColor, want: rgb(S?.skin?.token('color.bg.app')) }
+      })
+      check(r.id === s.id && r.mode === mode && r.bg === r.want && errs.length === 0,
+            `${s.id}/${mode}: boots clean, worn, the page in the skin's background (${JSON.stringify(r)}${errs.length ? ' ' + errs.slice(0, 2).join(' | ') : ''})`)
+      await p.close()
+    }
+  }
+  await page.evaluate(() => { localStorage.removeItem('dnp.studio.skin'); localStorage.removeItem('dnp.studio.skin.mode') })
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

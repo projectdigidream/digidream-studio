@@ -1,0 +1,96 @@
+{
+  "about": "Every icon the tools need. An icon's id is '<group>.<name>'; a skin draws it at icons/<group>/<name>.svg. 'glyph' is what the tools show today, used as the fallback until the icon is drawn. 'used' says which tools show it.",
+  "groups": [
+    { "id": "section", "label": "Studio sections", "used": "studio rail, home tiles", "icons": [
+      ["home", "Home / module", "◆"], ["maps", "Maps", "🗺"], ["map", "Map", "▭"], ["monsters", "Monsters", "☠"],
+      ["player", "Player", "🧍"], ["controls", "Controls", "🎮"], ["weapons", "Weapons", "🔫"], ["props", "Props", "📦"],
+      ["sprites", "Sprites", "🎞"], ["particles", "Particles", "✨"], ["textures", "Textures", "🧱"], ["music", "Music", "♪"],
+      ["sounds", "Sounds", "🔊"], ["screens", "Screens", "▣"], ["panels", "Panels", "▢"], ["style", "Style", "🎨"],
+      ["sky", "Sky", "🌌"], ["scripts", "Scripts", "📜"], ["graphs", "Graphs", "◇"], ["settings", "Settings", "⚙"],
+      ["snapshots", "Snapshots", "🕘"], ["playlog", "Play log", "📋"], ["plugins", "Plugins", "🧩"], ["package", "Package", "📦"]
+    ] },
+    { "id": "maptool", "label": "Map tools", "used": "studio map editor bar", "icons": [
+      ["select", "Select", "⌖"], ["room", "Room", "▭"], ["place", "Place", "✦"], ["triggers", "Triggers", "⚡"],
+      ["camera", "Camera", "🎥"], ["graph", "Graph", "◇"], ["play", "Play", "▶"], ["more", "More", "⋯"]
+    ] },
+    { "id": "action", "label": "General actions", "used": "every tool", "icons": [
+      ["undo", "Undo", "↶"], ["redo", "Redo", "↷"], ["add", "Add", "＋"], ["delete", "Delete", "🗑"], ["close", "Close", "✕"],
+      ["duplicate", "Duplicate", "⧉"], ["edit", "Edit / rename", "✎"], ["up", "Move up", "↑"], ["down", "Move down", "↓"],
+      ["left", "Move left", "←"], ["right", "Move right", "→"], ["expand", "Expand", "▸"], ["collapse", "Collapse", "▾"],
+      ["back", "Back", "‹"], ["next", "Next", "›"], ["fit", "Fit", "⤢"], ["zoomin", "Zoom in", "+"], ["zoomout", "Zoom out", "−"],
+      ["help", "Help", "ⓘ"], ["settings", "Settings", "⚙"], ["menu", "Menu", "☰"], ["more", "More", "⋯"],
+      ["new", "New", "🗋"], ["open", "Open", "📂"], ["save", "Save", "💾"], ["import", "Import", "⇩"], ["export", "Export", "⇪"],
+      ["download", "Download", "⬇"], ["copy", "Copy", "⎘"], ["cut", "Cut", "✂"], ["paste", "Paste", "📋"], ["swap", "Swap", "⇄"],
+      ["fliph", "Flip horizontal", "↔"], ["flipv", "Flip vertical", "↕"], ["rotate", "Rotate", "⟳"], ["mergedown", "Merge down", "⤓"],
+      ["reset", "Reset", "↺"], ["pick", "Pick on map", "📍"], ["keyboard", "Keyboard", "⌨"], ["variable", "Variable", "𝑥"],
+      ["link", "Link", "→"], ["search", "Search", "⌕"], ["scopegame", "Scope: whole game", "🌐"], ["scopemap", "Scope: this map", "🗺"]
+    ] },
+    { "id": "transport", "label": "Transport", "used": "sound, synth, studio previews, ThreeSprite", "icons": [
+      ["play", "Play", "▶"], ["pause", "Pause", "⏸"], ["stop", "Stop", "■"], ["record", "Record", "●"], ["loop", "Loop", "⟲"],
+      ["atloopend", "Switch at loop end", "⏭"], ["nextbar", "Next bar", "⇥"], ["crossfade", "Crossfade", "⇄"], ["timer", "Timer", "⏱"],
+      ["solo", "Solo", "S"], ["mute", "Mute", "M"]
+    ] },
+    { "id": "status", "label": "Status", "used": "every tool", "icons": [
+      ["ok", "Ok", "✔"], ["error", "Error", "✖"], ["warning", "Warning", "⚠"], ["info", "Info", "ⓘ"], ["initial", "Initial state", "★"]
+    ] },
+    { "id": "paint", "label": "Painting tools", "used": "qPainter, ThreeSprite", "icons": [
+      ["pencil", "Pencil", "✏"], ["brush", "Soft brush", "🖌"], ["eraser", "Eraser", "🧽"], ["dither", "Dither", "▦"],
+      ["ramp", "Ramp shade", "◐"], ["noise", "Noise", "⁘"], ["replace", "Replace colour", "⇄"], ["smooth", "Smooth", "≈"],
+      ["line", "Line", "╱"], ["rect", "Rectangle", "▭"], ["ellipse", "Ellipse", "◯"], ["fill", "Fill", "🪣"],
+      ["gradient", "Gradient", "▤"], ["eyedropper", "Eyedropper", "💧"], ["select", "Select", "⬚"], ["move", "Move", "✥"],
+      ["pan", "Pan", "✋"], ["symmetry", "Symmetry", "⊕"], ["mirror", "Mirror", "⇋"], ["grid", "Grid", "#"],
+      ["dim", "Dim others", "👁"], ["onion", "Onion skin", "◎"], ["wrap", "Wrap / tile", "⊞"]
+    ] },
+    { "id": "sprite", "label": "ThreeSprite modes and objects", "used": "ThreeSprite", "icons": [
+      ["draw", "Draw", "✏"], ["rig", "Rig", "🦴"], ["animate", "Animate", "🎞"], ["view3d", "3D", "⬡"], ["export", "Export", "⇪"],
+      ["bone", "Bone", "🦴"], ["parts", "Parts", "☷"], ["solids", "Solids", "⬡"]
+    ] },
+    { "id": "trigger", "label": "Trigger events", "used": "studio triggers", "icons": [
+      ["interact", "Interact", "✋"], ["cross", "Cross", "🚶"], ["touch", "Touch", "☝"], ["use", "Prop use", "🔘"],
+      ["attack", "Attack", "⚔"], ["crush", "Crush", "⬇"], ["tick", "Tick", "⏱"], ["ui", "UI event", "🎛"],
+      ["event", "Generic event", "⚡"], ["chained", "Run by another trigger", "↪"], ["if", "IF", "❓"], ["then", "THEN", "▶"]
+    ] },
+    { "id": "preset", "label": "Trigger presets", "used": "studio triggers", "icons": [
+      ["door", "Door", "🚪"], ["lift", "Lift", "⇕"], ["switch", "Switch", "⏻"], ["teleport", "Teleport", "✧"], ["ambush", "Ambush", "☠"],
+      ["exit", "Exit", "⇥"], ["crusher", "Crusher", "▼"], ["slider", "Slider", "⇄"], ["turntable", "Turntable", "⟳"], ["blank", "Blank", "+"]
+    ] },
+    { "id": "workshop", "label": "Workshop tabs and section heads", "used": "studio monsters, weapons, player", "icons": [
+      ["state", "State", "⬡"], ["brain", "Brain", "🧠"], ["swing", "Swing", "🌀"], ["body", "Body", "👤"], ["vars", "Vars", "#"],
+      ["missiles", "Missiles", "☄"], ["weapon", "Weapon", "🔫"], ["arsenal", "Arsenal", "🎒"], ["skin", "Skin", "🧍"],
+      ["size", "Size", "📏"], ["moves", "Moves", "🏃"], ["sounds", "Sounds", "🔊"], ["preview", "Preview", "🎞"],
+      ["details", "Details", "☰"], ["flinch", "Flinch", "💢"], ["drops", "Drops", "🎁"], ["hurt", "Hurt", "💥"],
+      ["health", "Health", "❤"], ["ammo", "Ammo", "🔢"]
+    ] },
+    { "id": "weather", "label": "Weather", "used": "studio sector effects", "icons": [
+      ["rain", "Rain", "🌧"], ["snow", "Snow", "❄"], ["dust", "Dust", "·"], ["embers", "Embers", "✦"], ["fog", "Fog", "🌫"]
+    ] },
+    { "id": "widget", "label": "Panel widget and decor kinds", "used": "studio panels designer", "icons": [
+      ["label", "Label", "T"], ["button", "Button", "▭"], ["toggle", "Toggle", "◐"], ["slider", "Slider", "⇿"], ["select", "Select", "☰"],
+      ["text", "Decor: text", "\""], ["bar", "Decor: bar", "▬"], ["picture", "Decor: picture", "▣"]
+    ] },
+    { "id": "graphgroup", "label": "Graph palette groups", "used": "studio graph editor", "icons": [
+      ["cutscene", "Cutscene", "🎬"], ["camera", "Camera", "🎥"], ["maps", "Maps", "🚪"], ["panels", "Panels", "🪟"], ["note", "Note", "📝"]
+    ] },
+    { "id": "seam", "label": "Metamap seam states", "used": "studio metamap", "icons": [
+      ["joined", "Joined", "✔"], ["oneway", "One-way", "◐"], ["walls", "Walls", "▭"], ["loose", "Loose", "○"]
+    ] },
+    { "id": "marker", "label": "Map markers", "used": "studio map editor", "icons": [
+      ["spawn", "Spawn", "⚑"], ["light", "Light", "☀"]
+    ] },
+    { "id": "sfx", "label": "Sound kinds", "used": "DigidreamSound", "icons": [
+      ["gunshot", "Gunshot", "🔫"], ["explosion", "Explosion", "💥"], ["laser", "Laser", "⚡"], ["hit", "Hit", "👊"],
+      ["bell", "Bell", "🔔"], ["pickup", "Pickup", "✨"], ["jingle", "Jingle", "🎵"], ["door", "Door", "🚪"],
+      ["machine", "Machine", "⚙"], ["engine", "Engine", "🚗"], ["monster", "Monster", "👹"], ["voice", "Voice", "🗣"],
+      ["whoosh", "Whoosh", "💨"], ["randomize", "Randomize", "🎲"], ["vary", "Vary", "✨"], ["match", "Match a recording", "🎙"],
+      ["unsure", "Not sure", "🤔"]
+    ] },
+    { "id": "platform", "label": "Packager platforms", "used": "Packager", "icons": [
+      ["android", "Android", "A"], ["linux", "Linux", "L"], ["windows", "Windows", "W"], ["macos", "macOS", "M"],
+      ["macosintel", "macOS Intel", "M"], ["ios", "iOS", "i"]
+    ] }
+  ],
+  "brand": [
+    ["studio", "Studio"], ["threesprite", "ThreeSprite"], ["qpainter", "qPainter"], ["sound", "DigidreamSound"],
+    ["synth", "DigidreamSynth"], ["packager", "Packager"], ["game", "Default game"]
+  ]
+}

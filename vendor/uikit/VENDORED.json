@@ -1,0 +1,10 @@
+{
+  "from": "uikit",
+  "commit": "ff368cf",
+  "skins": [
+    "claude",
+    "paper",
+    "90s",
+    "ps1"
+  ]
+}

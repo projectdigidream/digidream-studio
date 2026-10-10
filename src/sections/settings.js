@@ -5,7 +5,7 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { PERSIST } from '../module_emit.js'
-import { text, muted, select, toggle, button } from '../ui.js'
+import { text, muted, select, toggle, button, card } from '../ui.js'
 
 let S = null
 
@@ -33,7 +33,24 @@ function showSettings () {
         S.save()
       })),
     muted(`Prop ids start at ${S.module.propIdBase}.`),
-    button('🕘 snapshots: the module as it was…', () => S.go('snapshots'))
+    button('🕘 snapshots: the module as it was…', () => S.go('snapshots')),
+    look()
+  ])
+}
+
+/**
+ * How the studio looks on this device (skin.js, docs/STUDIO_SKINS.md): the
+ * person's choice, kept in S.prefs and never written into the module.
+ */
+function look () {
+  const list = S.skinList ?? []
+  const cur = list.find((s) => s.id === S.skin.id) ?? { modes: S.skin.view.compiled.modes, about: '' }
+  const want = S.skin.want
+  return card('Look — this device, not the module', [
+    select('skin', S.skin.id, list.map((s) => [s.id, s.name]), (v) => { S.skin.use({ skin: v }).then(showSettings) }),
+    select('mode', want.mode, [['auto', 'auto — follows the system'], ...cur.modes.map((m) => [m, m])], (v) => { S.skin.use({ mode: v }) }),
+    select('pointer', want.pointer, [['touch', 'touch — finger-sized'], ['mouse', 'mouse — compact'], ['auto', 'auto — follows the device']], (v) => { S.skin.use({ pointer: v }) }),
+    muted(cur.about)
   ])
 }
 

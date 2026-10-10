@@ -1,0 +1,58 @@
+[
+  {
+    "id": "claude",
+    "name": "Claude",
+    "about": "The unified proposal: the studio's navy look, one accent, one selection colour, one playhead, sans UI text with monospace numbers. Every other skin extends this one.",
+    "modes": [
+      "dark",
+      "light"
+    ],
+    "pointers": [
+      "mouse",
+      "touch"
+    ],
+    "file": "claude.skin.js"
+  },
+  {
+    "id": "paper",
+    "name": "Paper",
+    "about": "Modern and light-first: warm off-white paper, near-black ink, one terracotta accent, soft shadows instead of borders, generous radii, serif headings over a clean sans, drafting-paper canvases. Second mode: night, in warm darks.",
+    "modes": [
+      "day",
+      "night"
+    ],
+    "pointers": [
+      "mouse",
+      "touch"
+    ],
+    "file": "paper.skin.js"
+  },
+  {
+    "id": "90s",
+    "name": "90s",
+    "about": "Desktop software, 1995-1999: grey bevels, navy title bars, Tahoma, dithered toggles, the 16 VGA colours, a white map like the old DOOM editors and green-on-black waveforms. Two modes: classic, and night (a high-contrast scheme).",
+    "modes": [
+      "classic",
+      "night"
+    ],
+    "pointers": [
+      "mouse",
+      "touch"
+    ],
+    "file": "90s.skin.js"
+  },
+  {
+    "id": "ps1",
+    "name": "PS1",
+    "about": "Late-90s 3D console menus: blue gradient windows with a bright rim, white pixel text with hard shadows, a gold cursor, dithered gradients, faint scanlines, memory-card blocks for progress. Modes: dark (the TV at night) and console (grey plastic).",
+    "modes": [
+      "dark",
+      "console"
+    ],
+    "pointers": [
+      "mouse",
+      "touch"
+    ],
+    "file": "ps1.skin.js"
+  }
+]

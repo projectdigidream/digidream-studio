@@ -78,6 +78,7 @@ import { install as installPluginsPage } from './sections/plugins.js'
 import { install as installSprites } from './sections/sprites.js'
 import { installBaking } from './bake/apply.js'
 import { ensureServiceWorker, loadInstalled } from './plugins/install.js'
+import { wearSkin, skinList } from './skin.js'
 
 const boot = document.getElementById('boot')
 const bootMsg = document.getElementById('bootmsg')
@@ -125,8 +126,17 @@ const S = {
   }
 }
 
+// This device's choices (localStorage, dnp.studio.*): never the module's.
+const PREF = 'dnp.studio.'
+S.prefs = { get: (k) => { try { return localStorage.getItem(PREF + k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(PREF + k, v) } catch {} } }
+
 // --- boot ----------------------------------------------------------------------------
 bootLog(`studio ${STUDIO_VERSION} · ${hasShell() ? 'in the app' : 'in a browser'} · ${navigator.platform || 'unknown platform'} · ${location.origin}`)
+// The look, before anything is drawn (skin.js): the boot screen takes it too.
+stage('putting on the skin', 0.02)
+S.skin = await wearSkin(S.prefs)
+S.skinList = await skinList()
+bootStep(`skin ${S.skin.id} · ${S.skin.view.mode} · ${S.skin.view.pointer}`)
 stage('loading the core', 0.05)
 S.core = await Core.load()
 stage('loading the map compiler', 0.2)
@@ -141,11 +151,10 @@ S.vocab.graph = await fetchJson(`${RUNTIME}graph_vocab.json`).catch(() => null)
 // The plugins bundled with this build (plugins/index.json); installed ones join
 // them later. Which editor a kind opens in is remembered per device.
 stage('loading plugins', 0.45)
-const PREF = 'dnp.studio.'
 S.plugins = new PluginRegistry({
   suiteVersion: STUDIO_VERSION,
   knownKinds: SUITE_KINDS,
-  prefs: { get: (k) => { try { return localStorage.getItem(PREF + k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(PREF + k, v) } catch {} } }
+  prefs: S.prefs
 })
 bootStep(`${await loadBundled(S.plugins, { base: PLUGINS, fetchJson: (u) => fetchJson(u) })} bundled plugin(s)`)
 // Plugins installed later (plugins/install.js) are served by the studio's
