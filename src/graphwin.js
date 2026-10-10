@@ -1154,21 +1154,53 @@ class GraphWindow {
 
   #noteEl (note) {
     const on = this.picked?.kind === 'note' && this.picked.id === note.id
-    const head = el('div', { class: 'gw-note-head' }, [
-      el('span', { class: 'gw-note-text', text: note.text || 'note' }),
+    // THE TITLE BAR says what can be done with it: the grip moves it (with
+    // what is inside), a double tap or the pencil edits its text in place, the
+    // cross deletes it. Picked, it shows handles on every side to resize.
+    const textEl = el('span', { class: 'gw-note-text', text: note.text || 'note', title: 'double-tap to edit the text' })
+    const editBtn = el('button', { class: 'gw-info gw-note-edit', icon: 'action.edit', title: 'edit the text', onclick: (e) => { e.stopPropagation(); edit() } })
+    const head = el('div', { class: 'gw-note-head', title: 'drag to move the note and what is inside it' }, [
+      icon('paint.move', 'gw-note-grip'), textEl, editBtn,
       el('button', { class: 'gw-del', icon: 'action.close', title: 'delete the note (the nodes stay)', onclick: (e) => { e.stopPropagation(); this.#deleteNote(note) } })])
-    const size = el('div', { class: 'gw-note-size', title: 'drag to resize' })
-    const box = el('div', { class: `gw-note gw-note-${NOTE_COLORS.includes(note.color) ? note.color : 'slate'}${on ? ' gw-note-on' : ''}`, 'data-note': note.id }, [head, size])
+    const DIRS = on ? ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] : ['se']
+    const handles = DIRS.map((d) => el('div', { class: `gw-note-h gw-note-h-${d}${d === 'se' ? ' gw-note-size' : ''}`, 'data-dir': d, title: 'drag to resize' }))
+    const box = el('div', { class: `gw-note gw-note-${NOTE_COLORS.includes(note.color) ? note.color : 'slate'}${on ? ' gw-note-on' : ''}`, 'data-note': note.id }, [head, ...handles])
     const place = () => { box.style.left = `${note.x}px`; box.style.top = `${note.y}px`; box.style.width = `${note.w}px`; box.style.height = `${note.h}px` }
     place()
-    // Drag the title: the note, and every node (and bend) inside it at the start, go together.
+    // The text, edited where it is: Enter (without Shift) or leaving keeps it, Esc puts it back.
+    const edit = () => {
+      if (textEl.isContentEditable) return
+      const was = note.text ?? ''
+      textEl.textContent = was
+      textEl.contentEditable = 'true'
+      textEl.classList.add('gw-note-editing')
+      textEl.focus()
+      getSelection()?.selectAllChildren(textEl)
+      let done = false
+      const finish = (keep) => {
+        if (done) return
+        done = true
+        textEl.contentEditable = 'false'
+        textEl.classList.remove('gw-note-editing')
+        const v = textEl.innerText.trim()
+        if (keep && v !== was) { note.text = v; this.picked = { kind: 'note', id: note.id }; this.changed() } else textEl.textContent = was || 'note'
+      }
+      textEl.addEventListener('keydown', (e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true) }
+        if (e.key === 'Escape') { e.preventDefault(); finish(false) }
+      })
+      textEl.addEventListener('blur', () => finish(true), { once: true })
+    }
+    if (this.noteToEdit === note.id) { this.noteToEdit = null; requestAnimationFrame(() => edit()) }
     const drag = (handle, onMove) => handle.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.gw-del')) return
+      if (e.target.closest('button') || textEl.isContentEditable) return
       e.preventDefault(); e.stopPropagation()
       handle.setPointerCapture?.(e.pointerId)
       const start = { x: e.clientX, y: e.clientY }
       const begin = onMove.begin()
       let moved = false
+      box.classList.add('gw-note-moving')
       const move = (ev) => {
         const dx = (ev.clientX - start.x) / this.view.z; const dy = (ev.clientY - start.y) / this.view.z
         if (Math.abs(dx) + Math.abs(dy) > 3) moved = true
@@ -1178,11 +1210,18 @@ class GraphWindow {
       }
       const up = () => {
         handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up)
+        box.classList.remove('gw-note-moving')
         this.picked = { kind: 'note', id: note.id }
-        if (moved) this.changed(); else this.render()
+        if (moved) { this.changed(); return }
+        // A second tap on the title soon after the first edits the text (the
+        // first redraws the board, so the browser's own double-click never comes).
+        const now = Date.now()
+        if (handle === head && this.noteTap?.id === note.id && now - this.noteTap.t < 450) { this.noteTap = null; this.noteToEdit = note.id } else this.noteTap = { id: note.id, t: now }
+        this.render()
       }
       handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up)
     })
+    // Drag the title: the note, and every node (and bend) inside it at the start, go together.
     const inside = (x, y) => x >= note.x && y >= note.y && x <= note.x + note.w && y <= note.y + note.h
     drag(head, {
       begin: () => ({
@@ -1200,10 +1239,20 @@ class GraphWindow {
         for (const it of b.bends) { it.p.x = Math.round(it.x + dx); it.p.y = Math.round(it.y + dy) }
       }
     })
-    drag(size, {
-      begin: () => ({ w: note.w, h: note.h, nodes: [], bends: [] }),
-      move: (b, dx, dy) => { note.w = Math.max(160, Math.round(b.w + dx)); note.h = Math.max(80, Math.round(b.h + dy)) }
-    })
+    // Resize from any side or corner; the far side stays where it is.
+    const MIN_W = 160; const MIN_H = 80
+    for (const h of handles) {
+      const d = h.dataset.dir
+      drag(h, {
+        begin: () => ({ x: note.x, y: note.y, w: note.w, h: note.h }),
+        move: (b, dx, dy) => {
+          if (d.includes('e')) note.w = Math.max(MIN_W, Math.round(b.w + dx))
+          if (d.includes('s')) note.h = Math.max(MIN_H, Math.round(b.h + dy))
+          if (d.includes('w')) { const w = Math.max(MIN_W, Math.round(b.w - dx)); note.x = b.x + b.w - w; note.w = w }
+          if (d.includes('n')) { const hh = Math.max(MIN_H, Math.round(b.h - dy)); note.y = b.y + b.h - hh; note.h = hh }
+        }
+      })
+    }
     return box
   }
 
@@ -1219,6 +1268,7 @@ class GraphWindow {
     const ch = () => this.changed()
     return [
       el('div', { class: 'st-section-head' }, withIcon('graphgroup.note', 'note')),
+      muted('On the board: drag its title to move it, with what is inside; drag its sides or corners to resize it; double-tap the title (or ✎) to change its text.'),
       text('text', note.text ?? '', (v) => { note.text = v; ch() }, { multiline: true, placeholder: 'What this part of the graph does' }),
       row('colour', el('div', { class: 'st-row gw-note-colours' }, NOTE_COLORS.map((c) =>
         el('button', { class: `gw-swatch gw-note-${c}`, title: c, 'data-on': note.color === c ? '1' : '0', onclick: () => { note.color = c; ch() } })))),
@@ -1417,7 +1467,25 @@ const STYLE = `
 .gw-note-on{border-color:var(--cv-graph-node-selected);box-shadow:0 0 0 1px var(--cv-graph-node-selected)}
 .gw-note-head{pointer-events:auto;display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-radius:11px 11px 0 0;background:var(--cv-note-slate-head);cursor:grab;touch-action:none;font-weight:700;font-size:13px;font-family:var(--dnp-font-ui);color:var(--dnp-color-text-primary)}
 .gw-note-text{flex:1 1 auto;min-width:0;white-space:pre-wrap;word-break:break-word}
-.gw-note-size{pointer-events:auto;position:absolute;right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,color-mix(in srgb,var(--dnp-color-text-primary) 35%,transparent) 50%);border-radius:0 0 11px 0}
+.gw-note-head:hover{filter:brightness(1.15)}
+.gw-note-moving .gw-note-head{cursor:grabbing}
+.gw-note-head .gw-note-grip{opacity:.7;--icon-size:16px;flex:0 0 auto;margin-top:1px}
+.gw-note-edit{opacity:.55}
+.gw-note-head:hover .gw-note-edit{opacity:1}
+.gw-note-text{cursor:text}
+.gw-note-editing{outline:2px solid var(--cv-graph-node-selected);outline-offset:2px;border-radius:4px;background:var(--cv-graph-board);padding:0 4px;cursor:text;user-select:text;-webkit-user-select:text}
+/* Resize handles: the corner always (a visible grip), every side once picked. */
+.gw-note-h{pointer-events:auto;position:absolute;touch-action:none;z-index:2}
+.gw-note-h-se{right:-2px;bottom:-2px;width:26px;height:26px;cursor:nwse-resize;border-radius:0 0 11px 0;
+  background:linear-gradient(135deg,transparent 52%,color-mix(in srgb,var(--dnp-color-text-primary) 45%,transparent) 52% 60%,transparent 60% 70%,color-mix(in srgb,var(--dnp-color-text-primary) 45%,transparent) 70% 78%,transparent 78%)}
+.gw-note-on .gw-note-h-se,.gw-note-on .gw-note-h-ne,.gw-note-on .gw-note-h-nw,.gw-note-on .gw-note-h-sw{width:16px;height:16px;border-radius:4px;background:var(--cv-graph-node-selected);border:2px solid var(--cv-graph-board)}
+.gw-note-on .gw-note-h-se{right:-9px;bottom:-9px}.gw-note-h-ne{right:-9px;top:-9px;cursor:nesw-resize}
+.gw-note-h-nw{left:-9px;top:-9px;cursor:nwse-resize}.gw-note-h-sw{left:-9px;bottom:-9px;cursor:nesw-resize}
+.gw-note-h-n,.gw-note-h-s{left:24px;right:24px;height:14px;cursor:ns-resize}.gw-note-h-n{top:-7px}.gw-note-h-s{bottom:-7px}
+.gw-note-h-e,.gw-note-h-w{top:24px;bottom:24px;width:14px;cursor:ew-resize}.gw-note-h-e{right:-7px}.gw-note-h-w{left:-7px}
+.gw-note-h-n::after,.gw-note-h-s::after,.gw-note-h-e::after,.gw-note-h-w::after{content:"";position:absolute;background:var(--cv-graph-node-selected);border-radius:3px;opacity:.85}
+.gw-note-h-n::after,.gw-note-h-s::after{left:50%;top:50%;width:28px;height:5px;transform:translate(-50%,-50%)}
+.gw-note-h-e::after,.gw-note-h-w::after{left:50%;top:50%;width:5px;height:28px;transform:translate(-50%,-50%)}
 .gw-note-blue{border-color:var(--cv-note-blue);background:var(--cv-note-blue-body)}.gw-note-blue .gw-note-head{background:var(--cv-note-blue-head)}
 .gw-note-green{border-color:var(--cv-note-green);background:var(--cv-note-green-body)}.gw-note-green .gw-note-head{background:var(--cv-note-green-head)}
 .gw-note-amber{border-color:var(--cv-note-amber);background:var(--cv-note-amber-body)}.gw-note-amber .gw-note-head{background:var(--cv-note-amber-head)}
