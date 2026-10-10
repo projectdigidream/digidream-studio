@@ -30,18 +30,89 @@ export async function iconCatalog () {
 
 let listing = null
 /** The shipped skins: [{ id, name, about, modes, pointers, file }]. */
-export async function skinList () {
+async function shipped () {
   if (!listing) listing = fetch(new URL('index.json', SKINS)).then((r) => (r.ok ? r.json() : [])).catch(() => [])
   return listing
 }
 
-/** One baked bundle, by id; the default skin when that id is not shipped. */
+/** Every skin this device can wear: the shipped ones, then those imported here ({ imported: true }). */
+export async function skinList () {
+  const own = await importedSkins().catch(() => [])
+  return [...await shipped(), ...own.map(({ bundle }) => ({ ...summary(bundle), imported: true }))]
+}
+
+/** One bundle, by id: shipped, else imported; the default skin when there is no such id. */
 export async function loadBundle (id) {
-  const list = await skinList()
-  const hit = list.find((s) => s.id === id) ?? list.find((s) => s.id === DEFAULT_SKIN) ?? list[0]
-  const file = hit?.file ?? `${DEFAULT_SKIN}.skin.js`
+  const list = await shipped()
+  const hit = list.find((s) => s.id === id)
+  if (!hit) {
+    const own = (await importedSkins().catch(() => [])).find((r) => r.id === id)
+    if (own) return own.bundle
+  }
+  const file = (hit ?? list.find((s) => s.id === DEFAULT_SKIN) ?? list[0])?.file ?? `${DEFAULT_SKIN}.skin.js`
   return (await import(new URL(file, SKINS).href)).default
 }
+
+// --- skins imported from outside ------------------------------------------------------
+// A skin made with uikit (node uikit/build.js <name>, or the testbench's "Bake
+// bundle") is one baked file: its JSON, or the same as an ES module
+// (`export default {...}`, a .skin.js). Imported ones are kept on this device
+// in their own IndexedDB, never in a module.
+const SKIN_DB = 'dnp-studio-skins'
+function skinDb () {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SKIN_DB, 1)
+    req.onupgradeneeded = () => req.result.createObjectStore('skins', { keyPath: 'id' })
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+async function tx (mode, fn) {
+  const db = await skinDb()
+  return new Promise((resolve, reject) => {
+    const t = db.transaction('skins', mode)
+    const out = fn(t.objectStore('skins'))
+    t.oncomplete = () => { db.close(); resolve(out.result ?? out) }
+    t.onerror = () => { db.close(); reject(t.error) }
+  })
+}
+/** The skins imported on this device: [{ id, bundle, at }]. */
+export const importedSkins = () => tx('readonly', (st) => st.getAll())
+
+const summary = (b) => ({ id: b.id, name: b.name ?? b.id, about: b.about ?? '', modes: b.modes ?? [], pointers: b.pointers ?? [] })
+
+/**
+ * A baked skin from a file's text: the bundle, or an Error saying what is
+ * wrong with it. Pure (the import test runs it under Node).
+ */
+export function parseSkinFile (text) {
+  let src = String(text ?? '').trim()
+  // A .skin.js: `// comment` lines, then `export default {...};`
+  src = src.replace(/^(\s*\/\/[^\n]*\n)*/, '').replace(/^export\s+default\s+/, '').replace(/;\s*$/, '')
+  let b
+  try { b = JSON.parse(src) } catch { return new Error('this is not a baked skin: neither a .skin.json nor a .skin.js from uikit') }
+  if (b?.format !== 'dnp-skin') return new Error('this file is not a dnp-skin (no "format": "dnp-skin")')
+  for (const k of ['id', 'css', 'tokens', 'canvas', 'modes']) if (!b[k]) return new Error(`this skin has no ${k}: bake it with node uikit/build.js, not the skin.json source`)
+  if (!Array.isArray(b.modes) || !b.modes.length || !Object.keys(b.css).length) return new Error('this skin has no modes')
+  if (!/^[\w-]+$/.test(b.id)) return new Error(`the skin's id "${b.id}" is not letters, digits, _ and -`)
+  return b
+}
+
+/**
+ * Keep a skin from a file on this device. A shipped skin's id is never
+ * replaced: an import that takes one is filed as <id>-own.
+ * Returns its summary, or throws with what is wrong.
+ */
+export async function importSkin (text) {
+  const b = parseSkinFile(text)
+  if (b instanceof Error) throw b
+  if ((await shipped()).some((s) => s.id === b.id)) b.id = `${b.id}-own`
+  await tx('readwrite', (st) => st.put({ id: b.id, bundle: b, at: Date.now() }))
+  return summary(b)
+}
+
+/** Forget an imported skin. */
+export const removeSkin = (id) => tx('readwrite', (st) => st.delete(id))
 
 /** What this device chose, with the defaults filled in. */
 export function chosen (prefs) {

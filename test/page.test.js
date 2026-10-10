@@ -3108,6 +3108,35 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   await page.evaluate(() => { localStorage.removeItem('dnp.studio.skin'); localStorage.removeItem('dnp.studio.skin.mode') })
 }
 
+// A STYLE FROM OUTSIDE: uikit's sample skin, baked as a tool would get it,
+// imported through the studio (skin.js importSkin, what Home's "import a
+// style…" calls), worn, listed on Home, then forgotten.
+{
+  const { execFileSync } = await import('node:child_process')
+  const { mkdtempSync, readFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const out = join(mkdtempSync(join(tmpdir(), 'dnp-skin-')), 'sample.skin.js')
+  execFileSync(process.execPath, [new URL('../../uikit/build.js', import.meta.url).pathname, 'sample', '--js', out])
+  const text = readFileSync(out, 'utf8')
+  const got = await page.evaluate(async (text) => {
+    const S = window.__studio
+    const { importSkin, removeSkin, skinList } = await import('/studio/src/skin.js')
+    const s = await importSkin(text)
+    await S.skin.use({ skin: s.id })
+    S.skinList = await skinList()
+    await S.go('home'); await new Promise((r) => setTimeout(r, 400))
+    const options = [...document.querySelectorAll('.sd-page select')].flatMap((x) => [...x.options].map((o) => o.textContent))
+    const r = { id: s.id, worn: S.skin.id, mode: document.documentElement.dataset.dnpMode, listed: options.some((o) => /\(imported\)/.test(o)), forgetBtn: !!document.querySelector('.sd-page button.st-danger') }
+    await removeSkin(s.id); await S.skin.use({ skin: 'claude' }); S.skinList = await skinList()
+    r.gone = !S.skinList.some((x) => x.id === s.id)
+    await S.go('map')
+    return r
+  }, text)
+  check(got.id === 'sample' && got.worn === 'sample' && got.listed && got.forgetBtn && got.gone,
+        `a style baked by uikit is imported, worn and listed on Home, and can be forgotten (${JSON.stringify(got)})`)
+  await page.evaluate(() => { localStorage.removeItem('dnp.studio.skin'); localStorage.removeItem('dnp.studio.skin.mode') })
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

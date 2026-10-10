@@ -9,6 +9,7 @@ import { el, button, row, text, muted, chips, ask, icon, withIcon } from '../ui.
 import { moduleProblems } from '../app/problems.js'
 import { lastPlay } from '../playlog.js'
 import { thumbCanvas } from '../thumbs.js'
+import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
 
 let S = null
@@ -81,6 +82,8 @@ async function showHome () {
       tile('scripts', 'Scripts', `${Object.keys(m.scripts ?? {}).length}`),
       tile('settings', 'Settings', m.controls ?? 'platformer')
     ]),
+    // The style the studio wears, chosen (or brought in) here as well as in Settings.
+    lookCard(S, showHome, { title: 'Style', about: false }),
     list.length > 1 ? el('div', { class: 'st-section-head' }, withIcon('action.swap', 'other modules')) : null,
     list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null
   ])
