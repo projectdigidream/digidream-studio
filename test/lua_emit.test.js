@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { newDoc, addSector, addSpawn, addEntity, addTrigger, validate } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
-import { emitMapLua, facingBrad } from '../src/lua_emit.js'
+import { emitMapLua, facingBrad, CAMERA_MOTION } from '../src/lua_emit.js'
 import { Vocab } from '../src/vocab.js'
 import { door, lift, switchFor, teleport, ambush, exit, crusher, slider, turntable } from '../src/presets.js'
 import { ROOT } from './oracle.js'
@@ -138,6 +138,21 @@ if (!existsSync(TRIGGERCHECK)) {
   writeFileSync(cfile, camLua.text)
   const rc = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), cfile], { encoding: 'utf8' })
   check(rc.status === 0, `the runtime takes a map that sets its camera:\n${rc.stderr}`)
+  // HOW IT MOVES: every motion field the studio writes is one the server names
+  // (world_binding.cpp CAMERA_FIELD_NAMES) and the client reads (proto.js
+  // CAMERA_FIELD), and a map that sets them all is taken by the runtime.
+  const cpp = readFileSync(join(ROOT, 'engine', 'server', 'src', 'lua', 'world_binding.cpp'), 'utf8')
+  const names = /CAMERA_FIELD_NAMES\[\] = \{([\s\S]*?)\};/.exec(cpp)?.[1].replace(/\/\/[^\n]*/g, '').match(/"([a-z_]+)"/g)?.map((x) => x.slice(1, -1)) ?? []
+  const { CAMERA_FIELD } = await import('../../engine/client/src/proto.js')
+  const offWire = CAMERA_MOTION.filter((f) => !names.includes(f.wire) || CAMERA_FIELD[names.indexOf(f.wire)] !== f.key)
+  check(names.length > 0 && offWire.length === 0, `the camera's motion fields are the engine's, by wire name and client name (${offWire.map((f) => f.wire).join(', ') || 'all ' + CAMERA_MOTION.length})`)
+  const motion = Object.fromEntries(CAMERA_MOTION.map((f) => [f.key, f.max]))
+  const moveLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: null, ...motion } }, emitted)
+  check(CAMERA_MOTION.every((f) => new RegExp(`${f.wire} = ${Math.round(f.max * 1000)} / 1000`).test(moveLua.text)), 'a map\'s camera motion is written by wire name, in thousandths')
+  const mfile = join(dir, 'camera_motion.lua')
+  writeFileSync(mfile, moveLua.text)
+  const rm = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), mfile], { encoding: 'utf8' })
+  check(rm.status === 0, `the runtime takes a map that sets how its camera moves:\n${rm.stderr}`)
 
   // CONTROL: without the guards the runtime refuses the table. If it did not,
   // a stale side index would be discovered by walking into the wrong wall.

@@ -6,9 +6,10 @@
 //
 import { buildSpline } from '/src/spline.js'
 import { addPath, addPathPoint } from '../doc.js'
-import { el, button, row, text, muted, card, select, slider, toggle, number, confirmDialog, withIcon, icon } from '../ui.js'
+import { el, button, row, text, muted, card, select, slider, toggle, number, confirmDialog, withIcon, icon, addHelp } from '../ui.js'
 
 import { ISO_ELEVATION } from '/src/camera.js'
+import { CAMERA_MOTION } from '../lua_emit.js'
 
 let S = null
 
@@ -192,6 +193,14 @@ function showCamera () {
     toggle('lock turning', !!c.lockYaw, (v) => { c.lockYaw = v; S.commit() }),
     toggle('lock zoom', !!c.lockZoom, (v) => { c.lockZoom = v; S.commit() }),
     muted('The level view follows these while they are set. Sprites stand upright in the world, so the steeper the camera looks down, the shorter they show -- here and in the game.'),
+
+    // HOW IT MOVES while it follows: the engine's values until the map sets one.
+    el('div', { class: 'st-section-head' }, withIcon('maptool.camera', 'how it moves')),
+    ...CAMERA_MOTION.map((f) => addHelp(slider(`${f.label}${c[f.key] != null ? ' (own)' : ''}`, c[f.key] ?? f.def, f,
+      (v, done) => { if (done) { c[f.key] = v; S.commit(); showCamera() } }), f.doc)),
+    CAMERA_MOTION.some((f) => c[f.key] != null)
+      ? button(withIcon('action.reset', "back to the engine's movement"), () => { for (const f of CAMERA_MOTION) delete c[f.key]; S.commit(); showCamera() })
+      : muted("The engine's own movement: a smooth follow with a small dead zone, aimed at the player."),
 
     el('div', { class: 'st-section-head' }, withIcon('graphgroup.cutscene', 'how it follows')),
     select('mode', c.mode ?? '', [['', "follow the player (the engine's own)"], ['track', 'track: stay on the path, nearest the player'],

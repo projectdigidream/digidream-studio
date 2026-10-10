@@ -34,6 +34,29 @@ const ENTITIES_HEADER = `-- Placed props and monsters. Positions are eighths of 
  * @returns { text, problems }   problems are references that did not resolve
  */
 /** Degrees (0 is +x, counter-clockwise) as the engine's angle: brads, a full turn 2^32. */
+/**
+ * HOW THE CAMERA MOVES while it follows the player (engine/client/src/camera.js
+ * DEFAULTS, docs/protocol.md §11.1): the map's own values, written into
+ * dnp.level_camera by their wire names; `def` is the engine's, used when the
+ * map sets nothing.
+ */
+export const CAMERA_MOTION = [
+  { key: 'smoothing', wire: 'smoothing', label: 'smoothing', def: 8, min: 0.5, max: 30, step: 0.5,
+    doc: 'How fast the camera catches up with the player, per second. Higher is tighter; lower floats behind.' },
+  { key: 'maxAccel', wire: 'max_accel', label: 'weight (max accel)', def: 0, min: 0, max: 400, step: 5,
+    doc: 'The most the camera may speed up or slow down, in units per second squared, so it takes time to get going and to stop. 0 is no limit.' },
+  { key: 'lead', wire: 'lead', label: 'look ahead', def: 0, min: 0, max: 12, step: 0.25,
+    doc: 'Units ahead of the player, along where they face, that the camera aims at. 0 aims at the player.' },
+  { key: 'leadVelocity', wire: 'lead_velocity', label: 'look ahead with speed', def: 0, min: 0, max: 2, step: 0.05,
+    doc: 'And further ahead the faster they run forward: their forward speed times this (about "this many seconds of running ahead"). 0 is a fixed look-ahead.' },
+  { key: 'leadSmoothing', wire: 'lead_smoothing', label: 'look-ahead smoothing', def: 4, min: 0.5, max: 20, step: 0.5,
+    doc: 'How fast the aim point swings round when the player turns, per second. Slower than the follow, so a turn does not lurch the view.' },
+  { key: 'deadzoneX', wire: 'deadzone_x', label: 'dead zone across', def: 2.5, min: 0, max: 10, step: 0.25,
+    doc: 'How far the player may move sideways before the camera follows at all, in units.' },
+  { key: 'deadzoneY', wire: 'deadzone_y', label: 'dead zone up and down', def: 1.5, min: 0, max: 10, step: 0.25,
+    doc: 'How far the player may move up or down before the camera follows, in units.' }
+]
+
 export function facingBrad (deg) {
   const d = ((Number(deg) % 360) + 360) % 360
   return Math.round((d / 360) * 4294967296) % 4294967296
@@ -69,6 +92,8 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   if (cam.speed != null) camFields.push(`cam_path_speed = ${milli(cam.speed)} / 1000`)
   if (cam.attach != null) camFields.push(`cam_path_attach = ${milli(cam.attach)} / 1000`)
   if (cam.blend != null) camFields.push(`cam_path_blend = ${milli(cam.blend)} / 1000`)
+  // How the following camera moves (CAMERA_MOTION): only what the map sets.
+  for (const f of CAMERA_MOTION) if (cam[f.key] != null) camFields.push(`${f.wire} = ${milli(cam[f.key])} / 1000`)
   if (camFields.length) {
     L.push('')
     L.push('-- The camera this map is played from, for everyone who joins it.')

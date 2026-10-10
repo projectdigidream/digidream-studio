@@ -623,7 +623,8 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return { yaw: S.viewport.yaw, elevation: S.viewport.elevation, ranges: document.querySelectorAll('.st-sheet input[type=range]').length,
              squash: marker ? marker.scale.y / marker.userData.h : null, lua: /dnp\.level_camera\{ yaw = 250 \/ 1000, pitch = 50 \/ 1000, distance = 30000 \/ 1000, lock_yaw = 1 \}/.test(text) }
   })
-  check(before.ranges === 0 && cam.ranges === 3, `the sheet offers the angle and distance once they are set (${before.ranges} -> ${cam.ranges} sliders)`)
+  // (the seven sliders of how it moves are always there: three more once the angle and distance are set)
+  check(cam.ranges - before.ranges === 3, `the sheet offers the angle and distance once they are set (${before.ranges} -> ${cam.ranges} sliders)`)
   check(Math.abs(cam.yaw - Math.PI / 2) < 1e-9 && Math.abs(cam.elevation - Math.PI * 0.1) < 1e-9, `the level view takes the map's angle (${JSON.stringify({ yaw: cam.yaw, elevation: cam.elevation })})`)
   check(cam.squash !== null && Math.abs(cam.squash - Math.cos(Math.PI * 0.1)) < 1e-6, `a sprite marker is squashed by the pitch's cosine, as the game will draw it (${cam.squash})`)
   check(cam.lua, 'the camera is written for the game in thousandths')
