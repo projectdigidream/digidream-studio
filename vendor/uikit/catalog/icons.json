@@ -7,7 +7,8 @@
       ["sprites", "Sprites", "🎞"], ["particles", "Particles", "✨"], ["textures", "Textures", "🧱"], ["music", "Music", "♪"],
       ["sounds", "Sounds", "🔊"], ["screens", "Screens", "▣"], ["panels", "Panels", "▢"], ["style", "Style", "🎨"],
       ["sky", "Sky", "🌌"], ["scripts", "Scripts", "📜"], ["graphs", "Graphs", "◇"], ["settings", "Settings", "⚙"],
-      ["snapshots", "Snapshots", "🕘"], ["playlog", "Play log", "📋"], ["plugins", "Plugins", "🧩"], ["package", "Package", "📦"]
+      ["snapshots", "Snapshots", "🕘"], ["playlog", "Play log", "📋"], ["plugins", "Plugins", "🧩"], ["package", "Package", "📦"],
+      ["metamap", "Metamap", "▦"]
     ] },
     { "id": "maptool", "label": "Map tools", "used": "studio map editor bar", "icons": [
       ["select", "Select", "⌖"], ["room", "Room", "▭"], ["place", "Place", "✦"], ["triggers", "Triggers", "⚡"],
@@ -21,7 +22,7 @@
       ["help", "Help", "ⓘ"], ["settings", "Settings", "⚙"], ["menu", "Menu", "☰"], ["more", "More", "⋯"],
       ["new", "New", "🗋"], ["open", "Open", "📂"], ["save", "Save", "💾"], ["import", "Import", "⇩"], ["export", "Export", "⇪"],
       ["download", "Download", "⬇"], ["copy", "Copy", "⎘"], ["cut", "Cut", "✂"], ["paste", "Paste", "📋"], ["swap", "Swap", "⇄"],
-      ["fliph", "Flip horizontal", "↔"], ["flipv", "Flip vertical", "↕"], ["rotate", "Rotate", "⟳"], ["mergedown", "Merge down", "⤓"],
+      ["fliph", "Flip horizontal", "↔"], ["flipv", "Flip vertical", "↕"], ["rotate", "Rotate", "⟳"], ["rotateleft", "Rotate left", "⟲"], ["mergedown", "Merge down", "⤓"],
       ["reset", "Reset", "↺"], ["pick", "Pick on map", "📍"], ["keyboard", "Keyboard", "⌨"], ["variable", "Variable", "𝑥"],
       ["link", "Link", "→"], ["search", "Search", "⌕"], ["scopegame", "Scope: whole game", "🌐"], ["scopemap", "Scope: this map", "🗺"]
     ] },
