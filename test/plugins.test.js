@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validateManifest, satisfies, compareVersions, safeEntry, PROTOCOL } from '../src/plugins/manifest.js'
 import { PluginRegistry, loadBundled } from '../src/plugins/registry.js'
-import { Port, handshake, sameBytes } from '../src/plugins/protocol.js'
+import { Port, handshake, sameBytes, sendSkin } from '../src/plugins/protocol.js'
 import { serveEditor } from '../src/plugins/sdk.js'
 import { SUITE_KINDS } from '../src/plugins/kinds.js'
 import { editArg, parseEditArg } from '../src/plugins/frame.js'
@@ -114,6 +114,43 @@ check(parseEditArg('nope') === null, 'anything else is no edit route')
   check(got instanceof Uint8Array && sameBytes(got, bytes) && bytes.length === 3, 'bytes arrive as bytes, and the sender keeps its own copy')
   const failed = await host2.request('request-save')
   check(failed.error === 'the editor broke', 'an editor that fails to save says why, instead of handing back nothing')
+  host.close(); host2.close()
+}
+
+// THE SKIN (docs/STUDIO_SKINS.md, phase 5): an editor that gives onSkin asks
+// for it in its ready's caps, and is sent the studio's bundle, mode and pointer
+// after init and again on a change; one that does not ask is never sent it.
+{
+  const listeners = new Set()
+  const view = { mode: 'dark', pointer: 'touch', compiled: { id: 'claude', css: {} } }
+  const S = { skin: { id: 'claude', get view () { return view }, onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn) } } }
+  const change = (m) => { view.mode = m; for (const fn of listeners) fn(view) }
+  const ch = new MessageChannel()
+  const host = new Port(ch.port1)
+  const ready = new Promise((resolve) => host.on('ready', resolve))
+  const got = []
+  serveEditor(ch.port2, { onSkin: (bundle, mode, pointer) => got.push(`${bundle.id}/${mode}/${pointer}`) })
+  const r = await ready
+  check((r.caps ?? []).includes('skin'), 'an editor with onSkin asks for the skin in its ready')
+  const off = sendSkin(S, host, r)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check(got.join() === 'claude/dark/touch', `it is sent the skin at once (${got.join()})`)
+  change('dark')                                    // a font arriving: nothing new to say
+  change('light')
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check(got.join() === 'claude/dark/touch,claude/light/touch', `and again when the mode changes, once (${got.join()})`)
+  off(); change('dark')
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  check(got.length === 2, 'and no more once it has closed')
+  // CONTROL: an editor that does not ask.
+  const ch2 = new MessageChannel()
+  const host2 = new Port(ch2.port1)
+  const ready2 = new Promise((resolve) => host2.on('ready', resolve))
+  const said2 = []
+  host2.on('*', (m) => said2.push(m.t))
+  serveEditor(ch2.port2, {})
+  const r2 = await ready2
+  check(!(r2.caps ?? []).includes('skin') && sendSkin(S, host2, r2) === null, 'CONTROL: an editor without onSkin does not ask, and is not sent it')
   host.close(); host2.close()
 }
 

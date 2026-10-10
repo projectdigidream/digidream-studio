@@ -60,6 +60,19 @@ const script = () => page.evaluate(() => window.__studio.module.scripts['echo_te
 await page.evaluate(() => window.__studio.go('edit', '_echo/text~record:script~echo_test.lua'))
 let frame = await echo()
 check(await frame.evaluate(() => document.getElementById('text').value) === 'print("before")\n', 'the editor is given the script')
+// THE SKIN (phase 5): Echo asks for it (onSkin), so it is sent the studio's
+// skin after init, and again when the mode changes.
+{
+  await frame.waitForFunction(() => globalThis.__echo?.skins?.length > 0, { timeout: 10000 }).catch(() => {})
+  const first = await frame.evaluate(() => globalThis.__echo.skins.slice())
+  const want = await page.evaluate(() => ({ id: window.__studio.skin.id, mode: window.__studio.skin.view.mode }))
+  check(first.length === 1 && first[0].id === want.id && first[0].mode === want.mode && first[0].css, `the editor is sent the studio's skin on init (${JSON.stringify(first)})`)
+  await page.evaluate(() => window.__studio.skin.setMode('light'))
+  await frame.waitForFunction(() => globalThis.__echo.skins.length > 1, { timeout: 10000 }).catch(() => {})
+  const after = await frame.evaluate(() => globalThis.__echo.skins.slice())
+  check(after.length === 2 && after[1].mode === 'light', `and again on a mode change (${JSON.stringify(after.map((x) => x.mode))})`)
+  await page.evaluate(() => window.__studio.skin.setMode('auto'))
+}
 await type(frame, 'print("after")\n')
 await page.click('[data-action="editor-back"]')
 await page.waitForFunction(() => !document.querySelector('.sx-editor'))

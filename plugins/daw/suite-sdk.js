@@ -9,7 +9,8 @@
 //     const suite = await connectSuite({
 //       onInit: ({ kind, key, name, payload, caps }) => load(payload),
 //       onSave: () => bytesOrText(),          // asked on Back, and for drafts
-//       onUndo, onRedo, onRevert, onDispose
+//       onUndo, onRedo, onRevert, onDispose,
+//       onSkin: (bundle, mode, pointer) => …  // optional: wear the studio's skin
 //     })
 //     editor.onChange(() => { suite.dirty(true); suite.draft(bytesOrText()) })
 //   }
@@ -29,6 +30,9 @@ export function inSuite (search = globalThis.location?.search ?? '') {
  * tests hand one straight in). Returns the editor's API.
  */
 export function serveEditor (port, handlers = {}, { caps = [] } = {}) {
+  // An editor that can wear the studio's skin says so: 'skin' in its caps,
+  // which giving an onSkin handler does for it.
+  if (handlers.onSkin && !caps.includes('skin')) caps = [...caps, 'skin']
   let next = 1
   const pending = new Map()
   const send = (t, fields = {}) => {
@@ -87,6 +91,9 @@ export function serveEditor (port, handlers = {}, { caps = [] } = {}) {
         case 'redo': await handlers.onRedo?.(); break
         case 'saved': await handlers.onSaved?.(); break
         case 'dispose': await handlers.onDispose?.(); break
+        // The studio's skin, after init and again whenever it changes: a baked
+        // uikit bundle, and the mode and pointer the studio wears it in.
+        case 'skin': await handlers.onSkin?.(m.bundle, m.mode, m.pointer); break
         case 'query-result': pending.get(m.reqId)?.(m); pending.delete(m.reqId); break
       }
     } catch (err) {

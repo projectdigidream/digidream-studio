@@ -9,6 +9,7 @@
 //
 //   suite -> editor   init{kind,key,name,payload,caps}  request-save{reqId}
 //                     revert{payload}  undo  redo  saved  query-result{reqId,…}  dispose
+//                     skin{bundle,mode,pointer}   only to an editor whose ready lists 'skin'
 //   editor -> suite   ready{proto,caps}  dirty{dirty}  edit{label}  draft{payload}
 //                     content{reqId,payload}  query{reqId,what,arg}  diagnostics{items}
 //                     close{save}  error{message}
@@ -129,4 +130,24 @@ export function sameBytes (a, b) {
   if (x.length !== y.length) return false
   for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false
   return true
+}
+
+/**
+ * THE SKIN, to an editor that asked for it ('skin' in its ready's caps):
+ * the bundle the studio wears and the mode and pointer it wears it in, once
+ * now and again on every change of skin, mode or pointer (docs/PLUGINS.md).
+ * An editor that did not ask is never sent it. Returns the unsubscribe.
+ */
+export function sendSkin (S, port, ready) {
+  if (!S.skin || !(ready?.caps ?? []).includes('skin')) return null
+  let last = ''
+  const send = () => {
+    const v = S.skin.view
+    const at = `${S.skin.id}|${v.mode}|${v.pointer}`
+    if (at === last) return
+    last = at
+    port.send('skin', { bundle: v.compiled, mode: v.mode, pointer: v.pointer })
+  }
+  send()
+  return S.skin.onChange(send)
 }

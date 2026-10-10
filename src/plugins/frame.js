@@ -17,7 +17,7 @@
 // page too, with the same protocol but no document.
 //
 import { el, withIcon, icon } from '../ui.js'
-import { handshake, sameBytes } from './protocol.js'
+import { handshake, sameBytes, sendSkin } from './protocol.js'
 import { getDraft, putDraft, clearDraft } from './drafts.js'
 
 const SEP = '~'
@@ -92,8 +92,9 @@ class EditorSession {
     this.iframe.src = url.href
     this.hs = handshake(this.iframe.contentWindow, { origin: location.origin })
     try {
-      const { port } = await this.hs.done
+      const { port, ready } = await this.hs.done
       this.port = port
+      this.ready = ready
     } catch (e) {
       this.status(`${this.editor.label} did not start: ${e.message}`, 'error')
       return
@@ -103,6 +104,7 @@ class EditorSession {
       kind: this.kindId, key: this.key, name, payload: initial,
       caps: { hideOpen: true, hideSaveAs: true, hideLibrary: true, hideExport: true, fixedName: true }
     })
+    this.offSkin = sendSkin(S, this.port, this.ready)
     this.status(this.dirty ? 'unsaved work, from a draft' : '')
     this.onHide = () => { if (document.visibilityState === 'hidden') this.keepDraft() }
     document.addEventListener('visibilitychange', this.onHide)
@@ -180,6 +182,7 @@ class EditorSession {
 
   close () {
     this.hs?.stop()
+    this.offSkin?.()
     try { this.port?.send('dispose') } catch {}
     this.port?.close()
     if (this.onHide) document.removeEventListener('visibilitychange', this.onHide)
@@ -201,7 +204,7 @@ export function installPluginSections (S) {
   for (const { plugin, section, url } of S.plugins.sections()) {
     const id = sectionRoute(plugin, section.id)
     if (S.router.sections.has(id)) continue
-    let hs = null, port = null, iframe = null
+    let hs = null, port = null, iframe = null, offSkin = null
     S.router.register({
       id, label: section.label, icon: section.icon,
       mount: async (arg) => {
@@ -214,7 +217,8 @@ export function installPluginSections (S) {
         iframe = el('iframe', { class: 'sx-frame sx-section', title: section.label, src: u.href, allow: 'autoplay; clipboard-read; clipboard-write; fullscreen' })
         body.appendChild(iframe)
         hs = handshake(iframe.contentWindow, { origin: location.origin })
-        try { ({ port } = await hs.done) } catch (e) { S.status(`${section.label} did not start: ${e.message}`, 'error'); return }
+        let ready = null
+        try { ({ port, ready } = await hs.done) } catch (e) { S.status(`${section.label} did not start: ${e.message}`, 'error'); return }
         port.on('query', async (m) => {
           try {
             const result = await S.pluginQuery(m.what, m.arg, { section: id })
@@ -224,9 +228,11 @@ export function installPluginSections (S) {
         port.on('error', (m) => S.status(`${section.label}: ${m.message}`, 'error'))
         port.on('close', () => S.go('home'))
         port.send('section-init', { section: section.id, arg })
+        offSkin = sendSkin(S, port, ready)
       },
       unmount: () => {
         hs?.stop()
+        offSkin?.(); offSkin = null
         try { port?.send('dispose') } catch {}
         port?.close()
         if (iframe) iframe.src = 'about:blank'
