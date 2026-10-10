@@ -64,7 +64,7 @@ export function offsetOf (module, name, size) {
 export function viewPictures (module) {
   const out = new Set()
   for (const v of Object.values(module.viewmodels?.weapons ?? {})) {
-    for (const f of [...(v.ready ?? []), ...(v.fire ?? [])]) { if (f?.[0]) out.add(f[0]); if (f?.[2]) out.add(f[2]) }
+    for (const f of [...(v.ready ?? []), ...(v.fire ?? []), ...Object.values(v.anims ?? {}).flatMap((a) => a?.frames ?? [])]) { if (f?.[0]) out.add(f[0]); if (f?.[2]) out.add(f[2]) }
   }
   return [...out].sort()
 }
@@ -72,13 +72,45 @@ export function viewPictures (module) {
 /** A frame as the client reads it: [picture, tics] or [picture, tics, flash]. */
 const clean = (f) => (f?.[0] ? (f[2] ? [f[0], Math.max(1, Math.round(f[1] ?? 1)), f[2]] : [f[0], Math.max(1, Math.round(f[1] ?? 1))]) : null)
 
+/**
+ * The animation states a weapon's phases put the player in, with the phases
+ * that do: [{ state, phases: [name] }] in order -- a phase's `anim`, and
+ * every `set_anim` in its steps (docs/VIEWMODEL_PHASES.md). The first-person
+ * view plays `anims[state]` while the player is in that state.
+ */
+export function weaponStates (module, name) {
+  const by = new Map()
+  const add = (state, phase) => { if (Number.isInteger(state) && state >= 0) { if (!by.has(state)) by.set(state, new Set()); by.get(state).add(phase) } }
+  for (const [pn, ph] of Object.entries(module.weapons?.weapons?.[name]?.phases ?? {})) {
+    add(ph.anim, pn)
+    for (const st of ph.sequence ?? []) if (st?.action === 'set_anim') add(st.state, pn)
+  }
+  return [...by].sort((a, b) => a[0] - b[0]).map(([state, phases]) => ({ state, phases: [...phases] }))
+}
+
+/** A state's view loops unless told otherwise only when it is 0, as the client defaults. */
+export const loopsByDefault = (state) => Number(state) === 0
+
 /** assets/sprites/weapons.json, or null when no weapon has a view model. */
 export function weaponsJson (module) {
   const weapons = {}
   for (const [name, v] of Object.entries(module.viewmodels?.weapons ?? {})) {
     const ready = (v.ready ?? []).map(clean).filter(Boolean)
     const fire = (v.fire ?? []).map(clean).filter(Boolean)
-    if (ready.length || fire.length) weapons[name] = { ready: ready.length ? ready : fire.slice(0, 1), fire }
+    // Per animation state (docs/VIEWMODEL_PHASES.md): a frame list, or
+    // { frames, loop } when its looping is not the default.
+    const anims = {}
+    for (const [state, a] of Object.entries(v.anims ?? {})) {
+      const frames = (a?.frames ?? []).map(clean).filter(Boolean)
+      if (!frames.length || !/^(0|[1-9][0-9]*)$/.test(state)) continue
+      anims[state] = a.loop === undefined || a.loop === loopsByDefault(state) ? frames : { frames, loop: !!a.loop }
+    }
+    const animsFrames = (st) => (Array.isArray(anims[st]) ? anims[st] : anims[st]?.frames)
+    // An engine without per-phase views still gets ready and fire: from the
+    // lists themselves, else from state 0 and the first other state.
+    const r = ready.length ? ready : animsFrames('0') ?? fire.slice(0, 1)
+    const f = fire.length ? fire : animsFrames(Object.keys(anims).find((k) => k !== '0')) ?? []
+    if (r.length || f.length || Object.keys(anims).length) weapons[name] = { ready: r.length ? r : f.slice(0, 1), fire: f, ...(Object.keys(anims).length ? { anims } : {}) }
   }
   if (!Object.keys(weapons).length) return null
   return JSON.stringify({ _about: 'First-person weapon view models, written by the studio (docs/WEAPONS.md).', screen: SCREEN, weapons }, null, 1)
@@ -165,7 +197,9 @@ export function expandSheetViews (module, manifest) {
       }
       return [f.name, f.tics]
     })
-    weapons[name] = { ready: v.sheet.ready ? list(v.sheet.ready) : [], fire: v.sheet.fire ? list(v.sheet.fire) : [] }
+    const anims = {}
+    for (const [state, a] of Object.entries(v.anims ?? {})) if (a?.sheetAnim) anims[state] = { frames: list(a.sheetAnim), loop: a.loop }
+    weapons[name] = { ready: v.sheet.ready ? list(v.sheet.ready) : [], fire: v.sheet.fire ? list(v.sheet.fire) : [], anims }
   }
   return { module: { ...module, viewmodels: { ...module.viewmodels, weapons } }, pictures }
 }

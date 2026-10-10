@@ -4,9 +4,9 @@
 // pictures at rest and firing, where each sits on the screen, and a preview
 // played with the client's own view-model arithmetic (render/viewmodel.js).
 //
-import { el, select, button, muted, withIcon, slider } from './ui.js'
+import { el, select, button, muted, withIcon, slider, toggle } from './ui.js'
 import { frameAt, place } from '/src/render/viewmodel.js'
-import { SCREEN, weaponView, expandSheetViews, sheetCanvas, sheetBottomCentre, screenAt, offsetFor, offsetOf, bottomCentre, viewPictures } from './viewmodel_emit.js'
+import { SCREEN, weaponView, weaponStates, loopsByDefault, expandSheetViews, sheetCanvas, sheetBottomCentre, screenAt, offsetFor, offsetOf, bottomCentre, viewPictures } from './viewmodel_emit.js'
 
 /** The module's single pictures (sprites/NAME.png with no sheet manifest). */
 const picturesOf = (S) => Object.keys(S.rec?.assets ?? {})
@@ -50,7 +50,10 @@ class ViewPreview {
     if (!this.raf) this.raf = requestAnimationFrame(() => this.tick())
   }
 
-  fire () { this.fireAt = performance.now() }
+  fire () { this.fireAt = performance.now(); this.stateAt = null }
+
+  /** Play animation state `state` from its start, as the engine does when a phase puts the player in it. */
+  play (state) { this.stateAt = { state: String(state), t0: performance.now() }; this.fireAt = null }
 
   tick () {
     this.raf = this.canvas.isConnected ? requestAnimationFrame(() => this.tick()) : 0
@@ -72,7 +75,13 @@ class ViewPreview {
     }
     const now = performance.now()
     let frame = null
-    if (this.fireAt !== null) {
+    const st = this.stateAt && v.anims?.[this.stateAt.state]
+    if (st?.frames?.length) {
+      // Held on its last frame when it does not loop, as the client holds it.
+      const loop = st.loop ?? loopsByDefault(this.stateAt.state)
+      frame = frameAt(st.frames, (now - this.stateAt.t0) / 1000, loop) ?? st.frames[st.frames.length - 1]
+    }
+    if (!frame && this.fireAt !== null) {
       frame = frameAt(v.fire, (now - this.fireAt) / 1000)
       if (frame === null) this.fireAt = null
     }
@@ -114,7 +123,11 @@ export function viewRows (S, name, changed) {
   if (m.controls !== 'fps') rows.push(el('div', { class: 'st-warn-box', text: 'This is drawn only when the module is played first person: Settings → controls → first person (fps).' }))
   rows.push(muted(`How ${name} is drawn over the view in first person: pictures at rest and firing, as DOOM drew its guns. Each frame shows for some tics (35 a second); a frame may add a muzzle flash over it.`))
   preview.show(view)
-  rows.push(preview.canvas, el('div', { class: 'st-row' }, [button(withIcon('transport.play', 'fire'), () => preview.fire())]))
+  const states = weaponStates(m, name)
+  rows.push(preview.canvas, el('div', { class: 'st-row st-view-play' }, [
+    button(withIcon('transport.play', 'fire'), () => preview.fire()),
+    ...states.map((x) => button(withIcon('transport.play', `state ${x.state}`), () => preview.play(x.state), view.anims?.[x.state] ? '' : 'st-dim'))
+  ]))
   // DRAWN FROM: single pictures frame by frame, or a sprite sheet's animations
   // (a ThreeSprite project, baked) cut into pictures when the module is written.
   const sheets = Object.keys(m.sprites ?? {}).sort()
@@ -123,31 +136,18 @@ export function viewRows (S, name, changed) {
     if (v === 'sheet') w.sheet = { name: sheets[0] ?? null, ready: null, fire: null, scale: 1 }; else delete w.sheet
     changed()
   }))
-  if (view.sheet) { rows.push(...sheetRows(S, name, view, sheets, changed)); return rows }
+  if (view.sheet) { rows.push(...sheetRows(S, name, view, sheets, changed), ...phaseRows(S, name, view, states, changed, null)); return rows }
   rows.push(el('div', { class: 'st-row' }, [button(withIcon('action.import', 'import a picture (PNG)…'), async () => { const n = await S.importPicture?.(); if (n) changed() })]))
   if (!pics.length) {
     rows.push(muted('No pictures yet: import the weapon\'s pictures (PNG) first -- one for it at rest, one per frame of its shot, and a flash if it has one.'))
     return rows
   }
   const edit = () => weaponView(m, name, { make: true })
-  const list = (key, title, doc) => {
-    const frames = view[key] ?? []
-    const out = [el('div', { class: 'st-section-head', text: title }), muted(doc)]
-    frames.forEach((f, i) => {
-      out.push(el('div', { class: 'st-row st-view-frame', 'data-view-frame': `${key}:${i}` }, [
-        el('span', { class: 'st-val', text: String(i + 1) }),
-        select('', f[0] ?? '', [['', '(picture)'], ...pics.map((p) => [p, p])], (v) => { edit()[key][i][0] = v || null; changed() }).lastChild,
-        el('input', { type: 'number', min: 1, max: 350, step: 1, value: f[1] ?? 4, title: 'tics (35 a second)', class: 'st-view-tics', onchange: (e) => { edit()[key][i][1] = Math.max(1, Math.round(Number(e.target.value) || 1)); changed() } }),
-        select('', f[2] ?? '', [['', '(no flash)'], ...pics.map((p) => [p, `flash: ${p}`])], (v) => { const fr = edit()[key][i]; if (v) fr[2] = v; else fr.length = 2; changed() }).lastChild,
-        i > 0 ? button(withIcon('action.up'), () => { const a = edit()[key]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; changed() }) : null,
-        button(withIcon('action.close'), () => { edit()[key].splice(i, 1); changed() })
-      ].filter(Boolean)))
-    })
-    out.push(button(`+ frame`, () => { const a = edit()[key]; a.push([a[a.length - 1]?.[0] ?? pics[0], key === 'ready' ? 1 : 4]); changed() }))
-    return out
-  }
-  rows.push(...list('ready', 'at rest', 'Shown while it is held, looping: one frame for a still pose, more for an idle judder.'))
-  rows.push(...list('fire', 'firing', 'Played once on every shot, from the moment it is fired.'))
+  const list = (key, title, doc) => [el('div', { class: 'st-section-head', text: title }), muted(doc),
+    ...frameList(pics, view[key] ?? [], () => edit()[key], changed, key, key === 'ready' ? 1 : 4)]
+  rows.push(...phaseRows(S, name, view, states, changed, pics))
+  rows.push(...list('ready', 'at rest (any other state)', 'Shown while it is held, looping, whenever the player is in a state with no frames of its own above -- and by engines that do not play per phase.'))
+  rows.push(...list('fire', 'firing (any other state)', 'Played once on every shot, in a state with no frames of its own -- and by older engines.'))
   // WHERE EACH PICTURE SITS: its top-left corner on the 320 x 200 screen, at rest.
   const used = viewPictures(m).filter((p) => pics.includes(p))
   if (used.length) {
@@ -187,8 +187,8 @@ function sheetRows (S, name, view, sheets, changed) {
   if (!sh.name) return rows
   if (!atlas) { rows.push(el('div', { class: 'st-warn-box', text: `${sh.name} is not baked yet: open it in ThreeSprite and come back.` })); return rows }
   rows.push(
-    select('at rest', sh.ready ?? '', [['', '(choose an animation)'], ...anims.map((a) => [a, a])], (v) => set('ready')(v || null)),
-    select('firing', sh.fire ?? '', [['', '(choose an animation)'], ...anims.map((a) => [a, a])], (v) => set('fire')(v || null)),
+    select('at rest (fallback)', sh.ready ?? '', [['', '(choose an animation)'], ...anims.map((a) => [a, a])], (v) => set('ready')(v || null)),
+    select('firing (fallback)', sh.fire ?? '', [['', '(choose an animation)'], ...anims.map((a) => [a, a])], (v) => set('fire')(v || null)),
     slider('scale', sh.scale ?? 1, { min: 0.25, max: 8, step: 0.25 }, (v, done) => { if (done) set('scale')(v) }),
     el('div', { class: 'st-row' }, [
       el('span', { class: 'st-entry', text: `canvas ${canvasPx}×${canvasPx} at` }),
@@ -196,7 +196,54 @@ function sheetRows (S, name, view, sheets, changed) {
       el('input', { type: 'number', step: 1, value: at.y, title: 'y', class: 'st-view-tics', onchange: (e) => set('y')(Number(e.target.value) || 0) }),
       button('bottom centre', () => { delete sh.x; delete sh.y; changed() })
     ]),
-    muted('The sprite\'s canvas on the 320 x 200 screen, its top-left corner at x, y with the weapon at rest; scale is screen pixels to a canvas pixel.')
+    muted('At rest and firing play in any state with no animation of its own below, and on engines that do not play per phase. The sprite\'s canvas sits on the 320 x 200 screen with its top-left corner at x, y, the weapon at rest; scale is screen pixels to a canvas pixel.')
   )
+  return rows
+}
+
+/** One frame list's rows: picture, tics, flash, order; `make` gives the list to change (made on first edit). */
+function frameList (pics, frames, make, changed, tag, tics = 4) {
+  const out = frames.map((f, i) => el('div', { class: 'st-row st-view-frame', 'data-view-frame': `${tag}:${i}` }, [
+    el('span', { class: 'st-val', text: String(i + 1) }),
+    select('', f[0] ?? '', [['', '(picture)'], ...pics.map((p) => [p, p])], (v) => { make()[i][0] = v || null; changed() }).lastChild,
+    el('input', { type: 'number', min: 1, max: 350, step: 1, value: f[1] ?? tics, title: 'tics (35 a second)', class: 'st-view-tics', onchange: (e) => { make()[i][1] = Math.max(1, Math.round(Number(e.target.value) || 1)); changed() } }),
+    select('', f[2] ?? '', [['', '(no flash)'], ...pics.map((p) => [p, `flash: ${p}`])], (v) => { const fr = make()[i]; if (v) fr[2] = v; else fr.length = 2; changed() }).lastChild,
+    i > 0 ? button(withIcon('action.up'), () => { const a = make(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; changed() }) : null,
+    button(withIcon('action.close'), () => { make().splice(i, 1); changed() })
+  ].filter(Boolean)))
+  out.push(button('+ frame', () => { const a = make(); a.push([a[a.length - 1]?.[0] ?? pics[0], tics]); changed() }))
+  return out
+}
+
+/**
+ * PER PHASE (docs/VIEWMODEL_PHASES.md): the animation states this weapon's
+ * phases put the player in, each with its own first-person animation --
+ * frames of pictures (`pics`), or, drawn from a sheet (`pics` null), one of
+ * the sprite's animations. The engine plays a state's while the player is
+ * in it, restarting it each time the state is entered again.
+ */
+function phaseRows (S, name, view, states, changed, pics) {
+  const m = S.module
+  const rows = [el('div', { class: 'st-section-head', text: 'per phase' })]
+  if (!states.length) {
+    rows.push(muted('None of this weapon\'s phases sets an animation state (a phase\'s anim, or set_anim in its steps). Give its phases one in the weapon\'s graph, and each can have its own animation here.'))
+    return rows
+  }
+  rows.push(muted('Each animation state the weapon\'s phases set (their anim, and set_anim) can have its own animation: the engine plays it while the player is in that state, the same number the third-person body animates by.'))
+  const anim = (st) => { const w = weaponView(m, name, { make: true }); w.anims ??= {}; return (w.anims[st] ??= {}) }
+  const atlas = view.sheet?.name ? S.sheets.get(view.sheet.name)?.atlas : null
+  const sheetAnims = (atlas?.animations ?? []).map((a) => a.name)
+  for (const { state, phases } of states) {
+    const a = view.anims?.[state] ?? {}
+    const loop = a.loop ?? loopsByDefault(state)
+    rows.push(el('div', { class: 'st-card st-view-state', 'data-view-state': String(state) }, [
+      el('div', { class: 'st-entry', text: `state ${state} · ${phases.join(', ')}` }),
+      pics
+        ? null
+        : select('animation', a.sheetAnim ?? '', [['', '(none: at rest / firing)'], ...sheetAnims.map((n) => [n, n])], (v) => { const x = anim(state); if (v) x.sheetAnim = v; else delete x.sheetAnim; changed() }),
+      ...(pics ? frameList(pics, a.frames ?? [], () => (anim(state).frames ??= []), changed, `state${state}`, state === 0 ? 1 : 4) : []),
+      toggle(loop ? 'loops' : 'plays once, holds its last frame', loop, (v) => { anim(state).loop = v; changed() })
+    ].filter(Boolean)))
+  }
   return rows
 }
