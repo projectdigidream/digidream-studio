@@ -897,6 +897,35 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   })
   check(offered.when >= 15 && offered.step >= 13, `the phase offers the weapon vocabulary (${offered.when} conditions, ${offered.step} actions)`)
   check(!offered.mobOnly, "CONTROL: and not the monster's, which a weapon cannot run")
+  // → link on a weapon: the arrow goes into its phases (it used to write to
+  // `states`, which only a monster has, and threw), and starts on `always`,
+  // since the weapon runtime refuses an empty list. No "not" switch either.
+  const linked = await page.evaluate(() => {
+    const S = window.__studio
+    const errors = []
+    const onErr = (e) => errors.push(String(e.message ?? e.reason))
+    window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onErr)
+    const w = S.module.weapons.weapons.pistol
+    const [from, to] = Object.keys(w.phases)
+    const before = (w.phases[from].transitions ?? []).length
+    S.workshop.state = from; S.workshop.tab = 'node'; S.workshop.render()
+    ;[...document.querySelectorAll('.wk-details button')].find((b) => /tap a target state/.test(b.textContent)).click()
+    const node = [...document.querySelectorAll('.wk-world > .wk-node')].find((n) => n.querySelector('.wk-node-name').textContent === to)
+    const r = node.getBoundingClientRect()
+    const at = { bubbles: true, clientX: r.x + 10, clientY: r.y + 10, pointerId: 1 }
+    node.dispatchEvent(new PointerEvent('pointerdown', at)); node.dispatchEvent(new PointerEvent('pointerup', at))
+    window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr)
+    const trs = w.phases[from].transitions ?? []
+    const added = trs[trs.length - 1]
+    S.workshop.render()
+    const nots = [...document.querySelectorAll('.wk-details .st-muted')].filter((m) => m.textContent === 'not').length
+    const problems = S.vocab.validateWeapons(S.module).filter((p) => /pistol/.test(p))
+    trs.pop(); S.workshop.render()
+    return { errors, grew: trs.length + 1 - before, added, nots, problems }
+  })
+  check(!linked.errors.length && linked.grew === 1 && linked.added?.to, `→ link on a weapon adds an arrow to the tapped phase (${JSON.stringify(linked)})`)
+  check(JSON.stringify(linked.added?.when) === '[{"cond":"always"}]' && !linked.problems.length, `and it starts on \`always\`, which the runtime takes (${linked.problems.join(' | ')})`)
+  check(linked.nots === 0, `a weapon's conditions offer no "not" switch, which its runtime refuses (${linked.nots})`)
   // A swing, its picture, and the arsenal's pools.
   const swung = await page.evaluate(() => {
     const S = window.__studio

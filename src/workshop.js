@@ -510,8 +510,8 @@ class Workshop {
       start = null
       if (moved) { this.S.moduleChanged(); return }
       if (this.linking && this.state && this.state !== name) {
-        const from = this.brain.states[this.state]
-        ;(from.transitions ??= []).push({ to: name, when: [] })
+        const from = this.nodes[this.state]
+        ;(from.transitions ??= []).push({ to: name, when: this.#newWhen() })
         this.linking = false
         this.tab = 'node'
         this.changed()
@@ -524,6 +524,9 @@ class Workshop {
     })
     node.addEventListener('pointercancel', () => { start = null })
   }
+
+  /** A new transition's conditions: a weapon's runtime refuses an empty list, so it starts on `always`. */
+  #newWhen () { return this.kind === 'weapon' ? [{ cond: 'always' }] : [] }
 
   #redrawEdges () {
     // Only the arrows. Rebuilding the pane replaced the node under the finger
@@ -654,7 +657,8 @@ class Workshop {
         ]))
         body.push(...stateRows(S, m, this.state, st, ctx, changed, {
           onPickTarget: () => { this.linking = true; this.pane = 'graph'; this.root.dataset.pane = 'graph'; this.render() },
-          vocab: nodeSpec, nodes: sp.shape.nodes, skip: weapon ? ['swing'] : []
+          vocab: nodeSpec, nodes: sp.shape.nodes, skip: weapon ? ['swing'] : [],
+          negate: !weapon, newWhen: () => this.#newWhen()
         }))
         // A PHASE MAY CARRY ITS OWN SWING, replacing the weapon's while it is
         // in it -- which is what makes a combo escalate rather than being three

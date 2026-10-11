@@ -188,7 +188,7 @@ export function varsRows (m, changed) {
  * this takes the vocabulary to read rather than assuming the mob's -- which is
  * the whole of what it took to make one editor serve both.
  */
-export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null, vocab: V = null, nodes = 'states', skip = [] } = {}) {
+export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null, vocab: V = null, nodes = 'states', skip = [], negate = true, newWhen = () => [] } = {}) {
   const spec = V ?? {
     fields: S.vocab.mob.state_fields,
     conditions: S.vocab.mob.conditions,
@@ -208,7 +208,8 @@ export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null,
       const cspec = spec.conditionSpec(c.cond)
       trRows.push(el('div', { class: 'st-row' }, [
         el('span', { class: 'st-entry', text: c.cond }),
-        toggle('', !!c.negate, (v) => { c.negate = v || undefined; changed() }).lastChild, muted('not'),
+        // Only a monster's conditions can be turned round; a weapon has its opposites (has_ammo / no_ammo).
+        ...(negate || c.negate ? [toggle('', !!c.negate, (v) => { c.negate = v || undefined; changed() }).lastChild, muted('not')] : []),
         button(withIcon('action.close'), () => { tr.when.splice(j, 1); changed() })
       ]))
       if (cspec) trRows.push(...argFields(cspec.args ?? [], c, ctx, ['fn']))
@@ -218,7 +219,7 @@ export function stateRows (S, m, sname, st, ctx, changed, { onPickTarget = null,
     rows.push(el('div', { class: 'st-card', 'data-transition': String(i) }, trRows))
   })
   rows.push(el('div', { class: 'st-row' }, [
-    button('+ transition', () => { (st.transitions ??= []).push({ to: states[0], when: [] }); changed() }),
+    button('+ transition', () => { (st.transitions ??= []).push({ to: states[0], when: newWhen() }); changed() }),
     onPickTarget ? button(withIcon('action.link', 'tap a target state'), onPickTarget) : null
   ]))
   rows.push(el('div', { class: 'st-section-head st-then' }, withIcon('transport.play', 'at tick … do …')))

@@ -161,10 +161,13 @@ export class Vocab {
         for (const [i, tr] of (p.transitions ?? []).entries()) {
           const tw = `${pw}, transition ${i + 1}`
           if (typeof tr.to !== 'string' || !(tr.to in phases)) problems.push(`${tw}: \`to\` must name a phase`)
+          // An empty list is vacuously true: the runtime refuses it as `always` by accident.
+          if (Array.isArray(tr.when) && !tr.when.length) problems.push(`${tw}: \`when\` is an empty list, which would fire every tick (add \`always\` if that is the intent)`)
           for (const [j, c] of (tr.when ?? []).entries()) {
             const spec = this.weaponConditions.get(c.cond)
             if (!spec) { problems.push(`${tw}, condition ${j + 1}: unknown condition "${c.cond}"`); continue }
-            checkArgs(spec.args ?? [], c, `${tw}, condition ${j + 1}`, problems, ctx, ['cond', 'negate'])
+            // A weapon's condition has no `negate` (a monster's does): the runtime refuses it as an unknown field.
+            checkArgs(spec.args ?? [], c, `${tw}, condition ${j + 1}`, problems, ctx, ['cond'])
           }
         }
         for (const [i, step] of (p.sequence ?? []).entries()) {

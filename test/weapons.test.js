@@ -111,6 +111,15 @@ check(vocab.validateWeapons(badAction).some((p) => /unknown action "hug"/.test(p
 const badInitial = structuredClone(module)
 badInitial.weapons.weapons.fists.initial = 'elsewhere'
 check(vocab.validateWeapons(badInitial).some((p) => /`initial` names no phase/.test(p)), 'CONTROL: resting in a phase that does not exist is named')
+const negated = structuredClone(module)
+negated.weapons.weapons.shotgun.phases.ready.transitions[0].when[0].negate = true
+check(vocab.validateWeapons(negated).some((p) => /unknown field `negate`/.test(p)), 'CONTROL: `negate` on a weapon condition is named (only a monster\'s takes it)')
+const emptyWhen = structuredClone(module)
+emptyWhen.weapons.weapons.shotgun.phases.ready.transitions[0].when = []
+check(vocab.validateWeapons(emptyWhen).some((p) => /`when` is an empty list/.test(p)), 'CONTROL: a transition with no conditions is named')
+const healed = structuredClone(module)
+healed.weapons.pickups = { medkit: { heal: 25, ceiling: 'max' } }
+check(vocab.validateWeapons(healed).length === 0, `a new pickup's defaults are valid (${vocab.validateWeapons(healed).join(' | ')})`)
 
 // --- the real loader ------------------------------------------------------------------
 if (!existsSync(LUAJIT)) {
@@ -136,6 +145,10 @@ if (!existsSync(LUAJIT)) {
   check(bad.errors > 0, `CONTROL: the runtime also refuses the transition to nowhere (${bad.errors} complaint(s))`)
   const bad2 = run(emitWeaponsLua(badAmmo), 'bad2.lua')
   check(bad2.errors > 0, `CONTROL: and the undeclared ammunition pool (${bad2.errors})`)
+  check(run(emitWeaponsLua(negated), 'bad3.lua').errors > 0, 'CONTROL: and `negate` on a weapon condition')
+  check(run(emitWeaponsLua(emptyWhen), 'bad4.lua').errors > 0, 'CONTROL: and a transition with no conditions')
+  const heal = run(emitWeaponsLua(healed), 'heal.lua')
+  check(heal.errors === 0, `the runtime takes a new pickup's defaults:\n${heal.out}`)
 }
 
 // --- making and unmaking one ------------------------------------------------------------

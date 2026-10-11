@@ -153,7 +153,7 @@ export function arsenalRows (S, ctx) {
     const raw = await ask('pickup name (letters, digits, underscore)', 'medkit')
     const n = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (!n || a.pickups[n]) { if (raw) S.status('that name is empty or taken', 'warn'); return }
-    a.pickups[n] = { heal: 25, ceiling: 'normal' }
+    a.pickups[n] = { heal: 25, ceiling: 'max' }
     ctx.changed()
   }))
   rows.push(muted('A pickup is named by a prop in the level: walking over the prop grants this. `not_yet` declares one that does nothing yet and says so by name.'))
