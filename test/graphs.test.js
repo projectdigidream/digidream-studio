@@ -371,6 +371,19 @@ const nowhere = structuredClone(travel); nowhere.nodes[1].level = 'nowhere'
 check(graphProblems(nowhere, GV, TV, { maps: ['gate', 'yard'] }).some((p) => /no map called nowhere/.test(p)), 'CONTROL: one to a map the module lacks is named')
 const byNumber = structuredClone(travel); byNumber.nodes[1].level = '2'
 check(graphProblems(byNumber, GV, TV, { maps: ['gate', 'yard'] }).length === 0, 'a map given by its number is left to the server')
+
+// A decimal kept as text ("2.5"): compare in graphs.lua refuses a non-number, so
+// `>= "2.5"` is never true. And a prop event naming a prop nobody has never fires.
+{
+  const cmp = (b) => ({ ...newGraph(), nodes: [{ id: 'many', type: 'compare', op: '>=', b, pos: { x: 0, y: 0 } }], links: [] })
+  check(graphProblems(cmp('2.5'), GV, TV).some((p) => /is the text "2.5", not a number/.test(p)), 'a decimal kept as text in a compare is named')
+  check(!graphProblems(cmp(2.5), GV, TV).some((p) => /not a number/.test(p)), 'CONTROL: the number 2.5 is not')
+  check(!graphProblems(cmp('gold'), GV, TV).some((p) => /not a number/.test(p)), 'CONTROL: nor a word, which is meant as text')
+  const used = (prop) => ({ ...newGraph(), nodes: [{ id: 'pull', type: 'when_prop_used', prop, pos: { x: 0, y: 0 } }], links: [] })
+  check(graphProblems(used('levr'), GV, TV, { props: ['lever', 'crate'] }).some((p) => /no prop called levr/.test(p)), 'a when_prop_used naming a prop nobody has is named')
+  check(!graphProblems(used('lever'), GV, TV, { props: ['lever', 'crate'] }).some((p) => /no prop called/.test(p)), 'CONTROL: one naming a real prop is not')
+  check(!graphProblems(used(undefined), GV, TV, { props: ['lever'] }).some((p) => /no prop called/.test(p)), 'CONTROL: nor one with no prop, which hears any')
+}
 if (existsSync(SERVER)) {
   const gate = { ...structuredClone(plain), name: 'gate', graphs: { travel } }
   const yard = { ...structuredClone(plain), name: 'yard' }

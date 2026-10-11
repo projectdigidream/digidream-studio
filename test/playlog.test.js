@@ -30,6 +30,13 @@ check(isBad('[lua:maps/graphs.lua] [graphs] first.main.graph.json: 1 problems --
       'refusals, uncaught errors, a dead server and a missing path are failures')
 check(!isBad('[warning] [props] missing sprite BKEYA0 (/src/main.js:1527)') && isBad('[warning] the link failed to open') && isBad('[error] Uncaught TypeError: boom'),
       'the game page\'s warnings stay in its log unless they say something failed; its errors are failures')
+// The graph runtime's warnings while it runs, in its own words (graphs.lua say()).
+check(isBad("[lua:maps/graphs.lua] [graphs] world.levers: node 'open' was given \"x\" for 'amount', which is not a int -- skipped") &&
+      isBad("[graphs] world.main: node 'heal' (heal) acted on no player -- the event has none; tick `everyone` to reach them all") &&
+      isBad("[graphs] world.main: a run went past 1000 steps at node 'loop' and was stopped -- a loop?") &&
+      isBad("[graphs] game.hud: panel 'score' differs from world.hud's; world.hud's is the one used"),
+      "the graph runtime's run-time warnings are flagged: a skipped node, no player, a stopped run, a panel clash")
+check(!isBad('[graphs] world.levers: 12 nodes, 14 links'), "CONTROL: and its load summary is not")
 check(!isBad('[triggers] first: 3 triggers on 2 events') && !isBad('[studio] wrote 40 files (512 KB) under modules/x') && !isBad('[graphs] first.main.graph.json: 0 problems'),
       'CONTROL: ordinary lines are not')
 const logs = { studio: ['[studio] launching the game'], server: ['[srv] up', '[graphs] x: 1 problems -- the graph is not loaded'], game: [] }

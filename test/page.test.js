@@ -3271,6 +3271,51 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(got.texExports.some((t) => /PNG/.test(t)) && got.sprExports.some((t) => /tsprite/.test(t)) && got.sprExports.some((t) => /sheet/.test(t)), 'and each offers its files to take out of the studio')
 }
 
+// FOUR PAGES IN THE EXAMPLE PROJECT: the Sky page opens, a HUD picture that
+// names one of the module's own textures draws (the client asks /sprites/ and
+// /textures/, where the studio keeps none), the Sounds page counts a graph's
+// play_sound as a user, and a decimal typed into a graph is a number.
+{
+  const got = await page.evaluate(async () => {
+    const S = window.__studio
+    const was = S.rec.id
+    const errors = []
+    const onErr = (e) => errors.push(String(e.message ?? e.reason))
+    window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onErr)
+    await S.openExample('gemhollow'); await new Promise((r) => setTimeout(r, 1500))
+    await S.go('sky'); await new Promise((r) => setTimeout(r, 800))
+    const sky = !!document.querySelector('.sd-page canvas, .st-sheet canvas')
+    // The HUD picture.
+    const tex = Object.keys(S.module.textures)[0]
+    S.module.ui ??= JSON.parse(JSON.stringify((await import('/studio/src/ui_emit.js')).newLayout((await import('/src/render/layout.js')).DEFAULT_LAYOUT)))
+    S.module.ui.hud.push({ id: 'logo', type: 'image', frame: tex, anchor: 'tl', x: 8, y: 8, w: 32, h: 32 })
+    await S.go('screens')
+    S.window.tab = 'hud'; S.window.render()
+    let img = null
+    for (let i = 0; i < 40; i++) { img = [...document.querySelectorAll('.sc .sc-frame img')].find((x) => x.dataset.frame === tex); if (img?.complete && img.naturalWidth) break; await new Promise((r) => setTimeout(r, 100)) }
+    const hud = { tex, src: img?.src?.slice(0, 5), w: img?.naturalWidth ?? 0 }
+    S.module.ui.hud.pop()
+    // The sound a graph plays.
+    const sound = (S.moduleSounds ?? [])[0]
+    const d = Object.values(S.docs)[0]
+    const { graphsOf } = await import('/studio/src/graphs_emit.js')
+    const [gname, g] = graphsOf(d)[0] ?? []
+    g?.nodes.push({ id: 'zz_hear', type: 'play_sound', sound, pos: { x: 0, y: 0 } })
+    const by = [...(S.soundsUsed().get(sound) ?? [])]
+    g?.nodes.pop()
+    // The decimal.
+    const { literal } = await import('/studio/src/graphwin.js')
+    const typed = [literal('2.5'), literal('0,5'), literal('3'), literal('gold')]
+    window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr)
+    await S.store.remove('gemhollow'); await S.openModule(was); await S.go('map')
+    return { errors, sky, hud, sound, gname, by, typed }
+  })
+  check(!got.errors.length && got.sky, `the Sky page opens on the example project without an error (${got.errors.join(' | ')})`)
+  check(got.hud.src === 'blob:' && got.hud.w > 0, `a HUD picture naming one of the module's textures draws, from the module's copy (${JSON.stringify(got.hud)})`)
+  check(got.by.some((w) => w.includes(got.gname)), `the Sounds page counts a graph's play_sound as a user of ${got.sound} (${got.by.join(', ')})`)
+  check(JSON.stringify(got.typed) === '[2.5,0.5,3,"gold"]', `a decimal typed into a graph is a number, a word stays a word (${JSON.stringify(got.typed)})`)
+}
+
 // A STYLE FROM OUTSIDE: uikit's sample skin, baked as a tool would get it,
 // imported through the studio (skin.js importSkin, what Home's "import a
 // style…" calls), worn, listed on Home, then forgotten.

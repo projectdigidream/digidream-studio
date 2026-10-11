@@ -14,6 +14,7 @@ import { shell } from '../bridge.js'
 import { el, button, muted, toggle, confirmDialog, ask, withIcon, icon } from '../ui.js'
 import { mergeBanks, bankNames, packId, packPath } from '../soundpacks.js'
 import { editArg } from '../plugins/frame.js'
+import { graphsOf } from '../graphs_emit.js'
 
 let S = null
 
@@ -64,7 +65,7 @@ async function hear (name) {
   } catch (e) { S.status(`sound did not start: ${e.message ?? e}`, 'error') }
 }
 
-/** Every sound name the module's monsters and weapons say, with where. */
+/** Every sound name the module's monsters, weapons and graphs say, with where. */
 function soundsUsed () {
   const used = new Map()
   const note = (n, where) => { if (typeof n === 'string' && n) (used.get(n) ?? used.set(n, new Set()).get(n)).add(where) }
@@ -75,10 +76,14 @@ function soundsUsed () {
     if (typeof o.sound === 'string') note(o.sound, where)
     for (const v of Object.values(o)) walk(v, where)
   }
+  const walkGraph = (g, where) => { for (const n of g?.nodes ?? []) if (typeof n.sound === 'string') note(n.sound, where) }
   for (const [n, m] of Object.entries(S.module.mobs?.mobs ?? {})) walk(m, n)
   for (const [n, m] of Object.entries(S.module.mobs?.missiles ?? {})) walk(m, n)
   for (const [n, w] of Object.entries(S.module.weapons?.weapons ?? {})) walk(w, n)
   for (const [n, p] of Object.entries(S.module.weapons?.pickups ?? {})) walk(p, n)
+  // The graphs: a play_sound's sound, a typed subtitle's letter sound.
+  for (const d of Object.values(S.docs ?? {})) for (const [n, g] of graphsOf(d)) walkGraph(g, `graph ${d.name}.${n}`)
+  for (const [n, g] of graphsOf(S.module)) walkGraph(g, `the game's graph ${n}`)
   return used
 }
 

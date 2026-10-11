@@ -283,7 +283,7 @@ class GraphWindow {
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
-    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, props: this.S.propNames?.() ?? null, game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
       el('span', { class: 'wk-title' }, withIcon('section.graphs', this.game ? 'the game' : S.docName)),
@@ -633,7 +633,7 @@ class GraphWindow {
   #drawSide () {
     const side = this.root.querySelector('.wk-details')
     if (!side) return
-    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, props: this.S.propNames?.() ?? null, game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
     side.replaceChildren(...this.#sideRows(problems))
   }
 
@@ -1427,7 +1427,7 @@ function withCurrent (opts, cur) {
 }
 
 /** "3" -> 3, "true" -> true, "abc" -> "abc": a literal as the person meant it. */
-function literal (s) {
+export function literal (s) {
   // A decimal comma ("0,5", as many keyboards write it) is a decimal point:
   // kept as text, the runtime would read it as no number at all.
   const t = String(s).trim().replace(/^(-?\d+),(\d+)$/, '$1.$2')
@@ -1435,7 +1435,8 @@ function literal (s) {
   if (t === 'true') return true
   if (t === 'false') return false
   if (/^-?\d+$/.test(t)) return Number(t)
-  if (/^-?\d+\.\d+$/.test(t)) return t
+  // A decimal is a number too: kept as text, compare would never find it equal or greater.
+  if (/^-?\d+\.\d+$/.test(t)) return Number(t)
   return t
 }
 

@@ -34,12 +34,17 @@ const MAX_LINES = 2000
 // the Lua runtimes say what failed in sentences.
 const BAD = /\b(errors?|refus\w*|fail\w*|problems?\b(?! --)|not loaded|exited|cannot|could not|couldn't|no such|uncaught|exception|traceback|attempt to|nil value|missing|not found|undefined is not|is not a function|stopped (?:during|while|unexpectedly)|has no|unknown|invalid)\b/i
 const FINE = /\b0 problems\b|\bno problems\b|loads clean/i
+// The graph runtime's run-time warnings (engine/maps/scripts/graphs.lua): a
+// node skipped for a bad value or no entity, a run or a call stopped, an action
+// on no player, a panel clash. Its load summary ("N nodes, M links") is not one.
+const GRAPH_WARN = /\[graphs\].*(-- skipped|was stopped|-- stopped|acted on no player|is the one used)/
 
 /** A line as shown: the device's long path to the game tree dropped (`modules/x/maps/first.dnpm`). */
 export const tidy = (line) => line.replace(/(^|[\s[:(])\/[^[\]()]*?\/game\//g, '$1')
 
 /** Does this line look like a failure? */
 export const isBad = (line) => {
+  if (GRAPH_WARN.test(line)) return true
   if (FINE.test(line)) return false
   // The game page's warnings (a missing sprite) are in its log, not in the
   // list of failures -- unless they say something failed outright.

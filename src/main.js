@@ -238,6 +238,9 @@ S.skin.onChange(() => {
   redraw()
   for (const fn of S.skinListeners) { try { fn(S.skin) } catch (e) { console.warn('[studio] a drawing did not take the skin:', e) } }
 })
+/** Where a texture's picture is: the module's own, else the app's. */
+S.imageFor = (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`
+// (Before the sky: it loads its pictures through this the moment it is installed.)
 // The sky, before any map is drawn: a sky flat takes its material when it is built.
 installSky(S)
 // The module's own pictures come from the record's blobs; everything else the
@@ -1244,8 +1247,6 @@ S.soundField = (label, value, onChange) => {
   return row(label, sel, play)
 }
 
-/** Where a texture's picture is: the module's own, else the app's. */
-S.imageFor = (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`
 
 /** Every prop name a brain or a trigger may name: the module's bodies and props, then the served catalogue. */
 S.propNames = () => [...new Set([...(S.module?.props ?? []).map((p) => p.name), ...S.catalogue])].sort()
@@ -1274,12 +1275,12 @@ async function emitAll ({ forPlay = false } = {}) {
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
     for (const [name, g] of graphsOf(d)) {
-      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
+      const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, props: S.propNames?.() ?? null, maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
       if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
-    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, game: true, maps: Object.keys(S.docs) }) : []
+    const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, props: S.propNames?.() ?? null, game: true, maps: Object.keys(S.docs) }) : []
     if (mg.length) { S.status(`the game's graph ${name}: ${mg.join('; ')}`, 'error'); return null }
   }
   const sizes = { ...S.textureSizes }

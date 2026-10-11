@@ -35,6 +35,37 @@ export const DEVICES = {
 }
 
 const TYPES = ['text', 'number', 'bar', 'image', 'group']
+
+/**
+ * THE MODULE'S PICTURES IN THE HUD. The client's image element asks for
+ * /sprites/<name>.png, then /textures/<name>.png -- served in the game, but in
+ * the studio the module's own pictures are in its store, so those URLs miss and
+ * the picture draws broken. Every such src under `host` is pointed at the
+ * module's copy (a sprite picture first, then a texture, as the client tries
+ * them), now and whenever the client sets one again.
+ */
+export function moduleImageUrl (S, src) {
+  const m = /\/(sprites|textures)\/([^/?#]+)\.png$/.exec(src ?? '')
+  if (!m) return null
+  const name = decodeURIComponent(m[2])
+  return (m[1] === 'sprites' ? S.spriteUrls?.get(name) : null) ?? S.imageUrls?.get(name) ?? null
+}
+
+function useModuleImages (host, S) {
+  const fix = (node) => {
+    if (node.tagName !== 'IMG') return
+    const url = moduleImageUrl(S, node.getAttribute('src'))
+    if (url) node.src = url
+  }
+  if (host.__images) return
+  host.__images = new MutationObserver((list) => {
+    for (const r of list) {
+      if (r.type === 'attributes') fix(r.target)
+      else for (const n of r.addedNodes) if (n.nodeType === 1) { fix(n); for (const k of n.querySelectorAll('img')) fix(k) }
+    }
+  })
+  host.__images.observe(host, { attributes: true, attributeFilter: ['src'], subtree: true, childList: true })
+}
 const SAMPLE = { hp: 75, map: 'first', 'hud.hp_max': 100, 'hud.weapon': 'pistol', 'hud.ammo_type': 'bullets', 'hud.ammo': 12, 'hud.ammo_max': 50 }
 
 let win = null
@@ -124,6 +155,7 @@ class Screens {
 
     this.hud?.destroy()
     if (this.tab === 'hud' || this.tab === 'touch') {
+      useModuleImages(frame, this.S)
       this.hud = new HudView({ host: frame, touch: dev.touch, insets: dev.insets, size: { width: dev.width, height: dev.height } })
       this.hud.setLayout(checked.layout)
       this.hud.update(this.sample)

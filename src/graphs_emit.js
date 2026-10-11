@@ -243,7 +243,15 @@ export function varProblem (n, graph, props) {
   return null
 }
 
-export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null, buttons = null, panels = null } = {}) {
+/** A node's plain-value fields (a literal's value, set_var's, a `value`-typed argument): numbers there must be numbers. */
+function valueKeys (n, spec) {
+  // (A map's `level` is a name or a number as text, for the server to judge: not one of them.)
+  const keys = new Set((spec.args ?? []).filter((a) => a.type === 'value' && a.name !== 'level').map((a) => a.name))
+  if (['literal', 'set_var'].includes(n.type)) keys.add('value')
+  return [...keys].filter((k) => !isVarRef(n[k]))
+}
+
+export function graphProblems (graph, gv, tv, { game = false, paths = null, maps = null, buttons = null, panels = null, props: propNames = null } = {}) {
   const problems = []
   if (!graph) return problems
   // A GAME graph (a module's, in the game VM) may use only what the game
@@ -293,6 +301,14 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
     // A button nobody has: neither the engine's nor one of the module's keys -- refused at load.
     if (buttons && spec.category === 'input' && typeof n.button === 'string' && n.button !== '' && !buttons.includes(n.button)) {
       problems.push(`${where}: no button or key called ${n.button} -- the engine's are ${buttons.slice(0, 10).join(', ')}, and the module's keys are in Controls`)
+    }
+    // A prop event for a prop nobody has: the engine loads it and it never fires.
+    if (propNames && n.type.startsWith('when_prop_') && typeof n.prop === 'string' && n.prop !== '' && !propNames.includes(n.prop)) {
+      problems.push(`${where}: no prop called ${n.prop} in the module or the catalogue, so it never fires`)
+    }
+    // A number kept as text ("2.5"): compare treats it as no number at all -- never <, >, or equal to 2.5.
+    for (const k of valueKeys(n, spec)) {
+      if (typeof n[k] === 'string' && /^-?\d+([.,]\d+)?$/.test(n[k].trim())) problems.push(`${where}: \`${k}\` is the text "${n[k]}", not a number, so a comparison with it is always false -- type it again`)
     }
     // A panel node naming what the module's panels lack: refused at load.
     if (panels) { const pp = panelNodeProblem(n, panels); if (pp) problems.push(`${where}: ${pp}`) }
