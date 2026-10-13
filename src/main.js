@@ -297,7 +297,11 @@ S.ui.status.title = 'tap for the module\'s maps'
 // section, opened from Maps. A section that used to be a sheet draws its rows
 // into the page (Ui.showSheet routes a matching title there while it is up);
 // one that used to be a full-screen window moves its root into the page.
-S.router = new Router({ onChange: () => { refreshBadges(); S.shell.drawRail() } })
+S.router = new Router({ onChange: () => {
+  refreshBadges(); S.shell.drawRail()
+  // Back on the map: the bake that waited, and a frame.
+  if (S.route() === 'map') { if (S.previewStale) previewNow(); S.viewport.dirty = true }
+} })
 /** The rail's counts of what is wrong, by section (app/problems.js). */
 function refreshBadges () {
   try { S.shell.badges = new Map(Object.entries(badgeCounts(moduleProblems(S)))) } catch (e) { console.warn('[studio] problems', e) }
@@ -748,15 +752,18 @@ function frameToDoc () {
 }
 
 // --- the shared verbs ------------------------------------------------------------------------
-S.commit = () => {
+S.commit = ({ geometry = true } = {}) => {
   badgesSoon?.()
-  normalize(S.doc)
+  // An edit that leaves the map's shape alone (a graph's nodes) is not
+  // normalized, drawn or baked again: those cost far more than the edit did.
+  if (geometry) normalize(S.doc)
   S.history.commit(S.doc)
   // The module's history follows the maps without making a step of its own.
   S.moduleHistory?.replace({ module: S.module, docs: S.docs })
   S.ui.setHistory(S.history.canUndo, S.history.canRedo)
   S.syncHistory?.()
   save()
+  if (!geometry) return
   redraw()
   previewNow()
 }
@@ -932,7 +939,20 @@ function restore (doc) {
   previewNow()
 }
 
-function previewNow () { S.preview.refresh(S.module, S.doc) }
+/** Is a page over the map? Then the level is neither drawn nor baked: nobody can see it. */
+function mapCovered () { return !!S.shell?.page && !S.shell.page.hidden }
+
+/**
+ * Bake the map again, for the level view. While a page covers it the bake
+ * waits -- an edit to a graph or a monster changes nothing there, and a bake
+ * (and the shaders of a new view) cost far more than the edit -- and runs when
+ * the map shows (the router's onChange).
+ */
+function previewNow () {
+  if (mapCovered()) { S.previewStale = true; return }
+  S.previewStale = false
+  S.preview.refresh(S.module, S.doc)
+}
 
 function chooseTool (id) {
   if (id === 'play') return play()
@@ -1472,7 +1492,10 @@ async function finishBoot () {
   // For the page test and for poking at a live session from the console.
   globalThis.__studio = S
   requestAnimationFrame(function loop () {
-    if (S.viewport.dirty || S.viewport.animating) S.viewport.render()
+    // Not while a page covers the map (a graph, a workshop, Home): drawing
+    // the level under an opaque page every frame was most of what a drag on
+    // a big graph cost. It is drawn again the moment the map shows.
+    if (!mapCovered() && (S.viewport.dirty || S.viewport.animating)) S.viewport.render()
     requestAnimationFrame(loop)
   })
 }

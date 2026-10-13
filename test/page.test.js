@@ -2520,7 +2520,9 @@ await page.keyboard.press('Escape')
       const sid = S.doc.order[0]
       S.doc.sectors[sid].floorTex = 'FLICKER'
       S.commit()
-      await new Promise((r) => { const t = setInterval(() => { if (!S.preview.busy && S.preview.view) { clearInterval(t); r() } }, 50) })
+      // The map is baked when it shows, not under the Textures page (main.js previewNow).
+      await S.go('map', S.docName)
+      await new Promise((r) => { const t = setInterval(() => { if (!S.preview.busy && S.preview.view && !S.previewStale) { clearInterval(t); r() } }, 50) })
       await new Promise((r) => setTimeout(r, 300))
       const a = S.viewport.texAnimator
       const slot = S.preview.view.map.textures.indexOf('FLICKER')
@@ -3269,6 +3271,96 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   })
   check(got.texOk && got.sprOk, `a texture and a sprite duplicate, picture, sheet and project, under the new name (${JSON.stringify(got)})`)
   check(got.texExports.some((t) => /PNG/.test(t)) && got.sprExports.some((t) => /tsprite/.test(t)) && got.sprExports.some((t) => /sheet/.test(t)), 'and each offers its files to take out of the studio')
+}
+
+// BIG GRAPHS STAY QUICK. What made them crawl, each guarded: the map drawn
+// and baked under the page; a tap or an edit building every node again; a
+// drag reading every pin's place between writes. The links must still meet
+// their pins, measured from the page, after a drag and after an edit.
+{
+  const got = await page.evaluate(async () => {
+    const S = window.__studio
+    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const r = {}
+    // The map is neither drawn nor baked while a page covers it.
+    let draws = 0
+    const render = S.viewport.render.bind(S.viewport)
+    S.viewport.render = (...a) => { draws++; return render(...a) }
+    await S.go('graph'); await frame()
+    S.viewport.dirty = true; draws = 0
+    for (let i = 0; i < 4; i++) await frame()
+    r.drawsUnder = draws
+    S.moduleChanged()
+    r.staleUnder = !!S.previewStale
+    // A board of 120 nodes in a chain, each with a field.
+    const nodes = [{ id: 'start', type: 'when_level_starts', pos: { x: 0, y: 0 } }]
+    const links = []
+    let prev = 'start.then'
+    for (let i = 0; i < 120; i++) {
+      nodes.push({ id: `b${i}`, type: 'branch', pos: { x: 240 * (1 + (i % 10)), y: 150 * Math.floor(i / 10) } })
+      nodes.push({ id: `c${i}`, type: 'compare', op: '>=', b: i, pos: { x: 240 * (1 + (i % 10)) - 100, y: 150 * Math.floor(i / 10) + 70 } })
+      links.push([prev, `b${i}.in`], [`c${i}.value`, `b${i}.cond`])
+      prev = `b${i}.true`
+    }
+    S.doc.graphs ??= {}
+    S.doc.graphs.big = { version: 1, vars: {}, nodes, links }
+    const gw = S.window
+    await gw.pickGraph('big'); await frame(); await frame()
+    const nodeEl = (id) => document.querySelector(`.gw .gw-node[data-node="${id}"]`)
+    const paths = () => [...document.querySelectorAll('.gw .gw-link-g .wk-edge')]
+    // Every link's ends against its pins' dots, measured now.
+    const misses = () => {
+      const w = gw.world.getBoundingClientRect(); const z = gw.view.z
+      let worst = 0
+      for (const [i, [f, t]] of gw.graph.links.entries()) {
+        const vis = document.querySelector(`.gw .gw-link[data-link="${i}"]`)
+        const nums = vis.getAttribute('d').match(/-?[\d.]+/g).map(Number)
+        const dot = (key, dir) => { const q = document.querySelector(`.gw .gw-pin[data-pin="${key}"][data-dir="${dir}"] .gw-dot`).getBoundingClientRect(); return { x: (q.left + q.width / 2 - w.left) / z, y: (q.top + q.height / 2 - w.top) / z } }
+        const a = dot(f, 'out'); const b = dot(t, 'in')
+        worst = Math.max(worst, Math.hypot(nums[0] - a.x, nums[1] - a.y), Math.hypot(nums.at(-2) - b.x, nums.at(-1) - b.y))
+      }
+      return +worst.toFixed(1)
+    }
+    r.missAfterOpen = misses()
+    // A tap keeps every other node's element.
+    const keep = nodeEl('b50')
+    gw.picked = { kind: 'node', id: 'b3' }; gw.render(); await frame()
+    r.tapKept = nodeEl('b50') === keep && nodeEl('b3').classList.contains('gw-on')
+    // A drag: only the dragged node's links change, and nothing is rebuilt.
+    const before = paths(); const d0 = before.map((p) => p.getAttribute('d'))
+    const head = nodeEl('b12').querySelector('.gw-head'); const hr = head.getBoundingClientRect()
+    head.setPointerCapture = () => {}
+    const at = (dx) => ({ bubbles: true, clientX: hr.x + 10 + dx, clientY: hr.y + 8 + dx, pointerId: 9, isPrimary: true, buttons: 1 })
+    head.dispatchEvent(new PointerEvent('pointerdown', at(0)))
+    for (let i = 1; i <= 5; i++) head.dispatchEvent(new PointerEvent('pointermove', at(i * 10)))
+    const after = paths()
+    r.dragSameEls = after.length === before.length && after.every((p, i) => p === before[i])
+    r.dragChanged = after.filter((p, i) => p.getAttribute('d') !== d0[i]).length
+    head.dispatchEvent(new PointerEvent('pointerup', at(50))); await frame(); await frame()
+    r.missAfterDrag = misses()
+    // A node made taller (its help opened): the links follow its pins.
+    const h0 = nodeEl('c7').offsetHeight
+    gw.docOpen ??= new Set(); gw.docOpen.add('c7')
+    gw.changed(); await frame(); await frame(); await frame()
+    r.missAfterEdit = misses()
+    r.grew = nodeEl('c7').offsetHeight - h0
+    r.editKept = nodeEl('b50') === keep
+    delete S.doc.graphs.big
+    // Back on the map: the bake that waited, and a frame.
+    draws = 0
+    await S.go('map'); await frame(); await frame()
+    r.staleOnMap = !!S.previewStale
+    r.drawsOnMap = draws
+    S.viewport.render = render
+    return r
+  })
+  check(got.drawsUnder === 0 && got.staleUnder, `under a page the map is neither drawn nor baked (${got.drawsUnder} draws, waiting ${got.staleUnder})`)
+  check(!got.staleOnMap && got.drawsOnMap > 0, `and back on the map it is baked and drawn (${JSON.stringify({ stale: got.staleOnMap, draws: got.drawsOnMap })})`)
+  check(got.tapKept && got.editKept, `a tap or an edit on a big graph keeps the nodes it did not change (${JSON.stringify({ tap: got.tapKept, edit: got.editKept })})`)
+  check(got.dragSameEls && got.dragChanged === 3, `a drag moves only the dragged node's links, building nothing (${got.dragChanged} changed, same elements ${got.dragSameEls})`)
+  check(got.missAfterOpen < 1.5 && got.missAfterDrag < 1.5 && got.missAfterEdit < 1.5,
+        `every link meets its pins, opened, dragged and edited (worst ${got.missAfterOpen} / ${got.missAfterDrag} / ${got.missAfterEdit} units; the edited node grew ${got.grew}px)`)
+  check(got.grew > 0, 'CONTROL: and the edit did move its pins')
 }
 
 // FOUR PAGES IN THE EXAMPLE PROJECT: the Sky page opens, a HUD picture that

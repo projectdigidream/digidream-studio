@@ -44,6 +44,8 @@ export function playScene (S, graph, startId, { onEnd = () => {} } = {}) {
   const page = S.shell?.page
   const was = { mode: S.viewport.mode, page: page ? page.hidden : true, layerPage: S.ui.layer.dataset.page, workshop: S.ui.layer.dataset.workshop }
   if (page) page.hidden = true
+  // A bake that waited while the page covered the map (main.js previewNow).
+  if (S.previewStale) S.previewNow?.()
   S.ui.layer.dataset.page = '0'
   S.ui.layer.dataset.workshop = '0'
   S.ui.hideSheet()

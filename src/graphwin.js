@@ -163,7 +163,8 @@ class GraphWindow {
   changed ({ redraw = true } = {}) {
     // An empty graph is kept -- it has a name someone gave it -- and simply
     // not written (graphs_emit.js liveGraphs).
-    if (this.game) this.S.moduleChanged(); else this.S.commit()
+    // A graph is not the map's shape: the map is neither normalized nor baked again for it.
+    if (this.game) this.S.moduleChanged(); else this.S.commit({ geometry: false })
     if (redraw) this.render()
   }
 
@@ -298,6 +299,17 @@ class GraphWindow {
       button(withIcon('action.back', this.game ? 'graphs' : 'map'), () => this.back())
     ].filter(Boolean))
 
+    // THE SAME BOARD AGAIN (a tap, a field changed): only the nodes whose
+    // data changed are built again. Building and laying out every node of a
+    // big graph for each tap was what made it crawl.
+    const boardKey = JSON.stringify({ g: this.gname, scope: this.scope, game: this.game, map: S.docName, vars: this.graph?.vars ?? null,
+      panels: Object.keys(this.S.module.panels ?? {}), maps: Object.keys(S.docs), paths: (S.doc?.paths ?? []).map((p) => p.tag) })
+    if (this.world?.isConnected && this.boardGraph === this.graph && this.boardKey === boardKey) {
+      this.#patchBoard(top, problems)
+      return
+    }
+    this.boardGraph = this.graph
+    this.boardKey = boardKey
     const board = el('div', { class: 'wk-board gw-board' })
     const world = el('div', { class: 'wk-world' })
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -310,19 +322,85 @@ class GraphWindow {
     this.world = world
     this.svg = svg
     this.nodeEls = new Map()
+    this.nodeKeys = new Map()
+    this.nodeById = new Map((this.graph?.nodes ?? []).map((n) => [n.id, n]))
+    // Links are built again for this board; pins are measured again once it is laid out.
+    this.linkEls = null
+    this.pinCache = null
     const specs = nodeSpecs(this.gv)
     // NOTES behind everything, links included: a labelled box round a part of
     // the board (graph.notes, written to the file's meta, never run).
     for (const note of this.graph?.notes ?? []) world.insertBefore(this.#noteEl(note), svg)
     this.#pruneBends()
-    for (const n of this.graph?.nodes ?? []) world.appendChild(this.#nodeEl(n, specs.get(n.type), problems))
+    const keyOf = this.#nodeKeyer(problems)
+    for (const n of this.graph?.nodes ?? []) {
+      world.appendChild(this.#nodeEl(n, specs.get(n.type), problems))
+      this.nodeKeys.set(n.id, { n, key: keyOf(n) })
+    }
     this.#applyView()
     this.#boardGestures(board)
     board.appendChild(this.#zoomBar(board))
 
     const side = el('div', { class: 'wk-details' }, this.#sideRows(problems))
     this.root.replaceChildren(top, el('div', { class: 'wk-graph' }, [board]), side)
-    requestAnimationFrame(() => this.#drawLinks())
+    // A node that changes size (its fields, a font arriving, its help opened)
+    // moves its pins: they are measured again and the links follow.
+    this.resizeObs?.disconnect()
+    this.resizeObs = new ResizeObserver(() => { this.pinCache = null; this.#linksSoon() })
+    for (const n of this.nodeEls.values()) this.resizeObs.observe(n)
+    this.#linksSoon()
+  }
+
+  /**
+   * What a node's element is drawn from, as one string: its data, whether it
+   * is picked or has a problem, its help open, and which of its inputs are
+   * linked (a linked argument shows no field). The same string, the same element.
+   */
+  #nodeKeyer (problems) {
+    const bad = new Set(problems.map((m) => /^node '([^']*)'/.exec(m)?.[1]).filter(Boolean))
+    const into = new Map()
+    for (const [, t] of this.graph?.links ?? []) { const id = t.slice(0, t.indexOf('.')); (into.get(id) ?? into.set(id, []).get(id)).push(t) }
+    return (n) => `${this.picked?.kind === 'node' && this.picked.id === n.id ? 1 : 0}${bad.has(n.id) ? 1 : 0}${this.docOpen?.has(n.id) ? 1 : 0}|${(into.get(n.id) ?? []).sort().join(',')}|${JSON.stringify(n)}`
+  }
+
+  /** The board as it stands, brought up to date: changed nodes rebuilt, the rest kept. */
+  #patchBoard (top, problems) {
+    const specs = nodeSpecs(this.gv)
+    this.root.querySelector(':scope > .wk-top')?.replaceWith(top)
+    // Notes are few: drawn again.
+    for (const old of this.world.querySelectorAll(':scope > .gw-note')) old.remove()
+    for (const note of this.graph?.notes ?? []) this.world.insertBefore(this.#noteEl(note), this.svg)
+    this.#pruneBends()
+    const keyOf = this.#nodeKeyer(problems)
+    const oldEls = this.nodeEls
+    const oldKeys = this.nodeKeys
+    this.nodeEls = new Map()
+    this.nodeKeys = new Map()
+    this.nodeById = new Map((this.graph?.nodes ?? []).map((n) => [n.id, n]))
+    for (const n of this.graph?.nodes ?? []) {
+      const key = keyOf(n)
+      const was = oldKeys.get(n.id)
+      const elOld = oldEls.get(n.id)
+      if (elOld && was?.n === n && was.key === key) { this.nodeEls.set(n.id, elOld); this.nodeKeys.set(n.id, was); continue }
+      const fresh = this.#nodeEl(n, specs.get(n.type), problems)
+      if (elOld) { this.resizeObs?.unobserve(elOld); elOld.replaceWith(fresh) } else this.world.appendChild(fresh)
+      this.resizeObs?.observe(fresh)
+      this.nodeKeys.set(n.id, { n, key })
+    }
+    for (const [id, gone] of oldEls) if (!this.nodeEls.has(id)) { this.resizeObs?.unobserve(gone); gone.remove() }
+    // Links: built again, from pins measured again (a cheap read: only what changed is laid out).
+    this.linkEls = null
+    this.pinCache = null
+    this.#applyView()
+    this.root.querySelector(':scope > .wk-details')?.replaceChildren(...this.#sideRows(problems))
+    this.#linksSoon()
+  }
+
+  /** The links drawn on the next frame, once however many asked. */
+  #linksSoon () {
+    if (this.linksQueued) return
+    this.linksQueued = true
+    requestAnimationFrame(() => { this.linksQueued = false; this.#drawLinks() })
   }
 
   /** This scope's graphs, by name, and a new one. */
@@ -710,6 +788,7 @@ class GraphWindow {
       docEl.hidden = !docEl.hidden
       info.dataset.on = docEl.hidden ? '0' : '1'
       if (docEl.hidden) this.docOpen.delete(n.id); else this.docOpen.add(n.id)
+      this.pinCache = null
       this.#drawLinks()
     } }, [icon('action.help')]) : null
     const head = el('div', { class: 'gw-head' }, [el('span', { class: 'gw-title' }, n.type === 'event' ? withIcon('trigger.event', n.id) : [n.id]), info, del].filter(Boolean))
@@ -988,7 +1067,7 @@ class GraphWindow {
         if (Math.abs(dx) + Math.abs(dy) > 3) moved = true
         n.pos = { x: Math.round(start.nx + dx), y: Math.round(start.ny + dy) }
         node.style.left = `${n.pos.x}px`; node.style.top = `${n.pos.y}px`
-        this.#drawLinks()
+        this.#drawLinks({ nodes: new Set([n.id]) })
       }
       const up = () => {
         head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up)
@@ -1057,30 +1136,94 @@ class GraphWindow {
     return { x: (r.left + r.width / 2 - w.left) / this.view.z, y: (r.top + r.height / 2 - w.top) / this.view.z }
   }
 
-  #drawLinks () {
-    if (!this.svg) return
-    for (const p of [...this.svg.querySelectorAll('.gw-link-g')]) p.remove()
-    ;(this.graph?.links ?? []).forEach(([f, t], i) => {
-      const a = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(f)}"][data-dir="out"]`)
-      const b = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(t)}"][data-dir="in"]`)
-      if (!a || !b) return
+  /**
+   * Where each pin is on its node, in board units: pin key -> { node, kind, dx, dy }.
+   * Measured in ONE pass of reads -- reading a pin's place between writes made
+   * the browser lay the board out again for every link, which is what made a
+   * big graph crawl -- and kept until the board is drawn again or a node
+   * changes size. A pin's place is then its node's position plus this.
+   */
+  #pins () {
+    if (this.pinCache) return this.pinCache
+    const cache = new Map()
+    if (!this.world) return cache
+    const w = this.world.getBoundingClientRect()
+    const z = this.view.z
+    for (const [id, nodeEl] of this.nodeEls ?? []) {
+      const n = this.nodeById?.get(id)
+      if (!n) continue
+      for (const p of nodeEl.querySelectorAll('.gw-pin')) {
+        const r = p.querySelector('.gw-dot').getBoundingClientRect()
+        cache.set(`${p.dataset.dir}|${p.dataset.pin}`, {
+          node: id, kind: p.dataset.kind,
+          dx: (r.left + r.width / 2 - w.left) / z - (n.pos?.x ?? 0),
+          dy: (r.top + r.height / 2 - w.top) / z - (n.pos?.y ?? 0)
+        })
+      }
+    }
+    // Before the board is laid out every rect is empty: not worth keeping.
+    if (w.width || w.height) this.pinCache = cache
+    return cache
+  }
+
+  /** A pin's place on the board now, from its node's position: { x, y, kind } or null. */
+  #pinAt (dir, key, pins = this.#pins()) {
+    const c = pins.get(`${dir}|${key}`)
+    const n = c && this.nodeById?.get(c.node)
+    return n ? { x: (n.pos?.x ?? 0) + c.dx, y: (n.pos?.y ?? 0) + c.dy, kind: c.kind } : null
+  }
+
+  /**
+   * The links. After the board is drawn they are built; after that a move
+   * only changes their curves, in place -- every link, or with `nodes` only
+   * the ones touching those nodes (a node being dragged).
+   */
+  #drawLinks ({ nodes = null } = {}) {
+    // (Asked for on a frame that came after the graph went: nothing to draw.)
+    if (!this.svg || !this.graph) return
+    const links = this.graph?.links ?? []
+    const pins = this.#pins()
+    const curveOf = (f, t) => {
+      const a = this.#pinAt('out', f, pins); const b = this.#pinAt('in', t, pins)
+      return a && b ? { d: curveThrough([a, ...(this.graph.bends?.[`${f}>${t}`] ?? []), b]), kind: a.kind } : null
+    }
+    if (this.linkEls) {
+      const touches = (pin) => nodes.has(pin.slice(0, pin.indexOf('.')))
+      for (const le of this.linkEls) {
+        if (nodes && !touches(le.f) && !touches(le.t)) continue
+        const c = curveOf(le.f, le.t)
+        if (!c) continue
+        le.vis.setAttribute('d', c.d); le.hit.setAttribute('d', c.d)
+        le.dots.forEach((dot, k) => { const pt = this.graph.bends?.[`${le.f}>${le.t}`]?.[k]; if (pt) { dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y) } })
+      }
+      return
+    }
+    this.layerLinks?.remove()
+    const layer = this.layerLinks = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    layer.setAttribute('class', 'gw-links')
+    this.linkEls = []
+    links.forEach(([f, t], i) => {
+      const c = curveOf(f, t)
+      if (!c) return
       const bends = this.graph.bends?.[`${f}>${t}`] ?? []
-      const d = curveThrough([this.#pinPoint(a), ...bends, this.#pinPoint(b)])
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
       g.setAttribute('class', 'gw-link-g')
       const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      hit.setAttribute('d', d); hit.setAttribute('class', 'gw-link'); hit.dataset.link = String(i)
+      hit.setAttribute('d', c.d); hit.setAttribute('class', 'gw-link'); hit.dataset.link = String(i)
       hit.addEventListener('pointerdown', (e) => e.stopPropagation())
       hit.addEventListener('click', () => { this.picked = { kind: 'link', index: i }; this.render() })
       const vis = document.createElementNS('http://www.w3.org/2000/svg', 'path')
       const on = this.picked?.kind === 'link' && this.picked.index === i
-      vis.setAttribute('d', d); vis.setAttribute('class', `wk-edge gw-${a.dataset.kind}-link${on ? ' gw-link-on' : ''}`)
-      vis.setAttribute('marker-end', `url(#gw-arrow-${on ? 'on' : a.dataset.kind})`)
+      vis.setAttribute('d', c.d); vis.setAttribute('class', `wk-edge gw-${c.kind}-link${on ? ' gw-link-on' : ''}`)
+      vis.setAttribute('marker-end', `url(#gw-arrow-${on ? 'on' : c.kind})`)
       g.append(vis, hit)
       // Each bend a dot to drag.
-      bends.forEach((pt, k) => g.appendChild(this.#bendDot(pt, i, k, on)))
-      this.svg.appendChild(g)
+      const dots = bends.map((pt, k) => this.#bendDot(pt, i, k, on))
+      g.append(...dots)
+      layer.appendChild(g)
+      this.linkEls.push({ f, t, vis, hit, dots })
     })
+    this.svg.appendChild(layer)
   }
 
   // --- notes and bends: the board's own, never run --------------------------------
