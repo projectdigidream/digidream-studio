@@ -2,7 +2,7 @@
   "plugins": {
     "threesprite": {
       "path": "threesprite",
-      "commit": "e1038230",
+      "commit": "220e97c",
       "install": "pnpm install --frozen-lockfile --prefer-offline",
       "build": "pnpm build:web",
       "out": "dist-web"
@@ -28,7 +28,7 @@
     },
     "qpainter": {
       "path": "qpainter",
-      "commit": "5f7b7574",
+      "commit": "a16fb2d",
       "install": "npm ci --prefer-offline --no-audit --no-fund",
       "build": "npm run build",
       "out": "dist",

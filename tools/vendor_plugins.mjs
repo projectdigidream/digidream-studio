@@ -15,10 +15,10 @@
 //     "build": "pnpm build:web", "out": "dist-web" }
 //       built in a temporary git worktree at that commit, so nobody's
 //       uncommitted work in the checkout ever reaches the studio;
-//   { "path": "threesprite", "commit": "e1038230", "install": ..., "build": ..., "out": ... }
-//       a tool that lives in this repository: that folder as it is at that
-//       commit (git archive, so uncommitted work never reaches the studio),
-//       built in a temporary directory;
+//   { "path": "threesprite", "commit": "220e97c", "install": ..., "build": ..., "out": ... }
+//       a tool beside the studio in the workspace, a repository of its own:
+//       that repository at that commit (git archive, so uncommitted work never
+//       reaches the studio), built in a temporary directory;
 //   { "copy": ["sound/tool/sfx.html", "sound/tool/sfx", ...], "base": "sound" }
 //       files of this repository copied as they are (paths kept below `base`),
 //       pinned by the hash of what was copied, which --check compares.
@@ -91,12 +91,12 @@ for (const [id, spec] of Object.entries(lock.plugins)) {
       }
       source = { git: spec.git, commit: spec.commit }
     } else if (spec.path) {
-      // This repository's own folder, at the pinned commit.
+      // The tool's own repository, beside the studio, at the pinned commit.
       const wt = join(tmp, 'src')
       mkdirSync(wt)
       process.stdout.write(`${id}: building ${spec.path}/ at ${spec.commit}… `)
-      sh(`git archive --format=tar ${spec.commit} "${spec.path}" | tar -x -C "${wt}"`, REPO)
-      const at = join(wt, spec.path)
+      sh(`git archive --format=tar ${spec.commit} | tar -x -C "${wt}"`, join(REPO, spec.path))
+      const at = wt
       if (spec.install) sh(spec.install, at)
       sh(spec.build, at)
       rmSync(app, { recursive: true, force: true })
