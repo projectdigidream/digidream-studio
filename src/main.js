@@ -592,7 +592,8 @@ S.newFromTemplate = newFromTemplate
  * again from the example, under a new id, keeping the one they changed.
  */
 const EXAMPLES = [
-  { id: 'gemhollow', name: 'Gem Hollow', about: 'A small platformer: a title screen, one big level in four zones, levers, gates, keys, gems, monsters and cutscenes.' }
+  { id: 'gemhollow', name: 'Gem Hollow', about: 'A small platformer: a title screen, one big level in four zones, levers, gates, keys, gems, monsters and cutscenes.' },
+  { id: 'cinderfall', name: 'Cinderfall', about: 'A first-person shooter: a smelting colony gone wrong, five districts joined without a load, explored in any order, people to talk to and a boss at the bottom.' }
 ]
 S.examples = EXAMPLES
 S.openExample = async (id, { fresh = false } = {}) => {

@@ -3243,6 +3243,27 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
         `Gem Hollow opens from Home as the user's own module, clean, and a fresh copy beside it (${JSON.stringify(got)})`)
 }
 
+// CINDERFALL, the other example: a first-person shooter of twelve maps, with
+// fonts of its own (which the template must carry) and baked music.
+{
+  const got = await page.evaluate(async () => {
+    const S = window.__studio
+    const was = S.rec.id
+    await S.go('home')
+    let offered = false
+    for (let i = 0; i < 30 && !offered; i++) { await new Promise((r) => setTimeout(r, 100)); offered = !!document.querySelector('[data-example="cinderfall"] button') }
+    await S.openExample('cinderfall'); await new Promise((r) => setTimeout(r, 2500))
+    const r = { offered, id: S.rec.id, maps: Object.keys(S.docs).length, mobs: Object.keys(S.module.mobs?.mobs ?? {}).length,
+      fonts: Object.keys(S.rec.assets).filter((k) => /^ui\/fonts\/.+\.ttf$/.test(k)).length, clean: !!document.querySelector('[data-problems="0"]'),
+      bake: (await S.bakeAll()).ok }
+    await S.store.remove('cinderfall')
+    await S.openModule(was); await S.go('map')
+    return r
+  })
+  check(got.offered && got.id === 'cinderfall' && got.maps === 12 && got.mobs === 6 && got.fonts === 2 && got.clean && got.bake,
+        `Cinderfall opens from Home, clean, its fonts and baked music with it (${JSON.stringify(got)})`)
+}
+
 // DUPLICATE AND EXPORT: in the example project, a texture and a sprite are
 // duplicated (the dialog's name taken as offered), the copies are there to
 // draw, and each offers its files to take out of the studio.

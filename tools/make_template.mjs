@@ -2,7 +2,8 @@
 //
 // The studio's templates: a module's sources, packed into the studio.
 //   starter    what a new module is a copy of
-//   gemhollow  Gem Hollow, the example project Home offers to open (a copy too)
+//   gemhollow  Gem Hollow, an example project Home offers to open (a copy too)
+//   cinderfall Cinderfall, the other: a first-person shooter, its fonts included
 //
 //   node studio/tools/make_template.mjs [id ...]          write studio/src/templates/<id>.zip
 //   node studio/tools/make_template.mjs [id ...] --check  exit 1 if one differs from modules/<id>
@@ -21,14 +22,14 @@ import { fileURLToPath } from 'node:url'
 import { writePack, readPack } from '../src/pack.js'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
-export const TEMPLATES = ['starter', 'gemhollow']
+export const TEMPLATES = ['starter', 'gemhollow', 'cinderfall']
 const check = process.argv.includes('--check')
 const asked = process.argv.slice(2).filter((a) => !a.startsWith('--'))
 
 /** The template's files: what the studio's store keeps of a module. */
 function isTemplateFile (rel) {
   return rel === 'module.studio.json' || /^maps\/[^/]+\.studio\.json$/.test(rel) ||
-    (rel.startsWith('assets/') && /\.(png|json|mstk|sfxproj)$/.test(rel) && !/(^|\/)index\.json$/.test(rel)) ||
+    (rel.startsWith('assets/') && /\.(png|json|mstk|sfxproj|woff2|woff|ttf|otf)$/.test(rel) && !/(^|\/)index\.json$/.test(rel)) ||
     rel.startsWith('sources/')
 }
 
