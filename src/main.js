@@ -674,7 +674,7 @@ async function openModule (id, { show = true } = {}) {
     bootStep('nothing stored: a module from the starter template')
     rec = await newFromTemplate('my-level', 'My Level')
     if (!rec) {
-      rec = { id: 'my-level', module: newModule('my-level', 'My Level'), docs: { first: starterDoc('first') }, assets: {} }
+      rec = { id: 'my-level', module: newModule('my-level', 'My Level'), docs: { first: starterDoc('first', { fresh: true }) }, assets: {} }
       await S.store.save(rec)
     }
   }
@@ -720,16 +720,66 @@ async function openDoc (name) {
   S.applySky?.()
 }
 
-function starterDoc (name) {
+// `fresh`: the doc is for a module not open yet, so it must not be given
+// textures of the open one's making.
+function starterDoc (name, { fresh = false } = {}) {
   const doc = newDoc(name)
-  const floorTex = S.textureNames.find((n) => /FLOOR/.test(n)) ?? S.textureNames[0] ?? null
-  const wallTex = S.textureNames.find((n) => /WALL/.test(n)) ?? S.textureNames[1] ?? S.textureNames[0] ?? null
-  S.style.sector.floorTex = floorTex
-  S.style.sector.ceilTex = floorTex
-  S.style.edge.middle = wallTex
+  S.ensureRoomStyle({ create: !fresh })
   addSector(doc, [{ x: -8, y: -6 }, { x: 8, y: -6 }, { x: 8, y: 6 }, { x: -8, y: 6 }], { ...S.style.sector }, { ...S.style.edge })
   addSpawn(doc, 'start', 0, 0, 0)
   return doc
+}
+
+/**
+ * Textures for the next room drawn, wherever the style has none.
+ *
+ * A room with no textures bakes, but it is an outline in plan view and nothing
+ * at all in 3D -- to someone drawing their first room, drawing looks broken.
+ * So a style without textures takes the module's own (a FLOOR and a WALL by
+ * name when there are such), then the textures the app serves, and a module
+ * with none at all gets two plain ones of its own, added like an import.
+ * A texture the user picked is never replaced.
+ */
+S.ensureRoomStyle = ({ create = true } = {}) => {
+  const sec = S.style.sector; const edge = S.style.edge
+  const have = (n) => n && ((create && S.imageUrls.has(n)) || S.textureSizes[n])
+  if (have(sec.floorTex) && have(sec.ceilTex) && have(edge.middle)) return
+  // A doc for a module not open yet takes only what the app serves: the open
+  // module's pictures are not the new one's.
+  let names = create ? [...S.imageUrls.keys()].sort() : []
+  if (!names.length) names = S.textureNames
+  if (!names.length && create && S.rec) names = plainTextures()
+  if (!names.length) return
+  const floor = names.find((n) => /FLOOR|FLAT|GROUND/.test(n)) ?? names[0]
+  const wall = names.find((n) => /WALL/.test(n)) ?? names.find((n) => n !== floor) ?? floor
+  if (!have(sec.floorTex)) sec.floorTex = floor
+  if (!have(sec.ceilTex)) sec.ceilTex = floor
+  for (const k of ['middle', 'upper', 'lower']) if (!have(edge[k])) edge[k] = wall
+}
+
+// PLAIN_FLOOR and PLAIN_WALL: 64x64, quiet tiles with a faint grid, so a room
+// reads as a room and its scale can be judged. Made here, not fetched: a module
+// opened offline with nothing in it still gets them.
+function plainTextures () {
+  const make = (name, base, line) => {
+    const c = document.createElement('canvas'); c.width = c.height = 64
+    const g = c.getContext('2d')
+    g.fillStyle = base; g.fillRect(0, 0, 64, 64)
+    g.fillStyle = line; g.fillRect(0, 0, 64, 2); g.fillRect(0, 0, 2, 64); g.fillRect(0, 31, 64, 1); g.fillRect(31, 0, 1, 64)
+    const bin = atob(c.toDataURL('image/png').split(',')[1])
+    const blob = new Blob([Uint8Array.from(bin, (ch) => ch.charCodeAt(0))], { type: 'image/png' })
+    S.module.textures ??= {}
+    S.module.textures[name] = { w: 64, h: 64 }
+    S.rec.assets ??= {}
+    S.rec.assets[`textures/${name}.png`] = blob
+    S.imageUrls.set(name, URL.createObjectURL(blob))
+    S.textures?.forget(name)
+  }
+  make('PLAIN_FLOOR', '#6b6f78', '#5a5e66')
+  make('PLAIN_WALL', '#8a8170', '#776f60')
+  S.moduleChanged()
+  S.status('added two plain textures to the module, PLAIN_FLOOR and PLAIN_WALL (Textures to change them)', 'ok')
+  return ['PLAIN_FLOOR', 'PLAIN_WALL']
 }
 
 const save = debounce(async () => {

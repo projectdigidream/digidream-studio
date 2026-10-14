@@ -2458,9 +2458,17 @@ await page.keyboard.press('Escape')
     S.commit()
     await S.showTextures('ROCKWALL1')
     const card = document.querySelector('.sd-page [data-open-texture="ROCKWALL1"]')
-    return { own: !!S.module.textures?.ROCKWALL1, tile: !!document.querySelector('.sd-page [data-texture="ROCKWALL1"]'), card: card?.textContent ?? '' }
+    // Every place it is named, counted here: rooms drawn earlier may already
+    // use it (the style keeps the last texture a room took).
+    let uses = 0
+    for (const d of Object.values(S.docs)) for (const id of d.order) {
+      const sec = d.sectors[id]
+      uses += (sec.floorTex === 'ROCKWALL1') + (sec.ceilTex === 'ROCKWALL1')
+      for (const v of sec.verts) uses += ['upper', 'middle', 'lower'].filter((k) => v.edge[k] === 'ROCKWALL1').length
+    }
+    return { own: !!S.module.textures?.ROCKWALL1, tile: !!document.querySelector('.sd-page [data-texture="ROCKWALL1"]'), card: card?.textContent ?? '', uses }
   })
-  check(tex.own && tex.tile && /used 1 time/.test(tex.card), `an imported texture is the module's, shown with where it is used (${tex.card.slice(0, 60)})`)
+  check(tex.own && tex.tile && tex.uses >= 1 && new RegExp(`used ${tex.uses} times?`).test(tex.card), `an imported texture is the module's, shown with where it is used (${tex.card.slice(0, 60)})`)
   const renamed = await page.evaluate(async () => {
     const S = window.__studio
     ;[...document.querySelectorAll('.sd-page [data-open-texture] button')].find((b) => b.textContent === 'rename').click()
@@ -3456,6 +3464,52 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(got.id === 'sample' && got.worn === 'sample' && got.listed && got.forgetBtn && got.gone,
         `a style baked by uikit is imported, worn and listed on Home, and can be forgotten (${JSON.stringify(got)})`)
   await page.evaluate(() => { localStorage.removeItem('dnp.studio.skin'); localStorage.removeItem('dnp.studio.skin.mode') })
+}
+
+// A FIRST ROOM IS VISIBLE. A style that names no texture once drew rooms that
+// were outlines in plan and nothing in 3D, and a newcomer thought drawing had
+// failed: a room now takes the module's own textures, and a module with none
+// (and an app that serves none) is given two plain ones.
+{
+  const drawn = async () => {
+    await page.evaluate(async () => { const S = window.__studio; await S.go('map'); S.viewport.lookAt(30, 0, 0); S.viewport.viewHeight = 40; S.viewport.resize() })
+    await page.keyboard.press('Escape'); await page.keyboard.press('2')
+    const n = await page.evaluate(() => window.__studio.doc.order.length)
+    await tapAt(26, -3); await tapAt(34, -3); await tapAt(34, 3); await tapAt(26, 3); await tapAt(26, -3)
+    await page.waitForFunction((n) => window.__studio.doc.order.length === n + 1, { timeout: 5000 }, n).catch(() => {})
+    return page.evaluate(() => {
+      const S = window.__studio; const sec = S.doc.sectors[S.doc.order.at(-1)]
+      return { floor: sec.floorTex, ceil: sec.ceilTex, wall: sec.verts[0].edge.middle, own: Object.keys(S.module.textures ?? {}) }
+    })
+  }
+  const reset = () => page.evaluate(() => { const S = window.__studio; Object.assign(S.style.sector, { floorTex: null, ceilTex: null }); Object.assign(S.style.edge, { middle: null, upper: null, lower: null }) })
+  const made = await page.evaluate(async () => { const S = window.__studio; await S.store.remove('tex-first').catch(() => {}); const r = await S.newFromTemplate('tex-first', 'Tex first'); if (r) await S.openModule('tex-first'); return !!r })
+  if (made) {
+    await reset()
+    const r = await drawn()
+    check(r.own.includes(r.floor) && r.own.includes(r.wall) && r.ceil === r.floor,
+          `a room drawn in a module from the template takes the module's textures (${JSON.stringify(r)})`)
+  } else check(false, 'the starter template opens for the first-room check')
+  const plain = await page.evaluate(async () => {
+    const S = window.__studio
+    const { newModule } = await import('/studio/src/module_emit.js')
+    await S.store.remove('tex-none').catch(() => {})
+    await S.store.save({ id: 'tex-none', module: newModule('tex-none', 'Tex none'), docs: { first: S.starterDoc('first', { fresh: true }) }, assets: {} })
+    await S.openModule('tex-none')
+    S.__served = [S.textureNames, S.textureSizes]; S.textureNames = []; S.textureSizes = {}
+  })
+  await reset()
+  const r = await drawn()
+  check(r.floor === 'PLAIN_FLOOR' && r.ceil === 'PLAIN_FLOOR' && r.wall === 'PLAIN_WALL' && r.own.includes('PLAIN_WALL'),
+        `a module with no textures at all is given two plain ones for its first room (${JSON.stringify(r)})`)
+  await page.waitForFunction(() => window.__studio.preview.busy === false && window.__studio.preview.last, { timeout: 15000 }).catch(() => {})
+  const baked = await page.evaluate(() => ({ ok: window.__studio.preview.last?.ok, assets: Object.keys(window.__studio.rec.assets ?? {}).filter((p) => p.startsWith('textures/')) }))
+  check(baked.ok && baked.assets.includes('textures/PLAIN_FLOOR.png'), `and it bakes, the pictures in the module (${JSON.stringify(baked)})`)
+  void plain
+  await page.evaluate(async () => {
+    const S = window.__studio; [S.textureNames, S.textureSizes] = S.__served; delete S.__served
+    await S.store.remove('tex-none'); await S.store.remove('tex-first')
+  })
 }
 
 await browser.close()

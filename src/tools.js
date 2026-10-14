@@ -212,6 +212,7 @@ function pathTap (S, info) {
 export function finishRoom (S) {
   const d = S.draw
   if (d.corners.length < 3) { S.status('a room needs at least three corners', 'warn'); return }
+  S.ensureRoomStyle()
   const s = addSector(S.doc, d.corners, { ...S.style.sector }, { ...S.style.edge })
   d.corners = []
   S.select({ kind: 'sector', id: s.id })
@@ -329,6 +330,7 @@ export function onDragEnd (S, info, cancelled) {
     if (!cancelled && r.x0 !== r.x1 && r.y0 !== r.y1) {
       const x0 = Math.min(r.x0, r.x1); const x1 = Math.max(r.x0, r.x1)
       const y0 = Math.min(r.y0, r.y1); const y1 = Math.max(r.y0, r.y1)
+      S.ensureRoomStyle()
       const s = addSector(S.doc, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], { ...S.style.sector }, { ...S.style.edge })
       S.select({ kind: 'sector', id: s.id })
       S.commit()

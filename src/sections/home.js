@@ -26,7 +26,7 @@ async function newModuleFlow () {
   if (await S.store.load(clean)) { S.status(`a module called ${clean} already exists`, 'warn'); return }
   const made = await S.newFromTemplate(clean, id)
   if (!made) {
-    const rec = { id: clean, module: newModule(clean, id), docs: { first: S.starterDoc('first') }, assets: {} }
+    const rec = { id: clean, module: newModule(clean, id), docs: { first: S.starterDoc('first', { fresh: true }) }, assets: {} }
     await S.store.save(rec)
   }
   await S.openModule(clean)
