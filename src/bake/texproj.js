@@ -5,7 +5,7 @@
 //
 // What qPainter's own export does, without a canvas: each frame is its
 // visible layers composited bottom-up, "source-over" with the layer's opacity
-// (textureeditor/src/doc.ts, composite). One frame is the picture; several
+// (qpainter/src/doc.ts, composite). One frame is the picture; several
 // are stacked top to bottom into a sheet (its sheetBlob(vertical)) and the
 // texture is animated at the project's fps (docs/TEXTURE_SHEETS.md).
 //

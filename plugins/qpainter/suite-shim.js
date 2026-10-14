@@ -1,6 +1,6 @@
 //
 // qPainter in the suite. qPainter opened with ?host= is a guest that offers
-// window.qpainterEmbed (textureeditor/src/host.ts): load a texture, take it
+// window.qpainterEmbed (qpainter/src/host.ts): load a texture, take it
 // back as a project, hear about edits. This speaks the suite's protocol to it:
 //
 //   suite init{payload}   -> load(bytes, name)   (a project, a PNG, or empty for a new one)

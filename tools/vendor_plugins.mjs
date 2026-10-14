@@ -15,6 +15,10 @@
 //     "build": "pnpm build:web", "out": "dist-web" }
 //       built in a temporary git worktree at that commit, so nobody's
 //       uncommitted work in the checkout ever reaches the studio;
+//   { "path": "threesprite", "commit": "e1038230", "install": ..., "build": ..., "out": ... }
+//       a tool that lives in this repository: that folder as it is at that
+//       commit (git archive, so uncommitted work never reaches the studio),
+//       built in a temporary directory;
 //   { "copy": ["sound/tool/sfx.html", "sound/tool/sfx", ...], "base": "sound" }
 //       files of this repository copied as they are (paths kept below `base`),
 //       pinned by the hash of what was copied, which --check compares.
@@ -64,7 +68,7 @@ for (const [id, spec] of Object.entries(lock.plugins)) {
   const stamp = existsSync(join(app, 'VENDORED.json')) ? JSON.parse(readFileSync(join(app, 'VENDORED.json'), 'utf8')) : null
   if (check) {
     const now = existsSync(app) ? hashTree(app) : null
-    const pinned = spec.git ? stamp?.commit === spec.commit : true
+    const pinned = spec.git || spec.path ? stamp?.commit === spec.commit : true
     const ok = now && stamp?.tree === now && pinned
     console.log(`${id}: ${ok ? 'as vendored' : !now ? 'missing (run vendor_plugins.mjs)' : !pinned ? `vendored from ${stamp?.commit}, lock says ${spec.commit}` : 'app/ was changed by hand'}`)
     if (!ok) failed++
@@ -86,6 +90,18 @@ for (const [id, spec] of Object.entries(lock.plugins)) {
         sh(`git worktree remove --force "${wt}"`, spec.git)
       }
       source = { git: spec.git, commit: spec.commit }
+    } else if (spec.path) {
+      // This repository's own folder, at the pinned commit.
+      const wt = join(tmp, 'src')
+      mkdirSync(wt)
+      process.stdout.write(`${id}: building ${spec.path}/ at ${spec.commit}… `)
+      sh(`git archive --format=tar ${spec.commit} "${spec.path}" | tar -x -C "${wt}"`, REPO)
+      const at = join(wt, spec.path)
+      if (spec.install) sh(spec.install, at)
+      sh(spec.build, at)
+      rmSync(app, { recursive: true, force: true })
+      cpSync(join(at, spec.out), app, { recursive: true })
+      source = { path: spec.path, commit: spec.commit }
     } else if (spec.copy) {
       process.stdout.write(`${id}: copying ${spec.copy.length} path(s)… `)
       rmSync(app, { recursive: true, force: true })
@@ -95,7 +111,7 @@ for (const [id, spec] of Object.entries(lock.plugins)) {
         cpSync(from, join(app, relative(spec.base ?? '', p)), { recursive: true })
       }
       source = { copy: spec.copy, base: spec.base ?? '' }
-    } else throw new Error('neither git nor copy')
+    } else throw new Error('neither git, path nor copy')
     for (const p of spec.drop ?? []) rmSync(join(app, p), { recursive: true, force: true })
     // A page of the tool's, copied with the studio's shim as the first thing in
     // its head: the tool's own document, styles and scripts, untouched.
