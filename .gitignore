@@ -4,6 +4,9 @@
 build/
 builds/
 dist/
+# ...except inside a vendored plugin app: those dist/ folders ARE the editor
+# (the DAW's and DigidreamSound's engines), and a clean clone needs them.
+!/plugins/*/app/**/dist/
 node_modules/
 .cache/
 *.o
