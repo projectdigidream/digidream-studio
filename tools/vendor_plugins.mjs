@@ -15,7 +15,7 @@
 //     "build": "pnpm build:web", "out": "dist-web" }
 //       built in a temporary git worktree at that commit, so nobody's
 //       uncommitted work in the checkout ever reaches the studio;
-//   { "path": "threesprite", "commit": "220e97c", "install": ..., "build": ..., "out": ... }
+//   { "path": "threesprite", "commit": "34c3738", "install": ..., "build": ..., "out": ... }
 //       a tool beside the studio in the workspace, a repository of its own:
 //       that repository at that commit (git archive, so uncommitted work never
 //       reaches the studio), built in a temporary directory;
