@@ -82,14 +82,17 @@ export function installBaking (S, { parseAtlas }) {
   /** Which sources are not what their baked files were made from (or never were baked). */
   S.staleSources = async () => {
     const out = []
+    const { sha256 } = await import('./run.js')
+    const unchanged = async (s, had) => !!had && await sha256(new Uint8Array(await S.rec.assets[s.path].arrayBuffer())) === had.hash
     for (const s of sourcesIn(S.rec.assets)) {
       const b = bakersFor(s.kind)[0]
-      if (!b) { out.push({ ...s, why: 'nothing here bakes it' }); continue }
       const had = S.module.baked?.[s.path]
+      // No baker here (a studio without that plugin, or it is switched off):
+      // what was baked elsewhere still stands while the source is the one it
+      // was made from. Only a source changed since, or never baked, needs one.
+      if (!b) { if (!(await unchanged(s, had))) out.push({ ...s, why: 'nothing here bakes it' }); continue }
       if (!had || had.baker !== b.id || had.version !== b.version) { out.push({ ...s, why: had ? 'a newer baker' : 'never baked' }); continue }
-      const bytes = new Uint8Array(await S.rec.assets[s.path].arrayBuffer())
-      const { sha256 } = await import('./run.js')
-      if (await sha256(bytes) !== had.hash) out.push({ ...s, why: 'changed' })
+      if (!(await unchanged(s, had))) out.push({ ...s, why: 'changed' })
     }
     return out
   }

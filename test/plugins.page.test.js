@@ -286,6 +286,23 @@ if (await page.evaluate(() => window.__studio.plugins.plugins.has('daw'))) {
   await page.click('[data-track="dreamy"] button:nth-of-type(2)')
   await page.waitForFunction(() => !!window.__studio.rec.assets['music/dreamy.mstk'], { timeout: 30000 })
   check(await page.evaluate(() => window.__studio.trackUrls.has('dreamy')), '"bake now" makes the track, and the Music page can play it')
+  // With no baker (the DAW plugin off, or a studio built without plugins), a
+  // track baked from these very bytes stands; one edited since still needs it.
+  const noBaker = await page.evaluate(async () => {
+    const S = window.__studio
+    S.plugins.setEnabled('daw', false)
+    const unchanged = (await S.staleSources()).filter((x) => x.key === 'dreamy').map((x) => x.why)
+    const all = await S.bakeAll()
+    const was = S.rec.assets['sources/music/dreamy.msproj']
+    const p = JSON.parse(await was.text()); p.name = 'dreamy, edited again'
+    S.rec.assets['sources/music/dreamy.msproj'] = new Blob([JSON.stringify(p)], { type: 'application/json' })
+    const edited = (await S.staleSources()).filter((x) => x.key === 'dreamy').map((x) => x.why)
+    S.rec.assets['sources/music/dreamy.msproj'] = was
+    S.plugins.setEnabled('daw', true)
+    return { unchanged, ok: all.ok, edited }
+  })
+  check(!noBaker.unchanged.length && noBaker.ok, `with no music baker, a track baked from the same project stands and Play goes on (${JSON.stringify(noBaker)})`)
+  check(JSON.stringify(noBaker.edited) === '["nothing here bakes it"]', `CONTROL: and one edited since is still named as needing a baker (${JSON.stringify(noBaker.edited)})`)
   await page.evaluate(() => { const S = window.__studio; for (const k of Object.keys(S.rec.assets)) if (k.includes('dreamy')) delete S.rec.assets[k]; delete S.module.baked?.['sources/music/dreamy.msproj']; S.trackUrls.delete('dreamy'); S.moduleChanged() })
 }
 
