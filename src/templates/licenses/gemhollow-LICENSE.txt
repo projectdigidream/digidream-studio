@@ -1,0 +1,9 @@
+Gem Hollow -- an example module for the Digidream studio.
+
+Everything here is CC0 (public domain dedication):
+
+- Tiles, items, backgrounds: Kenney "New Platformer Pack" 1.1, https://kenney.nl/assets/new-platformer-pack (CC0)
+- Music: "15 Melodic RPG Chiptunes", https://opengameart.org/content/15-melodic-rpg-chiptunes (CC0, no credit required)
+- Characters (sources/sprites/*.tsprite): made for this module in ThreeSprite.
+- Sounds (sources/sounds/meadow.sfxproj): synthesized for this module in DigidreamSound.
+- Sky and floor textures: composed for this module from the Kenney art above.

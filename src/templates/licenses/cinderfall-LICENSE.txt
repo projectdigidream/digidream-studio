@@ -1,0 +1,53 @@
+Cinderfall -- an example module for the Digidream engine and studio.
+
+Textures and music: Freedoom (https://freedoom.github.io), under its licence below.
+  Wall textures are composited from Freedoom's patches as its textures.cfg lays them
+  out; flats and skies are Freedoom's own. They are renamed in this module.
+  Music (MIDI, imported into DigidreamSynth DAW projects):
+    title     "Mists Over the Mire" by Tyler "Picklehammer" P. (Freedoom MAP29)
+    railhead  "Not My First Rodeo..." by Lola "BlueWorrior" Harvey (MAP01)
+    hub       "Sewers" by Discoholic, remix of "Wasteland Scavengers" by Samuel "Blastfrog" Oliver (MAP12)
+    foundry   "Under Maintenance" by Lola "BlueWorrior" Harvey (MAP05)
+    mine      "Dark Underworld" by Lola "BlueWorrior" Harvey (MAP02)
+    oldtown   "Terrible Secrets" by Lola "BlueWorrior" Harvey (MAP09)
+    heart     "Devoured by the Jaws of Defeat" by Korp, based on "Paranoia" by Tyler "Picklehammer" P. (MAP30)
+    boss      "The Machine" by Lola "BlueWorrior" Harvey (MAP31)
+    victory   "Distance" by Korp (Phase 1 victory)
+
+Fonts (assets/ui/fonts/):
+  Special Elite by Astigmatic -- Apache License 2.0 (see SPECIAL_ELITE_LICENSE.txt)
+  Bebas Neue by Dharma Type -- SIL Open Font License 1.1 (see BEBAS_NEUE_OFL.txt)
+The panel skins (assets/ui/skins/) are cut from the Freedoom textures above.
+
+Everything else -- the levels, the monsters, people, weapons and props (ThreeSprite
+projects), the sounds (DigidreamSound), the icons and the graphs -- was made for
+this module and is dedicated to the public domain (CC0 1.0).
+
+---- Freedoom licence ----
+Copyright (c) 2001-2024
+Contributors to the Freedoom project.  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+  * Neither the name of the Freedoom project nor the names of its
+    contributors may be used to endorse or promote products derived from
+    this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
