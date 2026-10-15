@@ -27,22 +27,25 @@
   /* THE BOOT SCREEN is the kit's ui-boot: these rules are its first paint,
      before the skin arrives. Their look sits under :where(), so the skin's
      boot (any skin) takes over once it is worn; layout keeps the id. */
-  #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 200; }
-  #boot[hidden] { display: none; }
-  :where(#boot) { gap: 10px; background: var(--dnp-color-bg-app, #0b0d12); }
-  :where(#boot .bar) { width: min(60vw, 320px); height: 4px; background: var(--dnp-color-bg-raised, #1b2230); border-radius: 2px; }
-  #boot .bar { overflow: hidden; max-width: 92vw; }
-  #boot .fill { height: 100%; width: 0; transition: width 120ms linear; }
-  :where(#boot .fill) { background: var(--dnp-color-accent, #5b8fd6); }
+  /* THE PLAY SCREEN (src/playscreen.js) is the same kit part, over the
+     studio while Play bakes and starts the game. */
+  #playscreen.ps-failed .fill { background: var(--dnp-color-error, #ff8a8a); }
+  #boot, #playscreen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; z-index: 200; }
+  #boot[hidden], #playscreen[hidden] { display: none; }
+  :where(#boot, #playscreen) { gap: 10px; background: var(--dnp-color-bg-app, #0b0d12); }
+  :where(#boot .bar, #playscreen .bar) { width: min(60vw, 320px); height: 4px; background: var(--dnp-color-bg-raised, #1b2230); border-radius: 2px; }
+  #boot .bar, #playscreen .bar { overflow: hidden; max-width: 92vw; }
+  #boot .fill, #playscreen .fill { height: 100%; width: 0; transition: width 120ms linear; }
+  :where(#boot .fill, #playscreen .fill) { background: var(--dnp-color-accent, #5b8fd6); }
   /* What loading is doing, step by step, and what went wrong: for the person
      looking at it, and for whoever they send it to. */
-  #bootlog { margin: 6px 0 0; width: min(92vw, 680px); max-height: 38vh; overflow: auto; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; text-align: left; height: auto; }
-  :where(#bootlog) { font-size: 11px; line-height: 1.45; font-family: var(--dnp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); color: var(--dnp-color-text-dim, #6f7e96); }
-  #bootlog .bad { color: var(--dnp-color-error, #ff8a8a); }
-  #bootlog .slow { color: var(--dnp-color-warn, #ffd27a); }
-  #bootactions { display: flex; gap: 8px; }
-  #bootactions[hidden] { display: none; }
-  :where(#bootactions button) { height: 34px; padding: 0 14px; border-radius: 8px; background: var(--dnp-color-bg-raised, #1b2230); color: var(--dnp-color-text-primary, #cfe3ff); border: 1px solid var(--dnp-color-line-main, #2a3446); font-size: 13px; font-weight: 600; font-family: var(--dnp-font-ui, ui-monospace, Menlo, monospace); }
+  #bootlog, #playscreen .ui-boot__log { margin: 6px 0 0; width: min(92vw, 680px); max-height: 38vh; overflow: auto; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; text-align: left; height: auto; }
+  :where(#bootlog, #playscreen .ui-boot__log) { font-size: 11px; line-height: 1.45; font-family: var(--dnp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); color: var(--dnp-color-text-dim, #6f7e96); }
+  #bootlog .bad, #playscreen .bad { color: var(--dnp-color-error, #ff8a8a); }
+  #bootlog .slow, #playscreen .slow { color: var(--dnp-color-warn, #ffd27a); }
+  #bootactions, #playscreen .ps-actions { display: flex; gap: 8px; }
+  #bootactions[hidden], #playscreen .ps-actions[hidden] { display: none; }
+  :where(#bootactions button, #playscreen .ps-actions button) { height: 34px; padding: 0 14px; border-radius: 8px; background: var(--dnp-color-bg-raised, #1b2230); color: var(--dnp-color-text-primary, #cfe3ff); border: 1px solid var(--dnp-color-line-main, #2a3446); font-size: 13px; font-weight: 600; font-family: var(--dnp-font-ui, ui-monospace, Menlo, monospace); }
 </style>
 <script type="importmap">
 {

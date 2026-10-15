@@ -47,6 +47,7 @@ import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP } from '.
 import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
+import { showPlayScreen } from './playscreen.js'
 import { Vocab } from './vocab.js'
 import { Viewport, COLORS, ALPHA, FILL, wearSkin as wearCanvasSkin } from './viewport.js'
 import { Preview } from './preview.js'
@@ -775,8 +776,8 @@ function plainTextures () {
     S.imageUrls.set(name, URL.createObjectURL(blob))
     S.textures?.forget(name)
   }
-  make('PLAIN_FLOOR', '#6b6f78', '#5a5e66')
-  make('PLAIN_WALL', '#8a8170', '#776f60')
+  make('PLAIN_FLOOR', '#6b6f78', '#5a5e66') // content: the texture's own pixels, not the studio's look
+  make('PLAIN_WALL', '#8a8170', '#776f60') // content: the texture's own pixels
   S.moduleChanged()
   S.status('added two plain textures to the module, PLAIN_FLOOR and PLAIN_WALL (Textures to change them)', 'ok')
   return ['PLAIN_FLOOR', 'PLAIN_WALL']
@@ -1334,70 +1335,99 @@ const PLAY_DEBUG_KEY = 'dnp.studio.playDebug'
 S.playDebug = () => { try { return localStorage.getItem(PLAY_DEBUG_KEY) ?? 'module' } catch { return 'module' } }
 S.setPlayDebug = (v) => { try { localStorage.setItem(PLAY_DEBUG_KEY, v) } catch {} }
 
-async function emitAll ({ forPlay = false } = {}) {
+// `screen`: Play's screen (playscreen.js), told each step as it starts.
+// A refusal is said in the status strip as before, and kept in S.emitError
+// for whoever shows it in full (the play screen).
+async function emitAll ({ forPlay = false, screen = null } = {}) {
+  S.emitError = null
+  const refuse = (msg) => { S.emitError = msg; S.status(msg, 'error'); return null }
   // Every source baked first: what the module keeps is the sources, and what
   // Play and Export write must be made from them as they are now.
-  const bk = await S.bakeAll()
-  if (!bk.ok) { S.status(bk.errors.join('\n'), 'error'); return null }
+  await screen?.step('sources')
+  const bk = await S.bakeAll({ onProgress: screen && (({ i, n, key }) => screen.progress(i / n, `${key} (${i + 1} of ${n})`)) })
+  if (!bk.ok) return refuse(bk.errors.join('\n'))
   if (bk.baked) S.moduleChanged()
+  await screen?.step('check')
   const problems = validate(S.doc)
-  if (problems.length) { S.status(problems.map((p) => (p.sector ? `${p.sector}: ` : '') + p.msg).join('\n'), 'error'); return null }
+  if (problems.length) return refuse(problems.map((p) => (p.sector ? `${p.sector}: ` : '') + p.msg).join('\n'))
   // A graph the runtime would refuse does not load at all, so it is said here
   // rather than discovered as a level where nothing happens.
   for (const d of Object.values(S.docs)) {
     for (const [name, g] of graphsOf(d)) {
       const gp = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, props: S.propNames?.() ?? null, maps: Object.keys(S.docs), paths: new Set((d.paths ?? []).map((x) => x.tag)) }) : []
-      if (gp.length) { S.status(`${d.name}'s graph ${name}: ${gp.join('; ')}`, 'error'); return null }
+      if (gp.length) return refuse(`${d.name}'s graph ${name}: ${gp.join('; ')}`)
     }
   }
   for (const [name, g] of graphsOf(S.module)) {
     const mg = S.vocab.graph ? graphProblems(g, S.vocab.graph, S.vocab.trigger, { buttons: buttonNames(S.module), panels: S.module.panels ?? {}, props: S.propNames?.() ?? null, game: true, maps: Object.keys(S.docs) }) : []
-    if (mg.length) { S.status(`the game's graph ${name}: ${mg.join('; ')}`, 'error'); return null }
+    if (mg.length) return refuse(`the game's graph ${name}: ${mg.join('; ')}`)
   }
   const sizes = { ...S.textureSizes }
   const assets = {}
   for (const [path, blob] of Object.entries(S.rec.assets ?? {})) assets[path] = new Uint8Array(await blob.arrayBuffer())
+  await screen?.step('maps')
   const r = await emitModule(S.module, Object.values(S.docs), {
     // The hook names the server harvests, from the vocabulary that lists them.
     bake: S.bake, runtime: S.runtime, hooks: S.vocab.trigger.events.map((e) => e.name), assets, graphVocab: S.vocab.graph,
     textureSizes: (n) => (sizes[n] ? { w: sizes[n][0], h: sizes[n][1], cutout: !!texIndex.cutout?.[n] } : null),
-    debug: forPlay && S.playDebug() !== 'module' ? S.playDebug() === 'on' : undefined
+    debug: forPlay && S.playDebug() !== 'module' ? S.playDebug() === 'on' : undefined,
+    onMap: screen && (({ i, n, name }) => screen.progress(i / n, `${name} (${i + 1} of ${n})`))
   })
-  if (!r.ok) {
-    S.status(r.problems.map((p) => `${p.map}: ` + p.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('; ')).join('\n'), 'error')
-    return null
-  }
+  if (!r.ok) return refuse(r.problems.map((p) => `${p.map}: ` + p.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('; ')).join('\n'))
   return r
 }
+
+// The steps Play's screen shows, and how much of the bar each takes.
+const PLAY_STEPS = [
+  { id: 'sources', label: 'baking sources', weight: 3 },
+  { id: 'check', label: 'checking maps and graphs', weight: 1 },
+  { id: 'maps', label: 'baking maps', weight: 4 },
+  { id: 'write', label: 'writing the module', weight: 2 },
+  { id: 'start', label: 'starting the game', weight: 3 }
+]
 
 async function play () {
   if (!hasShell()) { S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn'); return }
   S.status('baking…', 'ok')
   const map = `${S.docName}.dnpm`
-  const r = await emitAll({ forPlay: true })
+  const screen = showPlayScreen({ title: `Play: ${S.module.name || S.module.id} · ${S.docName}`, steps: PLAY_STEPS })
+  const toLog = () => S.go('playlog')
+  let r = null
+  try { r = await emitAll({ forPlay: true, screen }) } catch (e) { S.emitError = String(e.message ?? e) }
   if (!r) {
     // Refused before anything ran: what the status strip said is the log.
     S.playLogLines = [`[studio] play-test of ${S.module.id}/maps/${map}, ${new Date().toISOString()}`]
-    await noteStudioLog(S, `the module did not bake, so nothing was launched: ${document.querySelector('.st-status')?.textContent ?? ''}`)
+    await noteStudioLog(S, `the module did not bake, so nothing was launched: ${S.emitError ?? document.querySelector('.st-status')?.textContent ?? ''}`)
+    screen.fail(S.emitError ?? 'the module did not bake', [{ label: 'play log', run: toLog }])
     return
   }
+  await screen.step('write')
   const root = `modules/${S.module.id}`
-  for (const f of r.files) {
+  for (const [i, f] of r.files.entries()) {
     const bytes = typeof f.bytes === 'string' ? new TextEncoder().encode(f.bytes) : f.bytes
+    // Every 16 files, the bar: a big module writes hundreds.
+    if (i % 16 === 0) await screen.progress(i / r.files.length, `${i} of ${r.files.length} files`)
     await shell.writeFile(`${root}/${f.path}`, bytes)
   }
   // The studio's part of the Play log (playlog.js), before anything starts.
   await writeStudioLog(S, r, { map })
   S.status('starting the game…', 'ok')
+  await screen.step('start', 'the game server, then the game')
   rememberReturn()
   try {
+    // The shell starts the server, then loads the game in this window: the
+    // screen stays until the page is replaced.
     await shell.launch({ module: root, map })
+    await screen.progress(1, 'loading the game')
+    // A shell that started the game without replacing this page (or a page
+    // that is slow to go): the screen must not outlive its purpose.
+    setTimeout(() => screen.close(), 20000)
   } catch (e) {
     forgetReturn()
     await noteStudioLog(S, `the launch failed: ${e.message ?? e}`)
     S.status(String(e.message ?? e), 'error')
-    // What the server said is in the log: show it.
-    S.go('playlog')
+    // What the server said is in the log: offer it.
+    screen.fail(String(e.message ?? e), [{ label: 'play log', run: toLog }])
   }
 }
 

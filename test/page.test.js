@@ -3512,6 +3512,52 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   })
 }
 
+// PLAY SHOWS WHAT IT IS DOING: a screen over the studio from the press until
+// the game takes the window -- once it went silent, then the game appeared.
+// A stand-in shell (the page has none): files counted, a launch that takes a
+// while, and then fails (the failure stays, with the log and a way back) or
+// succeeds (the screen stays for the page that replaces it).
+{
+  const run = (fail) => page.evaluate(async (fail) => {
+    const S = window.__studio
+    await S.go('map')
+    let writes = 0
+    globalThis.dnp = { studio: {
+      writeFile: async () => { writes++; return true },
+      readFile: async () => null, listFiles: async () => [], deleteFile: async () => true, useModule: async () => true,
+      share: async () => true,
+      launch: () => new Promise((resolve, reject) => setTimeout(() => (fail ? reject(new Error('the test server refused')) : resolve(true)), 900))
+    } }
+    const seen = new Set()
+    const watch = setInterval(() => { const st = document.querySelector('#playscreen .ui-boot__status')?.textContent; if (st) seen.add(st.replace(/:.*$/, '').replace(/…$/, '')) }, 20)
+    const playing = S.play()
+    await new Promise((r) => setTimeout(r, 30))
+    const early = !!document.getElementById('playscreen')
+    await playing
+    clearInterval(watch)
+    const el = document.getElementById('playscreen')
+    const out = { early, writes, seen: [...seen], open: !!el, failed: el?.classList.contains('ps-failed') ?? false,
+      log: [...(el?.querySelectorAll('.ui-boot__line') ?? [])].map((x) => x.textContent.replace(/^\S+\s+/, '')),
+      buttons: [...(el?.querySelectorAll('.ps-actions button') ?? [])].map((b) => b.textContent),
+      fill: parseFloat(el?.querySelector('.ui-boot__fill')?.style.width ?? '0') }
+    return out
+  }, fail)
+  const bad = await run(true)
+  await page.screenshot({ path: process.env.DNP_SHOT_DIR ? `${process.env.DNP_SHOT_DIR}/play-failed.png` : '/dev/null' }).catch(() => {})
+  // Each step logged as done, in order (a fast one can finish between two looks at the status).
+  const done = bad.log.filter((l) => /^✓ /.test(l)).map((l) => l.replace(/^✓ /, '').replace(/ \(\d+ ms\)$/, ''))
+  check(bad.early && bad.writes > 0 && done.join(' > ') === 'baking sources > checking maps and graphs > baking maps > writing the module' && bad.seen.includes('starting the game'),
+        `Play shows a screen at once and logs each step as it runs (${done.join(' > ')}; ${bad.writes} files)`)
+  check(bad.open && bad.failed && bad.log.some((l) => /✗ starting the game/.test(l)) && bad.log.some((l) => /the test server refused/.test(l)) && bad.buttons.join() === 'play log,back to the studio',
+        `a launch that fails stays on the screen, with the error, the log and a way back (${JSON.stringify({ log: bad.log.slice(-3), buttons: bad.buttons })})`)
+  const back = await page.evaluate(async () => { [...document.querySelectorAll('#playscreen .ps-actions button')].find((b) => /back/.test(b.textContent)).click(); await new Promise((r) => setTimeout(r, 50)); return { gone: !document.getElementById('playscreen'), route: window.__studio.route() } })
+  check(back.gone && back.route === 'map', `"back to the studio" puts it away, on the map (${JSON.stringify(back)})`)
+  const good = await run(false)
+  check(good.open && !good.failed && good.fill >= 99 && good.log.some((l) => /✓ writing the module/.test(l)),
+        `a launch that works keeps the screen, the bar full, until the game replaces the page (${good.fill}%)`)
+  await page.evaluate(() => { document.getElementById('playscreen')?.remove(); delete globalThis.dnp })
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

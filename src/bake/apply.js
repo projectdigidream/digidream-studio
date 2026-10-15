@@ -101,13 +101,15 @@ export function installBaking (S, { parseAtlas }) {
    * Before Play and Export: every stale source baked. { ok, baked, errors }.
    * Music is baked here too (an edit to a track does not bake it at once).
    */
-  S.bakeAll = async () => {
+  S.bakeAll = async ({ onProgress } = {}) => {
     const stale = await S.staleSources()
     const errors = []
     let baked = 0
-    for (const s of stale) {
+    for (const [i, s] of stale.entries()) {
       if (s.why === 'nothing here bakes it') { errors.push(`${s.path}: nothing in this studio bakes a ${S.docKinds[s.kind]?.label ?? s.kind} (is its plugin switched off?)`); continue }
       S.status?.(`baking ${s.key}…`)
+      // The play screen (playscreen.js): which source, and how far through.
+      await onProgress?.({ i, n: stale.length, key: s.key, kind: s.kind })
       const r = await S.bakeSource(s.kind, s.key)
       if (r.ok) baked++; else errors.push(r.error)
     }

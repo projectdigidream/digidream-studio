@@ -417,7 +417,7 @@ export async function emitLevel (module, doc, { bake, runtime, hooks = [], graph
  * @param textureSizes  (name) => { w, h } | null, for index.json
  * @returns { ok, files, problems: [{ map, errors, warnings }] }
  */
-export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null, graphVocab = null, debug } = {}) {
+export async function emitModule (module, docs, { bake, runtime, hooks = [], assets = {}, textureSizes = () => null, graphVocab = null, debug, onMap } = {}) {
   const files = []
   const problems = []
   const used = new Set()
@@ -464,7 +464,10 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
   // A metamap the server would refuse is fatal there, so it is here.
   let ok = !problems.some((p) => (p.map === 'metamap' || p.map === 'module graph') && p.errors.length)
   const baked = []
-  for (const doc of docs) {
+  for (const [i, doc] of docs.entries()) {
+    // Before each map's bake (mapc, which holds the page): who is watching
+    // (Play's screen) says which map, and paints before it starts.
+    await onMap?.({ i, n: docs.length, name: doc.name })
     const r = await emitLevel(module, doc, { bake, runtime, hooks, graphVocab })
     files.push({ path: `maps/${doc.name}.studio.json`, bytes: JSON.stringify(doc, null, 2) })
     files.push({ path: `maps/${doc.name}.map`, bytes: r.mapText })
