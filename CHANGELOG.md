@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.3.4.1 -- 2026-10-15
+
+Built on engine 0.1.5.
+
 ### Added
 
 - **The player's states, without a monster**: the Player page's skin tab sets
