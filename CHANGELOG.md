@@ -11,6 +11,18 @@ Built on engine 0.1.2.
 
 ### Fixed
 
+- Weapons with a swing arc set as a fraction (`{ 1, 8 }`) ran unpredicted on
+  Android, so the first-person weapon never played its swing (engine 0.1.2).
+- Play on a phone in first person asked for a pointer lock the WebView never
+  grants, and "Click to look around" stayed on screen (engine 0.1.2).
+
+## 0.3.0 -- 2026-10-14
+
+The first public release. Rebuilt on 2026-10-15 (same version) with the
+fixes below.
+
+### Fixed
+
 - **A first room was invisible**: new rooms had no textures, so a room
   showed as an outline in plan view and not at all in 3D. A new room now
   takes the module's own textures (a FLOOR and a WALL by name when there
@@ -18,17 +30,11 @@ Built on engine 0.1.2.
   `PLAIN_FLOOR` and `PLAIN_WALL`.
 - A new module's first map could take textures from the module open before.
 - **No music or sound effects on Android**, in the studio's Play and in
-  games packaged from it (the engine's kits lacked the audio engines; see
-  the engine's 0.1.2).
-- Weapons with a swing arc set as a fraction ran unpredicted on Android,
-  without their first-person animations (engine 0.1.2).
+  games packaged from it: the engine's kits lacked the audio engines (engine
+  0.1.1.1's rebuild).
 
 ### Changed
 
 - The Package page shows where kits come from and offers to download a
   missing one from the engine's releases.
 - A README: download, a first room, running it from source.
-
-## 0.3.0 -- 2026-10-14
-
-The first public release.
