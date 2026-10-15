@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.3.2 -- 2026-10-15
+
+Built on engine 0.1.3.
+
 ### Fixed
 
 - An edit in the DAW plugin made before its audio had started did not mark
