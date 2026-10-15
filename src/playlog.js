@@ -134,7 +134,7 @@ export async function showPlayLog (S) {
   rows.push(el('div', { class: 'st-row' }, [
     button('↻ read again', () => showPlayLog(S)),
     button('share the log', async () => { await shell.share(`play-log-${last?.map?.replace(/\.dnpm$/, '') ?? 'last'}.txt`, new TextEncoder().encode(asText(logs))) }),
-    last ? button(withIcon('transport.play', 'play again'), () => S.play()) : null
+    last ? button(withIcon('transport.play', 'play again'), () => S.play({ start: String(last.map ?? '').replace(/\.dnpm$/, '') })) : null
   ].filter(Boolean)))
   rows.push(muted(last
     ? `The last play-test: ${last.module}/${String(last.map).replace(/\.dnpm$/, '')}, ${new Date(last.at).toLocaleString()}.`

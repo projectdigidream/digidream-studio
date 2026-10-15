@@ -32,6 +32,8 @@ function showMaps () {
         await S.snapshot?.(`before deleting map ${n}`, { force: true })
         delete S.docs[n]
         if (S.module.metamap?.cells) delete S.module.metamap.cells[n]
+        // The starting map, gone: the first by name again (startmap.js).
+        if (S.module.startMap === n) delete S.module.startMap
         S.moduleChanged()
         if (n === S.docName) await S.openDoc(Object.keys(S.docs)[0])
         S.status(`deleted map ${n}`, 'ok')

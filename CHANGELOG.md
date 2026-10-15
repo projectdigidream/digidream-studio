@@ -7,6 +7,11 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **A starting map** (Settings): the map the game starts on. **Play on Home
+  starts there** -- it used to start on whichever map was open in the editor;
+  Play in the map editor still starts on the map being edited. Unset, it is
+  the first map by name, which is where the game starts too. The Package page
+  starts its map choice on it.
 - **A newer studio is said on Home**: the studio asks its GitHub releases
   (at most every six hours, never in the way), and when a later one is out
   Home shows it with what changed, a download that opens the release in the

@@ -11,6 +11,7 @@ import { lastPlay } from '../playlog.js'
 import { thumbCanvas } from '../thumbs.js'
 import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
+import { startMapOf } from '../startmap.js'
 import { checkForUpdate, skipped, skipVersion } from '../updates.js'
 import { shell } from '../bridge.js'
 
@@ -60,7 +61,7 @@ async function showHome () {
         el('button', { class: 'sd-check-update', 'data-action': 'check-update', onclick: (e) => checkNow(e.currentTarget) }, 'check for updates')
       ]),
       ...updateRows(),
-      el('div', { class: 'st-row' }, [button(withIcon('transport.play', 'play'), () => S.play()), button(withIcon('action.export', 'export'), () => S.exportPack()), button(withIcon('action.import', 'import pack'), () => S.importPack()),
+      el('div', { class: 'st-row' }, [button(withIcon('transport.play', `play from ${startMapOf(m, maps) ?? 'the start'}`), () => S.play({ start: startMapOf(m, maps) })), button(withIcon('action.export', 'export'), () => S.exportPack()), button(withIcon('action.import', 'import pack'), () => S.importPack()),
         button(withIcon('action.add', 'new module'), () => newModuleFlow()),
         el('button', { 'data-section': 'snapshots', onclick: () => S.go('snapshots') }, withIcon('section.snapshots', 'snapshots')),
         el('button', { 'data-section': 'plugins', onclick: () => S.go('plugins') }, withIcon('section.plugins', `plugins (${S.plugins?.list().filter((p) => !p.manifest.hidden).length ?? 0})`)),

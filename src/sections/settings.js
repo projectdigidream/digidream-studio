@@ -6,6 +6,7 @@
 //
 import { PERSIST } from '../module_emit.js'
 import { text, muted, select, toggle, button, withIcon } from '../ui.js'
+import { startMapOf } from '../startmap.js'
 import { lookCard } from './look.js'
 
 let S = null
@@ -16,6 +17,10 @@ function showSettings () {
     text('id', S.module.id, (v) => { const id = v.toLowerCase().replace(/[^a-z0-9_-]/g, ''); if (id) { S.module.id = id; S.rec.id = id; S.save(); S.shell.drawRail() } }),
     text('name', S.module.name, (v) => { S.module.name = v; S.shell.moduleName = v || S.module.id; S.save(); S.shell.drawRail() }),
     text('about', S.module.about, (v) => { S.module.about = v; S.save() }, { multiline: true }),
+    // Where the game starts (startmap.js): Home's Play, and the Package page's first choice.
+    select('starting map', S.module.startMap && S.docs[S.module.startMap] ? S.module.startMap : '', [['', `the first by name (${startMapOf({}, Object.keys(S.docs)) ?? 'no maps'})`], ...Object.keys(S.docs).sort().map((n) => [n, n])],
+           (v) => { if (v) S.module.startMap = v; else delete S.module.startMap; S.moduleChanged() }),
+    muted('The map the game starts on: Play on Home starts there, and a packaged game does too unless the Package page is told otherwise. Play in the map editor starts on the map being edited.'),
     // How it is played and what it remembers: module.txt's own switches
     // (docs/MODULES.md, docs/SAVING.md), written on the next Play or Export.
     select('controls', S.module.controls ?? 'platformer', [['platformer', 'platformer — third person'], ['fps', 'first person (fps)']],

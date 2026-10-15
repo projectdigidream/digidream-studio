@@ -3591,6 +3591,46 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(!r.afterSkip && !r.current, `"not now" puts it away; the same version shows no notice (${JSON.stringify({ afterSkip: r.afterSkip, current: r.current })})`)
 }
 
+// PLAY FROM HOME STARTS ON THE MODULE'S STARTING MAP (startmap.js), not the
+// map open in the editor; the map editor's Play starts on the map being
+// edited. Unset, the first by name -- what the game does.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const launched = []
+    globalThis.dnp = { studio: { writeFile: async () => true, readFile: async () => null, listFiles: async () => [], deleteFile: async () => true, useModule: async () => true, share: async () => true,
+      launch: async (o) => { launched.push(o.map); throw new Error('stop here') } } }
+    const had = S.module.startMap
+    S.docs.zzstart = S.starterDoc('zzstart')
+    S.docs.aafirst = S.starterDoc('aafirst')
+    await S.openDoc(Object.keys(S.docs).find((n) => n !== 'zzstart' && n !== 'aafirst'))
+    const editing = S.docName
+    const homePlay = async () => {
+      await S.go('home'); await S.router.remount(); await new Promise((r) => setTimeout(r, 200))
+      const b = [...document.querySelectorAll('.sd-page .sd-hero button')].find((x) => /play from/.test(x.textContent))
+      const label = b?.textContent ?? ''
+      b?.click(); await new Promise((r) => setTimeout(r, 50))
+      await new Promise((r) => { const t = setInterval(() => { if (document.querySelector('#playscreen.ps-failed')) { clearInterval(t); r() } }, 50) })
+      document.getElementById('playscreen')?.remove()
+      return label
+    }
+    S.module.startMap = 'zzstart'
+    const labelSet = await homePlay()
+    delete S.module.startMap
+    const labelUnset = await homePlay()
+    await S.go('map')
+    await S.play()
+    document.getElementById('playscreen')?.remove()
+    delete S.docs.zzstart; delete S.docs.aafirst
+    if (had) S.module.startMap = had
+    delete globalThis.dnp
+    return { launched, editing, labelSet, labelUnset }
+  })
+  check(r.launched[0] === 'zzstart.dnpm' && /play from zzstart/.test(r.labelSet), `Home's Play starts on the starting map, not the one being edited (${r.launched[0]}, editing ${r.editing})`)
+  check(r.launched[1] === 'aafirst.dnpm' && /play from aafirst/.test(r.labelUnset), `with none set, on the first map by name, as the game (${r.launched[1]})`)
+  check(r.launched[2] === `${r.editing}.dnpm`, `the map editor's Play starts on the map being edited (${r.launched[2]})`)
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

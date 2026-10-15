@@ -1387,11 +1387,14 @@ const PLAY_STEPS = [
   { id: 'start', label: 'starting the game', weight: 3 }
 ]
 
-async function play () {
+// `start`: the map to start on (Home's Play: the module's starting map,
+// startmap.js); the map being edited when not said.
+async function play ({ start = null } = {}) {
   if (!hasShell()) { S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn'); return }
   S.status('baking…', 'ok')
-  const map = `${S.docName}.dnpm`
-  const screen = showPlayScreen({ title: `Play: ${S.module.name || S.module.id} · ${S.docName}`, steps: PLAY_STEPS })
+  const startName = start && S.docs[start] ? start : S.docName
+  const map = `${startName}.dnpm`
+  const screen = showPlayScreen({ title: `Play: ${S.module.name || S.module.id} · ${startName}`, steps: PLAY_STEPS })
   const toLog = () => S.go('playlog')
   let r = null
   try { r = await emitAll({ forPlay: true, screen }) } catch (e) { S.emitError = String(e.message ?? e) }
