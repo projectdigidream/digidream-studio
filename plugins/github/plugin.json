@@ -1,0 +1,15 @@
+{
+  "id": "github",
+  "name": "GitHub sync",
+  "version": "0.1.0",
+  "protocol": 1,
+  "suite": ">=0.3.1",
+  "description": "Keeps modules in a GitHub repository and brings them to your other devices: each sync is a commit, edits to different maps merge, and a file changed on two devices asks which to keep.",
+  "sections": [
+    { "id": "sync", "entry": "index.html", "label": "Sync", "icon": "🔄" }
+  ],
+  "services": [
+    { "id": "sync", "entry": "service.html" }
+  ],
+  "permissions": ["module-write", "background", "net:api.github.com"]
+}

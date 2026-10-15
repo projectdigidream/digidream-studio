@@ -460,6 +460,18 @@ S.pluginQuery = async (what, arg, ctx = {}) => {
       if (typeof arg?.name !== 'string' || !(arg.bytes instanceof Uint8Array)) throw new Error('share needs { name, bytes }')
       return !!(await shell.share(arg.name.replace(/[\\/]/g, '_'), arg.bytes))
     }
+    // A web page in the system's browser (where to make a token, a repository):
+    // a link in a plugin's frame goes nowhere in the apps. https only. In a
+    // browser it answers false and opens nothing: a tab opened from here, after
+    // the message, would be blocked as a popup -- the plugin opens it from its
+    // own click.
+    case 'open-url': {
+      const url = String(arg?.url ?? '')
+      if (!/^https:\/\/[^\s]+$/.test(url)) throw new Error('open-url needs an https address')
+      if (!hasShell()) return false
+      await shell.openUrl(url)
+      return true
+    }
     case 'modulePack': {
       const r = await emitAll()
       if (!r) throw new Error('the module does not bake (the studio says why)')

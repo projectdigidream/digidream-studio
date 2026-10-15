@@ -13,6 +13,15 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **Sync with GitHub** (the Sync page, a bundled plugin): keep modules in a
+  GitHub repository and open them on your other devices. Paste a token for
+  one repository and the modules sync by themselves -- on open, a few seconds
+  after a save, when the app comes back -- each sync a commit. Edits to
+  different maps on two devices merge; a file changed on both asks which to
+  keep, and the other stays in GitHub's history or the Snapshots. Modules
+  only on GitHub come here with Get. No server of ours: the page talks to
+  GitHub directly.
+- Plugins can open a web page in the system's browser (`open-url`).
 - **What a sync plugin needs** (docs/PLUGINS.md, "A plugin that keeps modules
   somewhere else"): every module's files, unbaked and byte-stable
   (`record-files`, `modules`); a revision per module that rises on every save;
