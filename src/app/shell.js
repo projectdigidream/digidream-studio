@@ -116,6 +116,12 @@ const STYLE = `
 /* The module's home. */
 .sd-hero{display:flex;flex-direction:column;gap:6px;padding:4px 0 8px}
 .sd-hero-name{font-size:22px;font-weight:700;color:var(--dnp-color-text-primary)}
+/* The version, a check for a newer one, and the notice when there is one (updates.js). */
+.sd-version-row{align-items:center;gap:10px}
+.sd-body.st-page .sd-check-update{height:auto;min-height:0;padding:2px 8px;font-size:12px}
+.sd-update{display:flex;flex-direction:column;gap:6px;border-color:var(--dnp-color-accent)}
+.sd-update .lbl{font-weight:700;color:var(--dnp-color-text-primary)}
+.sd-update-notes{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:2px}
 .sd-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .sd-maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .sd-body.st-page .sd-tile,.sd-body.st-page .sd-map{height:auto;min-height:72px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;

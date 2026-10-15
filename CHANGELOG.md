@@ -7,6 +7,11 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **A newer studio is said on Home**: the studio asks its GitHub releases
+  (at most every six hours, never in the way), and when a later one is out
+  Home shows it with what changed, a download that opens the release in the
+  system's browser, and "not now". A "check for updates" button beside the
+  version asks at once.
 - **Play shows what it is doing**: a full-screen panel, in the studio's skin,
   from the press until the game appears -- baking sources, checking maps and
   graphs, baking maps, writing the module, starting the game -- with a bar and

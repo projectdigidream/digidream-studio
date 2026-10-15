@@ -48,6 +48,7 @@ import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
 import { showPlayScreen } from './playscreen.js'
+import { checkForUpdate } from './updates.js'
 import { Vocab } from './vocab.js'
 import { Viewport, COLORS, ALPHA, FILL, wearSkin as wearCanvasSkin } from './viewport.js'
 import { Preview } from './preview.js'
@@ -1570,6 +1571,12 @@ async function finishBoot () {
   addEventListener('hashchange', () => S.router.follow())
   stage('ready', 1)
   boot.hidden = true
+  // A newer studio on GitHub (updates.js): asked after the studio is up, never
+  // in the way of it; Home shows it when there is one.
+  checkForUpdate(STUDIO_VERSION).then((u) => {
+    S.update = u
+    if (u.state === 'newer' && S.route?.() === 'home') S.router.remount()
+  }).catch(() => {})
   // For the page test and for poking at a live session from the console.
   globalThis.__studio = S
   requestAnimationFrame(function loop () {

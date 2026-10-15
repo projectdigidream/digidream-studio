@@ -31,6 +31,18 @@ export const shell = {
    */
   useModule: (id) => native()?.useModule?.(id) ?? Promise.resolve(false),
 
+  /**
+   * A web page, in the system's browser: the app's own window would show it
+   * in place of the studio (Android) or as a bare window (desktop). A shell
+   * without the call, or a browser: a new tab.
+   */
+  openUrl: (url) => {
+    const n = native()
+    if (n?.openUrl) return n.openUrl(url)
+    window.open(url, '_blank', 'noopener')
+    return Promise.resolve(true)
+  },
+
   /** Give the user a file. In a browser: a download. */
   share: async (name, bytes) => {
     const n = native()

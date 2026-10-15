@@ -11,6 +11,8 @@ import { lastPlay } from '../playlog.js'
 import { thumbCanvas } from '../thumbs.js'
 import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
+import { checkForUpdate, skipped, skipVersion } from '../updates.js'
+import { shell } from '../bridge.js'
 
 let S = null
 
@@ -53,7 +55,11 @@ async function showHome () {
     el('div', { class: 'sd-hero' }, [
       el('div', { class: 'sd-hero-name', text: m.name || m.id }),
       el('div', { class: 'st-muted', text: m.about || 'A module: maps, and everything they share.' }),
-      el('div', { class: 'st-muted sd-version', 'data-version': STUDIO_VERSION, text: `studio ${STUDIO_VERSION}` }),
+      el('div', { class: 'st-row sd-version-row' }, [
+        el('span', { class: 'st-muted sd-version', 'data-version': STUDIO_VERSION, text: `studio ${STUDIO_VERSION}` }),
+        el('button', { class: 'sd-check-update', 'data-action': 'check-update', onclick: (e) => checkNow(e.currentTarget) }, 'check for updates')
+      ]),
+      ...updateRows(),
       el('div', { class: 'st-row' }, [button(withIcon('transport.play', 'play'), () => S.play()), button(withIcon('action.export', 'export'), () => S.exportPack()), button(withIcon('action.import', 'import pack'), () => S.importPack()),
         button(withIcon('action.add', 'new module'), () => newModuleFlow()),
         el('button', { 'data-section': 'snapshots', onclick: () => S.go('snapshots') }, withIcon('section.snapshots', 'snapshots')),
@@ -97,6 +103,33 @@ async function showHome () {
 }
 
 /** What is wrong anywhere in the module, each line a way to where it is. */
+// A NEWER STUDIO, when there is one (updates.js; main.js asks at boot): what
+// it is, what changed, and the way to it. "Not now" keeps it away until a
+// later one is out.
+function updateRows () {
+  const u = S.update
+  if (!u || u.state !== 'newer' || skipped() === u.latest) return []
+  return [el('div', { class: 'st-card sd-update', 'data-update': u.latest }, [
+    el('div', { class: 'lbl', text: `Studio ${u.latest} is out (you have ${u.current})` }),
+    u.notes.length ? el('ul', { class: 'sd-update-notes' }, u.notes.map((n) => el('li', { class: 'st-muted', text: n }))) : null,
+    el('div', { class: 'st-row' }, [
+      button(withIcon('action.export', 'download'), () => shell.openUrl(u.url)),
+      button('not now', () => { skipVersion(u.latest); S.router?.remount?.() })
+    ])
+  ].filter(Boolean))]
+}
+
+// The button beside the version: ask GitHub now, and say what it answered.
+async function checkNow (btn) {
+  btn.disabled = true
+  btn.textContent = 'checking…'
+  const u = await checkForUpdate(STUDIO_VERSION, { force: true })
+  S.update = u
+  if (u.state === 'newer') { if (skipped() === u.latest) skipVersion(''); S.router?.remount?.(); return }
+  btn.disabled = false
+  btn.textContent = u.state === 'current' ? `up to date (${u.latest} is the latest)` : `could not check: ${u.error ?? 'no answer'}`
+}
+
 function problemRows () {
   const p = moduleProblems(S)
   const items = [

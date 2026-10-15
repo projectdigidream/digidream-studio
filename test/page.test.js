@@ -3558,6 +3558,39 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   await page.evaluate(() => { document.getElementById('playscreen')?.remove(); delete globalThis.dnp })
 }
 
+// A NEWER STUDIO IS SAID ON HOME (updates.js): what it is, what changed, a
+// download that goes to the system's browser (the shell's openUrl), and "not
+// now" that keeps it away until a later one. CONTROL: the same version is no notice.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const opened = []
+    globalThis.dnp = { studio: { openUrl: async (u) => { opened.push(u); return true } } }
+    localStorage.removeItem('dnp.studio.update.skip')
+    const current = S.update
+    S.update = { state: 'newer', current: '0.3.1', latest: '9.9.9', url: 'https://github.com/projectdigidream/digidream-studio/releases/tag/studio-v9.9.9', notes: ['A first room is visible.', 'Play shows its steps.'], error: null }
+    await S.go('home'); await new Promise((r) => setTimeout(r, 300))
+    const card = document.querySelector('.sd-page .sd-update[data-update="9.9.9"]')
+    const out = { card: !!card, text: card?.textContent ?? '', notes: card?.querySelectorAll('li').length ?? 0, check: !!document.querySelector('.sd-page [data-action="check-update"]') }
+    ;[...(card?.querySelectorAll('button') ?? [])].find((b) => /download/.test(b.textContent))?.click()
+    await new Promise((r) => setTimeout(r, 50))
+    out.opened = opened
+    ;[...(document.querySelector('.sd-page .sd-update')?.querySelectorAll('button') ?? [])].find((b) => /not now/.test(b.textContent))?.click()
+    await new Promise((r) => setTimeout(r, 300))
+    out.afterSkip = !!document.querySelector('.sd-page .sd-update')
+    localStorage.removeItem('dnp.studio.update.skip')
+    S.update = { ...S.update, state: 'current', latest: '0.3.1' }
+    await S.router.remount(); await new Promise((r) => setTimeout(r, 300))
+    out.current = !!document.querySelector('.sd-page .sd-update')
+    S.update = current; delete globalThis.dnp
+    await S.go('map')
+    return out
+  })
+  check(r.card && /Studio 9\.9\.9 is out/.test(r.text) && r.notes === 2 && r.check, `Home says a newer studio is out, with what changed, and offers a check (${r.text.slice(0, 60)})`)
+  check(r.opened.length === 1 && /releases\/tag\/studio-v9\.9\.9$/.test(r.opened[0]), `download opens the release in the system's browser (${r.opened})`)
+  check(!r.afterSkip && !r.current, `"not now" puts it away; the same version shows no notice (${JSON.stringify({ afterSkip: r.afterSkip, current: r.current })})`)
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)
