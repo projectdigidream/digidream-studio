@@ -57,14 +57,16 @@ const summary = (paths) => paths.length <= 3 ? paths.join(', ') : `${paths.slice
  * @param device  a name for commit messages
  * @param keep    conflict choices (plan's)
  * @param get     true: bring a module this device does not have
+ * @param progress  told each step: { step: 'checking'|'downloading'|'saving'|'uploading'|'committing', done?, total? }
  * @returns { result, state, pulled, pushed, conflicts }
  *   result: 'synced' | 'conflict' | 'missing-local' | 'missing-remote'
  */
-export async function syncModule ({ id, studio, gh, store, device = 'a device', keep = {}, get = false, now = Date.now }) {
+export async function syncModule ({ id, studio, gh, store, device = 'a device', keep = {}, get = false, now = Date.now, progress = () => {} }) {
   let base = (await store.get(id)) ?? null
   const pulled = new Set()
   const pushed = new Set()
   for (let pass = 0; pass < PASSES; pass++) {
+    progress({ step: 'checking' })
     const local = await studio.files(id)
     // A module this device does not have is only brought when asked. One it
     // had and has no more was deleted here: nothing is pushed for that (the
@@ -90,10 +92,16 @@ export async function syncModule ({ id, studio, gh, store, device = 'a device', 
     // (the push of what is left over happens on the next pass).
     if (pull.length) {
       const byPath = new Map((local?.files ?? []).map((f) => [f.path, f.bytes]))
+      const fetching = pull.filter((p) => R[p])
+      let got = 0
       for (const p of pull) {
-        if (R[p]) byPath.set(p, await gh.blob(R[p]))
-        else byPath.delete(p)
+        if (R[p]) {
+          progress({ step: 'downloading', done: got, total: fetching.length })
+          byPath.set(p, await gh.blob(R[p]))
+          got++
+        } else byPath.delete(p)
       }
+      progress({ step: 'saving' })
       const files = [...byPath].sort(([a], [b]) => (a < b ? -1 : 1)).map(([path, bytes]) => ({ path, bytes }))
       const w = await studio.write(id, local?.rev ?? 0, files)
       if (!w.ok && w.reason === 'changed') continue
@@ -112,13 +120,17 @@ export async function syncModule ({ id, studio, gh, store, device = 'a device', 
       if (!head) { await gh.ensureBranch(); continue }
       const bytes = new Map(local.files.map((f) => [f.path, f.bytes]))
       const entries = []
+      const sending = push.filter((p) => L[p])
+      let sent = 0
       for (const p of push) {
         if (L[p]) {
+          progress({ step: 'uploading', done: sent++, total: sending.length })
           const sha = await gh.createBlob(bytes.get(p))
           if (sha !== L[p]) throw new GitHubError(0, `GitHub stored ${p} as ${sha}, not ${L[p]}`, '/git/blobs')
           entries.push({ path: `${id}/${p}`, sha })
         } else entries.push({ path: `${id}/${p}`, sha: null })
       }
+      progress({ step: 'committing' })
       const tree = await gh.createTree(head.tree, entries)
       const message = `${id}: ${summary(push)}\n\nFrom the studio on ${device}.`
       const commit = await gh.createCommit(message, tree, [head.commit])

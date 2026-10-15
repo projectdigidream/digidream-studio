@@ -231,7 +231,8 @@ async function connectedView (cfg) {
       h('button', { class: 'primary', 'data-action': 'sync-all', onclick: () => { chan.postMessage({ t: 'sync' }); refreshRemote() }, text: 'Sync now' }),
       h('button', { 'data-action': 'change-repo', onclick: () => { openPicker(cfg.token, cfg.login, { back: 'connected' }); render() }, text: 'Change repository' }),
       h('button', { 'data-action': 'disconnect', onclick: disconnect, text: 'Disconnect' })
-    ])
+    ]),
+    h('div', { class: 'batch', 'data-batch': '' })
   ])
 
   const rows = local.map((m) => moduleRow(m, cfg, states[m.id], said[m.id]))
@@ -347,6 +348,51 @@ async function refreshRemote () {
   render()
 }
 
+// ------------------------------------------------------------ progress
+
+// What the service says it is doing ({ steps: { id: { step, done, total } },
+// batch: { done, total } }), drawn as bars on the rows already on the page --
+// painted in place, not by a redraw, so they do not flicker.
+let prog = { steps: {}, batch: { done: 0, total: 0 }, waiting: [] }
+
+/** A step in a word or two: 'checking', 'uploading 3/12'. */
+function stepLabel ({ step, done = 0, total = 0 }) {
+  return total > 1 && (step === 'downloading' || step === 'uploading') ? `${step} ${Math.min(done + 1, total)}/${total}` : step
+}
+
+function bar (fraction, label, attrs = {}) {
+  const fill = h('i')
+  if (fraction === null) fill.className = 'busy'
+  else fill.style.width = fraction > 0 ? `${Math.max(4, Math.round(fraction * 100))}%` : '0'
+  return h('div', { class: 'prog', ...attrs }, [
+    h('div', { class: 'bar', role: 'progressbar', 'aria-label': label, ...(fraction === null ? {} : { 'aria-valuenow': Math.round(fraction * 100), 'aria-valuemin': 0, 'aria-valuemax': 100 }) }, [fill]),
+    h('span', { class: 'plabel', text: label })
+  ])
+}
+
+function paintProgress () {
+  for (const row of app.querySelectorAll('[data-module], [data-remote]')) {
+    const id = row.dataset.module ?? row.dataset.remote
+    // Next in line: an empty bar that says so.
+    const st = prog.steps[id] ?? (prog.waiting.includes(id) ? { step: 'waiting', done: 0, total: 1 } : null)
+    const old = row.querySelector(':scope > .prog')
+    if (!st) { old?.remove(); continue }
+    const fraction = st.total ? st.done / st.total : null
+    const next = bar(fraction, stepLabel(st), { 'data-step': st.step })
+    // Same step: move the fill, so its width animates instead of jumping in anew.
+    if (old && old.dataset.step === st.step && fraction !== null && old.querySelector('i:not(.busy)')) {
+      old.querySelector('i').style.width = next.querySelector('i').style.width
+      old.querySelector('.plabel').textContent = stepLabel(st)
+    } else if (old) old.replaceWith(next)
+    else row.querySelector(':scope > .row')?.after(next)
+  }
+  const slot = app.querySelector('[data-batch]')
+  if (slot) {
+    const { done, total } = prog.batch
+    slot.replaceChildren(...(total > 1 ? [bar(done / total, `${Math.min(done + 1, total)} of ${total} modules`)] : []))
+  }
+}
+
 // ------------------------------------------------------------ drawing
 
 let drawing = null
@@ -361,6 +407,7 @@ async function render () {
       // Keep what is being typed and where the caret is across a redraw.
       const focus = document.activeElement?.dataset?.field
       app.replaceChildren(...kids.filter(Boolean))
+      paintProgress()
       if (focus) app.querySelector(`[data-field="${focus}"]`)?.focus()
     } while (again)
   })()
@@ -374,6 +421,7 @@ let soon = null
 const renderSoon = () => { clearTimeout(soon); soon = setTimeout(render, 120) }
 
 chan.onmessage = (e) => {
+  if (e.data?.t === 'progress') { prog = { steps: e.data.steps ?? {}, batch: e.data.batch ?? { done: 0, total: 0 }, waiting: e.data.waiting ?? [] }; paintProgress(); return }
   if (e.data?.t !== 'changed') return
   if (quiet() && !e.data.id) return render()
   if (quiet()) return
@@ -385,7 +433,7 @@ chan.onmessage = (e) => {
 const fonts = { '--bg': 'color.bg.app', '--panel': 'color.bg.panel', '--raised': 'color.bg.raised', '--line': 'color.line.main', '--fg': 'color.text.primary', '--dim': 'color.text.secondary', '--accent': 'color.accent', '--on-accent': 'color.text.inverse', '--ok': 'color.ok', '--warn': 'color.warn', '--bad': 'color.error', '--info': 'color.info' }
 if (inSuite()) {
   api = await connectSuite({
-    onSectionInit: () => { render(); refreshRemote() },
+    onSectionInit: () => { render(); refreshRemote(); chan.postMessage({ t: 'ping' }) },
     onEvent: () => { if (!quiet()) render() },
     onSkin: (bundle, mode, pointer) => wearSkin(bundle, mode, pointer, { vars: fonts })
   })

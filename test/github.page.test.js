@@ -99,6 +99,26 @@ check(await until(async () => (await sec()).evaluate((m) => document.querySelect
 check(await until(() => S(() => window.__studio.shell.moduleStatus?.level === 'ok')), `and the studio wears the badge (${JSON.stringify(await S(() => window.__studio.shell.moduleStatus))})`)
 check(fake.log()[0].includes(`${id}:`) && fake.log()[0].includes('From the studio on'), `one commit for it (${JSON.stringify(fake.log()[0].split('\n')[0])})`)
 
+// PROGRESS: while GitHub is slow to take the commit, the row shows a bar
+// saying so; it goes when the sync is done.
+{
+  let release
+  fake.beforeMove = () => new Promise((resolve) => { release = resolve })
+  await S(() => { const St = window.__studio; St.module.name = 'Watched going up'; St.moduleChanged() })
+  await settle(900)
+  await click(await sec(), `[data-module="${id}"] [data-action="sync"]`)
+  const seen = new Set()
+  const label = await until(async () => {
+    const t = await (await sec()).evaluate((m) => document.querySelector(`[data-module="${m}"] .prog .plabel`)?.textContent, id)
+    if (t) seen.add(t)
+    return t === 'committing' && release ? t : null
+  })
+  check(label === 'committing', `a bar on the row says what it is doing, step by step (${[...seen].join(', ')})`)
+  check(await (await sec()).evaluate((m) => !!document.querySelector(`[data-module="${m}"] .bar[role="progressbar"]`), id), 'and is a progressbar to a screen reader')
+  release?.()
+  check(await until(async () => (await sec()).evaluate((m) => !document.querySelector(`[data-module="${m}"] .prog`), id)), 'when it is done, the bar goes')
+}
+
 // AN EDIT IN THE STUDIO FOLLOWS BY ITSELF (a few seconds after the save).
 await S(() => { const St = window.__studio; St.module.name = 'Renamed on this device'; St.moduleChanged() })
 check(await until(() => /Renamed on this device/.test(fake.read('main', id)['module.studio.json'] ?? ''), 30000), 'an edit in the studio reaches GitHub without asking')

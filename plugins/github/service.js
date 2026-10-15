@@ -48,11 +48,19 @@ async function say (id, text, level, extra = {}) {
 
 const queue = new Map() // id -> opts, waiting
 let working = false
+// What the page draws as bars: the step each module is at (kept, so a page that
+// opens, or is re-mounted, mid-sync catches up on 'ping'), and how far the
+// current run of modules is.
+const steps = new Map() // id -> { step, done, total }
+const batch = { done: 0, total: 0 }
+const tell = () => chan.postMessage({ t: 'progress', steps: Object.fromEntries(steps), batch, waiting: [...queue.keys()] })
 
 function schedule (id, opts = {}) {
   if (!cfg || !id) return
   if (!tracked(id) && !opts.get) return
+  if (!queue.has(id)) batch.total++
   queue.set(id, { ...(queue.get(id) ?? {}), ...opts })
+  tell()
   if (!working) work()
 }
 
@@ -63,8 +71,14 @@ async function work () {
       const [id, opts] = queue.entries().next().value
       queue.delete(id)
       await syncOne(id, opts)
+      batch.done++
+      tell()
     }
-  } finally { working = false }
+  } finally {
+    working = false
+    batch.done = batch.total = 0
+    tell()
+  }
 }
 
 async function syncOne (id, { get = false, keep = {} } = {}) {
@@ -72,7 +86,10 @@ async function syncOne (id, { get = false, keep = {} } = {}) {
   const gh = new GitHub({ token: cfg.token, repo: cfg.repo, branch: cfg.branch })
   await say(id, 'syncing…', 'info')
   try {
-    const r = await syncModule({ id, studio, gh, store: modules, device: cfg.device || deviceName(), keep, get })
+    let r
+    try {
+      r = await syncModule({ id, studio, gh, store: modules, device: cfg.device || deviceName(), keep, get, progress: (p) => { steps.set(id, p); tell() } })
+    } finally { steps.delete(id) }
     if (r.result === 'synced') {
       if (get && !tracked(id)) { cfg.tracked = [...(cfg.tracked ?? []), id]; await saveConfig() }
       const took = r.pulled.length ? `, ${r.pulled.length} file${r.pulled.length > 1 ? 's' : ''} from GitHub` : ''
@@ -137,7 +154,7 @@ if (inSuite()) {
 
 chan.onmessage = async (e) => {
   const m = e.data ?? {}
-  if (m.t === 'ping') chan.postMessage({ t: 'pong', running: !!api, busy: working })
+  if (m.t === 'ping') { chan.postMessage({ t: 'pong', running: !!api, busy: working }); tell() }
   else if (m.t === 'config') {
     // Settings changed on the page: connected, disconnected, modules ticked.
     const was = cfg

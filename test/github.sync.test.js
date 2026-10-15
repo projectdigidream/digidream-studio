@@ -209,6 +209,24 @@ B.studio.beforeWrite = (s) => s.edit('cave', { 'maps/map05.studio.json': 'typed 
     'a branch that does not exist yet is made from the default one, and only it gets the module')
 }
 
+// PROGRESS: each step said, uploads and downloads counted.
+{
+  const f3 = new FakeGitHub()
+  const g = new GitHub({ token: 'tok', repo: 'me/modules', fetch: f3.fetch })
+  const s1 = new FakeStudio()
+  s1.put('cave', mod('cave', { a: '1', b: '2', c: '3' }))
+  const seen = []
+  await syncModule({ id: 'cave', studio: s1, gh: g, store: new MemStore(), progress: (p) => seen.push(p) })
+  const up = seen.filter((p) => p.step === 'uploading')
+  check(seen[0].step === 'checking' && up.length === 4 && up.every((p, i) => p.done === i && p.total === 4) && seen.at(-1).step === 'committing',
+    `a push says checking, uploading 0..3 of 4, committing (${seen.map((p) => p.step + (p.total ? p.done + '/' + p.total : '')).join(' ')})`)
+  const s2 = new FakeStudio()
+  const seen2 = []
+  await syncModule({ id: 'cave', studio: s2, gh: g, store: new MemStore(), get: true, progress: (p) => seen2.push(p) })
+  const down = seen2.filter((p) => p.step === 'downloading')
+  check(down.length === 4 && down.at(-1).done === 3 && seen2.some((p) => p.step === 'saving'), `a pull says downloading of 4, then saving (${seen2.map((p) => p.step).join(' ')})`)
+}
+
 // REPOSITORIES: listed (only ones the token can write to), and made.
 {
   const f2 = new FakeGitHub()

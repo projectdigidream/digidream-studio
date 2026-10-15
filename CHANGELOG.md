@@ -37,6 +37,9 @@ Built on engine 0.1.3.
   keep, and the other stays in GitHub's history or the Snapshots. Modules
   only on GitHub come here with Get. No server of ours: the page talks to
   GitHub directly.
+- The Sync page shows **progress bars** while it works: one per module with
+  a word on the step (checking, downloading 2/6, saving, uploading, committing,
+  waiting), and one for the whole run (1 of 4 modules).
 - Plugins can open a web page in the system's browser (`open-url`).
 - **What a sync plugin needs** (docs/PLUGINS.md, "A plugin that keeps modules
   somewhere else"): every module's files, unbaked and byte-stable
