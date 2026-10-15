@@ -95,7 +95,7 @@ const dataUrl = (bytes) => `data:image/png;base64,${Buffer.from(bytes).toString(
   check(a.ok && !a.cached && b.ok && b.cached && same(a.files['sprites/GHOST.png'], b.files['sprites/GHOST.png']), 'the second bake of the same source comes from the cache')
   const c = await baker.bake('file:tsprite', 'OTHER', bytes)
   check(!c.cached && c.files['sprites/OTHER.json'], 'the same source under another name is baked for that name')
-  check(a.hash === await sha256(bytes) && a.baker === 'tsprite' && a.version === '1', 'a bake says which bytes, which baker, which version')
+  check(a.hash === await sha256(bytes) && a.baker === 'tsprite' && a.version === '2', 'a bake says which bytes, which baker, which version')
   const none = await baker.bake('file:psd', 'X', bytes)
   check(!none.ok && /nothing here bakes/.test(none.error), 'a kind with no baker says so')
   const lying = new Baker({ bakersFor: () => [{ id: 'texproj', version: '9', url: BUILTIN_BAKERS[0].url }] })

@@ -5,6 +5,14 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **A sprite's per-view layer order from ThreeSprite was not baked**: a view
+  that stacks its parts its own way (an arm in front from the front, behind
+  from the back) came out in the one default order, because the studio baked
+  with a ThreeSprite runtime from before the feature. It bakes with the
+  current one, and every sprite is baked again at the next Play or Export.
+
 ## 0.3.3.1 -- 2026-10-15
 
 Built on engine 0.1.4.1.

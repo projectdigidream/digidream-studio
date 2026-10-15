@@ -1,10 +1,10 @@
 // @threesprite/runtime -- the .tsprite entry point, bundled for the browser.
-// MIT. Built by scripts/vendor_tsprite.sh from ThreeSprite 38f0250; do not edit here.
+// MIT. Built by scripts/vendor_tsprite.sh from ThreeSprite a9a9f6c; do not edit here.
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-// ../ThreeSprite/node_modules/.pnpm/fflate@0.8.3/node_modules/fflate/esm/browser.js
+// ../threesprite/node_modules/.pnpm/fflate@0.8.3/node_modules/fflate/esm/browser.js
 var u8 = Uint8Array;
 var u16 = Uint16Array;
 var i32 = Int32Array;
@@ -904,7 +904,7 @@ function unzipSync(data, opts) {
   return files;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/iobuffer@6.0.1/node_modules/iobuffer/lib/text.js
+// ../threesprite/node_modules/.pnpm/iobuffer@6.0.1/node_modules/iobuffer/lib/text.js
 function decode(bytes, encoding = "utf8") {
   const decoder = new TextDecoder(encoding);
   return decoder.decode(bytes);
@@ -914,7 +914,7 @@ function encode(str) {
   return encoder.encode(str);
 }
 
-// ../ThreeSprite/node_modules/.pnpm/iobuffer@6.0.1/node_modules/iobuffer/lib/iobuffer.js
+// ../threesprite/node_modules/.pnpm/iobuffer@6.0.1/node_modules/iobuffer/lib/iobuffer.js
 var defaultByteLength = 1024 * 8;
 var hostBigEndian = (() => {
   const array = new Uint8Array(4);
@@ -1525,7 +1525,7 @@ var IOBuffer = class _IOBuffer {
   }
 };
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/crc.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/crc.js
 var crcTable = [];
 for (let n = 0; n < 256; n++) {
   let c = n;
@@ -1560,7 +1560,7 @@ function writeCrc(buffer, length) {
   buffer.writeUint32(crc(new Uint8Array(buffer.buffer, buffer.byteOffset + buffer.offset - length, length), length));
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/unfilter.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/unfilter.js
 function unfilterNone(currentLine, newLine, bytesPerLine) {
   for (let i2 = 0; i2 < bytesPerLine; i2++) {
     newLine[i2] = currentLine[i2];
@@ -1636,7 +1636,7 @@ function paethPredictor(a, b, c) {
     return c;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/apply_unfilter.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/apply_unfilter.js
 function applyUnfilter(filterType, currentLine, newLine, prevLine, passLineBytes, bytesPerPixel) {
   switch (filterType) {
     case 0:
@@ -1659,7 +1659,7 @@ function applyUnfilter(filterType, currentLine, newLine, prevLine, passLineBytes
   }
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/decode_interlace_adam7.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/decode_interlace_adam7.js
 var uint16 = new Uint16Array([255]);
 var uint8 = new Uint8Array(uint16.buffer);
 var osIsLittleEndian = uint8[0] === 255;
@@ -1726,7 +1726,7 @@ function swap16(val) {
   return (val & 255) << 8 | val >> 8 & 255;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/decode_interlace_null.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/decode_interlace_null.js
 var uint162 = new Uint16Array([255]);
 var uint82 = new Uint8Array(uint162.buffer);
 var osIsLittleEndian2 = uint82[0] === 255;
@@ -1781,7 +1781,7 @@ function swap162(val) {
   return (val & 255) << 8 | val >> 8 & 255;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/signature.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/signature.js
 var pngSignature = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
 function writeSignature(buffer) {
   buffer.writeBytes(pngSignature);
@@ -1803,7 +1803,7 @@ function hasPngSignature(array) {
   return true;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/text.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/helpers/text.js
 var textChunkName = "tEXt";
 var NULL = 0;
 var latin1Decoder = new TextDecoder("latin1");
@@ -1849,7 +1849,7 @@ function readLatin1(buffer, length) {
   return latin1Decoder.decode(buffer.readBytes(length));
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/internal_types.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/internal_types.js
 var ColorType = {
   UNKNOWN: -1,
   GREYSCALE: 0,
@@ -1881,7 +1881,7 @@ var BlendOpType = {
   OVER: 1
 };
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/png_decoder.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/png_decoder.js
 var PngDecoder = class extends IOBuffer {
   constructor(data, options = {}) {
     super(data);
@@ -2387,7 +2387,7 @@ function checkBitDepth(value) {
   return value;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/png_encoder.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/png_encoder.js
 var defaultZlibOptions = {
   level: 3
 };
@@ -2611,7 +2611,7 @@ function writeDataUint16(data, newData, slotsPerLine, offset) {
   return offset;
 }
 
-// ../ThreeSprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/index.js
+// ../threesprite/node_modules/.pnpm/fast-png@8.0.0/node_modules/fast-png/lib/index.js
 function decodePng(data, options) {
   const decoder = new PngDecoder(data, options);
   return decoder.decode();
@@ -2621,7 +2621,7 @@ function encodePng(png, options) {
   return encoder2.encode();
 }
 
-// ../ThreeSprite/src/domain/image.ts
+// ../threesprite/src/domain/image.ts
 function createImage(width, height, fill) {
   const pixels = new Uint8ClampedArray(width * height * 4);
   if (fill && fill[3] > 0) {
@@ -2665,22 +2665,23 @@ function opaqueBounds(px, w, h) {
   return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
-// ../ThreeSprite/src/domain/types.ts
+// ../threesprite/src/domain/types.ts
 var FORMAT_VERSION = 3;
 var MIN_CANVAS = 8;
 var MAX_CANVAS = 256;
 var MAX_FRAMES = 256;
-var SPRITE_NAME_RE = /^[A-Z0-9]{4}$/;
+var MAX_SPRITE_NAME = 32;
+var SPRITE_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
 var ZERO3 = Object.freeze({ r: 0, u: 0, f: 0 });
 var ONE3 = Object.freeze({ r: 1, u: 1, f: 1 });
 
-// ../ThreeSprite/src/core/export/plan.ts
+// ../threesprite/src/core/export/plan.ts
 function slug(name) {
   const s = name.replace(/[^A-Za-z0-9_-]/g, "_");
   return s || "anim";
 }
 
-// ../ThreeSprite/src/core/export/atlasBuild.ts
+// ../threesprite/src/core/export/atlasBuild.ts
 function nextPow2(n) {
   let p = 1;
   while (p < n) p <<= 1;
@@ -2789,7 +2790,7 @@ function buildAtlas(input) {
   return { png, rgba: sheet, json: JSON.stringify(manifest, null, 2), manifest, width, height, warnings };
 }
 
-// ../ThreeSprite/src/domain/animation.ts
+// ../threesprite/src/domain/animation.ts
 var lerpNumber = (a, b, u) => a + (b - a) * u;
 var lerpVec3 = (a, b, u) => ({ r: lerpNumber(a.r, b.r, u), u: lerpNumber(a.u, b.u, u), f: lerpNumber(a.f, b.f, u) });
 var stepOnly = (a) => a;
@@ -2815,7 +2816,7 @@ function sampleTrack(keys, frame, identity, lerp) {
   return lerp(k0.value, k1.value, u);
 }
 
-// ../ThreeSprite/src/domain/math3.ts
+// ../threesprite/src/domain/math3.ts
 var IDENTITY3 = Object.freeze([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 var D2R = Math.PI / 180;
 var add3 = (a, b) => ({ r: a.r + b.r, u: a.u + b.u, f: a.f + b.f });
@@ -2874,6 +2875,15 @@ function projectPoint(p, vp) {
   const d = p.f * c - p.r * s;
   return { x: vp.size / 2 + sx, y: vp.size - (sy * cp - d * sp), depth: sy * sp + d * cp };
 }
+var DEPTH_SCALE_MIN = 0.25;
+var DEPTH_SCALE_MAX = 4;
+function depthFactor(restDepth, curDepth, vp) {
+  const s = vp.depthStrength ?? 0;
+  if (!(s > 0)) return 1;
+  const travel = s * (curDepth - restDepth) / vp.size;
+  if (travel >= 1) return DEPTH_SCALE_MAX;
+  return Math.max(DEPTH_SCALE_MIN, Math.min(DEPTH_SCALE_MAX, 1 / (1 - travel)));
+}
 function viewAxes(vp) {
   const { c, s, cp, sp } = trig(vp);
   return {
@@ -2888,7 +2898,7 @@ function projectedAngle(from, to) {
   return { angle: -Math.atan2(dy, dx) * 180 / Math.PI, length: Math.hypot(dx, dy) };
 }
 
-// ../ThreeSprite/src/domain/transform.ts
+// ../threesprite/src/domain/transform.ts
 var IDENTITY = Object.freeze({ a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 });
 function translate(x2, y) {
   return { a: 1, b: 0, c: 0, d: 1, tx: x2, ty: y };
@@ -2937,7 +2947,7 @@ function apply(m, x2, y) {
   return { x: m.a * x2 + m.c * y + m.tx, y: m.b * x2 + m.d * y + m.ty };
 }
 
-// ../ThreeSprite/src/domain/pose.ts
+// ../threesprite/src/domain/pose.ts
 function sampleBone(anim, boneId, frame) {
   const t = anim?.boneTracks[boneId];
   if (!t) return { rotation: ZERO3, translate: ZERO3, scale: ONE3 };
@@ -2978,19 +2988,28 @@ function projectBone(world, length, vp, fallbackAngle = 90) {
   const t = projectPoint(applyAffine(world, { r: 0, u: length, f: 0 }), vp);
   const pa = projectedAngle(o, t);
   const angle = pa.length < MIN_PROJECTED ? fallbackAngle : pa.angle;
-  return { origin: { x: o.x, y: o.y }, tip: { x: t.x, y: t.y }, angle, length: pa.length, depth: o.depth };
+  return { origin: { x: o.x, y: o.y }, tip: { x: t.x, y: t.y }, angle, length: pa.length, depth: o.depth, tipDepth: t.depth };
 }
-function partMatrix(rest, cur, part) {
+function boneDepthScale(rest, cur, vp) {
+  if (!vp) return 1;
+  return depthFactor((rest.depth + rest.tipDepth) / 2, (cur.depth + cur.tipDepth) / 2, vp);
+}
+function boneDepthTapers(rest, cur, vp) {
+  if (!vp || !((vp.depthStrength ?? 0) > 0)) return false;
+  return Math.abs(cur.tipDepth - rest.tipDepth - (cur.depth - rest.depth)) > 0.01;
+}
+function partMatrix(rest, cur, part, vp) {
   let fs = 1;
   if (part.foreshorten && rest.length >= MIN_PROJECTED) fs = Math.max(0.15, Math.min(4, cur.length / rest.length));
   const angle = cur.length < MIN_PROJECTED ? rest.angle : cur.angle;
-  return compose(translate(cur.origin.x, cur.origin.y), rotate(angle), scale(fs, 1), translate(part.offset.x, part.offset.y), rotate(part.rotation), translate(-part.pivot.x, -part.pivot.y));
+  const ds = boneDepthScale(rest, cur, vp);
+  return compose(translate(cur.origin.x, cur.origin.y), scale(ds, ds), rotate(angle), scale(fs, 1), translate(part.offset.x, part.offset.y), rotate(part.rotation), translate(-part.pivot.x, -part.pivot.y));
 }
 function viewProj(p, view) {
-  return { N: p.views.count, view, size: p.canvas.size, elevationDeg: p.views.elevationDeg };
+  return { N: p.views.count, view, size: p.canvas.size, elevationDeg: p.views.elevationDeg, depthStrength: p.views.depthScale };
 }
 
-// ../ThreeSprite/src/domain/skin.ts
+// ../threesprite/src/domain/skin.ts
 function boneFrame(bp, fs = 1) {
   return compose(translate(bp.origin.x, bp.origin.y), rotate(bp.angle), scale(fs, 1));
 }
@@ -3047,7 +3066,7 @@ function buildSkinGrid(img, restMatrix, boneRests, falloff, cell) {
   }
   return { cols, rows, uv, rest, weights };
 }
-function deformGrid(grid, boneRests, boneCurs, foreshorten) {
+function deformGrid(grid, boneRests, boneCurs, foreshorten, vp) {
   const nb = boneRests.length;
   const deltas = [];
   for (let b = 0; b < nb; b++) {
@@ -3059,6 +3078,11 @@ function deformGrid(grid, boneRests, boneCurs, foreshorten) {
     const inv = invert(boneFrame(r, 1));
     deltas.push(inv ? compose(curFrame, inv) : { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 });
   }
+  const scaling = !!vp && (vp.depthStrength ?? 0) > 0;
+  const axes = boneRests.map((r) => {
+    const dx = r.tip.x - r.origin.x, dy = r.tip.y - r.origin.y;
+    return { ox: r.origin.x, oy: r.origin.y, dx, dy, l2: dx * dx + dy * dy };
+  });
   const nv = grid.rest.length / 2;
   const out = new Float32Array(nv * 2);
   for (let k = 0; k < nv; k++) {
@@ -3068,8 +3092,20 @@ function deformGrid(grid, boneRests, boneCurs, foreshorten) {
       const w = grid.weights[k * nb + b];
       if (w === 0) continue;
       const m = deltas[b];
-      ox += w * (m.a * x2 + m.c * y + m.tx);
-      oy += w * (m.b * x2 + m.d * y + m.ty);
+      let px = m.a * x2 + m.c * y + m.tx;
+      let py = m.b * x2 + m.d * y + m.ty;
+      if (scaling) {
+        const a = axes[b];
+        const t = a.l2 > 1e-6 ? ((x2 - a.ox) * a.dx + (y - a.oy) * a.dy) / a.l2 : 0;
+        const r = boneRests[b], cu = boneCurs[b];
+        const ds = depthFactor(r.depth + t * (r.tipDepth - r.depth), cu.depth + t * (cu.tipDepth - cu.depth), vp);
+        if (ds !== 1) {
+          px = cu.origin.x + (px - cu.origin.x) * ds;
+          py = cu.origin.y + (py - cu.origin.y) * ds;
+        }
+      }
+      ox += w * px;
+      oy += w * py;
     }
     out[k * 2] = ox;
     out[k * 2 + 1] = oy;
@@ -3146,7 +3182,7 @@ function rasterizeSkinnedGrid(dst, dw, dh, img, grid, pos, alphaMul = 1) {
   }
 }
 
-// ../ThreeSprite/src/domain/ids.ts
+// ../threesprite/src/domain/ids.ts
 var ALPHABET = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 if (ALPHABET.length !== 64) throw new Error("id alphabet must have 64 symbols");
 function newId(size = 12) {
@@ -3157,7 +3193,7 @@ function newId(size = 12) {
   return id;
 }
 
-// ../ThreeSprite/src/domain/solids.ts
+// ../threesprite/src/domain/solids.ts
 var meshCache = /* @__PURE__ */ new Map();
 function unitMesh(kind) {
   let m = meshCache.get(kind);
@@ -3273,7 +3309,7 @@ function tones(color, levels) {
 function outlineColor(color) {
   return [Math.round(color[0] * 0.25), Math.round(color[1] * 0.25), Math.round(color[2] * 0.25), 255];
 }
-function renderSolids(group, world, vp) {
+function renderSolids(group, world, vp, rest) {
   const size = vp.size;
   const img = createImage(size, size);
   const zbuf = new Float32Array(size * size).fill(-Infinity);
@@ -3281,6 +3317,8 @@ function renderSolids(group, world, vp) {
   const shade = new Float32Array(size * size);
   const axes = viewAxes(vp);
   const worldRot = rotationOf3(world);
+  const root = projectPoint(applyAffine(world, { r: 0, u: 0, f: 0 }), vp);
+  const persp = rest && (vp.depthStrength ?? 0) > 0 ? { rest, ox: root.x, oy: root.y } : null;
   let L = [-0.45, 0.75, 0.55];
   if (group.shading.lightSpace === "character") {
     const lc2 = { r: 0.45, u: 0.75, f: 0.55 };
@@ -3298,10 +3336,16 @@ function renderSolids(group, world, vp) {
     const nx = new Float32Array(n), ny = new Float32Array(n), nz = new Float32Array(n);
     for (let i2 = 0; i2 < n; i2++) {
       const local = apply3(R, { r: mesh.positions[i2 * 3] * prim.size.r, u: mesh.positions[i2 * 3 + 1] * prim.size.u, f: mesh.positions[i2 * 3 + 2] * prim.size.f });
-      const p = applyAffine(world, { r: local.r + prim.position.r, u: local.u + prim.position.u, f: local.f + prim.position.f });
-      const pr = projectPoint(p, vp);
-      vx[i2] = pr.x;
-      vy[i2] = pr.y;
+      const lp = { r: local.r + prim.position.r, u: local.u + prim.position.u, f: local.f + prim.position.f };
+      const pr = projectPoint(applyAffine(world, lp), vp);
+      let px2 = pr.x, py = pr.y;
+      if (persp) {
+        const k = depthFactor(projectPoint(applyAffine(persp.rest, lp), vp).depth, pr.depth, vp);
+        px2 = persp.ox + (px2 - persp.ox) * k;
+        py = persp.oy + (py - persp.oy) * k;
+      }
+      vx[i2] = px2;
+      vy[i2] = py;
       vz[i2] = pr.depth;
       const wn = normalize3(apply3(NR, { r: mesh.normals[i2 * 3], u: mesh.normals[i2 * 3 + 1], f: mesh.normals[i2 * 3 + 2] }));
       nx[i2] = dot3(wn, axes.right);
@@ -3386,176 +3430,7 @@ function renderSolids(group, world, vp) {
   return img;
 }
 
-// ../ThreeSprite/src/domain/views.ts
-var MIN_VIEWS = 1;
-var MAX_VIEWS = 64;
-function clampViewCount(n) {
-  if (!Number.isFinite(n)) return 8;
-  return Math.min(MAX_VIEWS, Math.max(MIN_VIEWS, Math.round(n)));
-}
-function mirrorOf(N, k) {
-  return (N - (k - 1)) % N + 1;
-}
-function authoredViewCount(N, mirror) {
-  return mirror ? Math.floor(N / 2) + 1 : N;
-}
-function authoredViews(N, mirror) {
-  const n = authoredViewCount(N, mirror);
-  const out = [];
-  for (let k = 1; k <= Math.min(n, N); k++) out.push(k);
-  return out;
-}
-function isDerived(N, mirror, k) {
-  return mirror && k > authoredViewCount(N, mirror);
-}
-
-// ../ThreeSprite/src/core/raster/rasterizer.ts
-function imageKey(partId, variantId, view) {
-  return `${partId}/${variantId}/${view}`;
-}
-var SNAP_EPS = 1e-6;
-function snapMatrix(m) {
-  const q = (v) => Math.abs(v) < SNAP_EPS ? 0 : Math.abs(v - 1) < SNAP_EPS ? 1 : Math.abs(v + 1) < SNAP_EPS ? -1 : v;
-  const a = q(m.a), b = q(m.b), c = q(m.c), d = q(m.d);
-  const axisAligned = (a === 0 || a === 1 || a === -1) && (b === 0 || b === 1 || b === -1) && (c === 0 || c === 1 || c === -1) && (d === 0 || d === 1 || d === -1);
-  return {
-    a: axisAligned ? a : m.a,
-    b: axisAligned ? b : m.b,
-    c: axisAligned ? c : m.c,
-    d: axisAligned ? d : m.d,
-    tx: Math.round(m.tx),
-    ty: Math.round(m.ty)
-  };
-}
-function blitNearest(dst, dw, dh, src, m, alphaMul = 1) {
-  const sw = src.width;
-  const sh = src.height;
-  const sp = src.pixels;
-  if (sw <= 0 || sh <= 0 || alphaMul <= 0) return;
-  const cx = [m.tx, m.a * sw + m.tx, m.c * sh + m.tx, m.a * sw + m.c * sh + m.tx];
-  const cy = [m.ty, m.b * sw + m.ty, m.d * sh + m.ty, m.b * sw + m.d * sh + m.ty];
-  const x0 = Math.max(0, Math.floor(Math.min(cx[0], cx[1], cx[2], cx[3])));
-  const x1 = Math.min(dw, Math.ceil(Math.max(cx[0], cx[1], cx[2], cx[3])));
-  const y0 = Math.max(0, Math.floor(Math.min(cy[0], cy[1], cy[2], cy[3])));
-  const y1 = Math.min(dh, Math.ceil(Math.max(cy[0], cy[1], cy[2], cy[3])));
-  if (x0 >= x1 || y0 >= y1) return;
-  const inv = invert(m);
-  if (!inv) return;
-  const ia = inv.a, ib = inv.b, ic = inv.c, id = inv.d, itx = inv.tx, ity = inv.ty;
-  for (let dy = y0; dy < y1; dy++) {
-    const py = dy + 0.5;
-    const rowBase = dy * dw;
-    for (let dx = x0; dx < x1; dx++) {
-      const px = dx + 0.5;
-      const sx = ia * px + ic * py + itx;
-      const sy = ib * px + id * py + ity;
-      const si = Math.floor(sx);
-      const sj = Math.floor(sy);
-      if (si < 0 || sj < 0 || si >= sw || sj >= sh) continue;
-      const s = (sj * sw + si) * 4;
-      let sa = sp[s + 3];
-      if (sa === 0) continue;
-      if (alphaMul !== 1) sa *= alphaMul;
-      const d = (rowBase + dx) * 4;
-      if (sa >= 255) {
-        dst[d] = sp[s];
-        dst[d + 1] = sp[s + 1];
-        dst[d + 2] = sp[s + 2];
-        dst[d + 3] = 255;
-        continue;
-      }
-      const a = sa / 255;
-      const da = dst[d + 3] / 255;
-      const outA = a + da * (1 - a);
-      if (outA <= 0) continue;
-      const wS = a / outA;
-      const wD = da * (1 - a) / outA;
-      dst[d] = sp[s] * wS + dst[d] * wD;
-      dst[d + 1] = sp[s + 1] * wS + dst[d + 1] * wD;
-      dst[d + 2] = sp[s + 2] * wS + dst[d + 2] * wD;
-      dst[d + 3] = outA * 255;
-    }
-  }
-}
-function composeFrame(project, animId, frame, view, opts = {}) {
-  const size = project.canvas.size;
-  const N = project.views.count;
-  const out = opts.out ?? new Uint8ClampedArray(size * size * 4);
-  if (opts.out) out.fill(0);
-  const derived = isDerived(N, project.views.mirror, view);
-  const srcView = derived ? mirrorOf(N, view) : view;
-  const vp = viewProj(project, srcView);
-  const anim = animId ? project.animations[animId] ?? null : null;
-  const pose = evalPose(project.skeleton, anim, frame);
-  const rest = anim ? evalPose(project.skeleton, null, 0) : pose;
-  for (const partId of project.partOrder) {
-    if (opts.only && !opts.only.has(partId)) continue;
-    const part = project.parts[partId];
-    if (!part) continue;
-    const bone = project.skeleton.bones[part.boneId];
-    const world = pose.get(part.boneId);
-    const restWorld = rest.get(part.boneId);
-    if (!bone || !world || !restWorld) continue;
-    const s = samplePart(anim, part, frame);
-    if (!s.visible) continue;
-    const alpha = opts.dim && opts.dim.except !== partId ? opts.dim.alpha : 1;
-    if (part.solids) {
-      const img2 = renderSolids(part.solids, world, vp);
-      blitNearest(out, size, size, img2, IDENTITY, alpha);
-      continue;
-    }
-    const variantId = part.variants[s.variantId] ? s.variantId : part.defaultVariant;
-    const key = imageKey(partId, variantId, srcView);
-    const img = opts.overrides?.get(key) ?? part.variants[variantId]?.images[srcView];
-    if (!img) continue;
-    const rp = projectBone(restWorld, bone.length, vp);
-    const cp = anim ? projectBone(world, bone.length, vp, rp.angle) : rp;
-    const extra = part.skin ? part.skin.bones.filter((id) => id !== part.boneId && project.skeleton.bones[id] && pose.has(id) && rest.has(id)) : [];
-    if (anim && extra.length) {
-      const restProj = [rp];
-      const curProj = [cp];
-      for (const id of extra) {
-        const b = project.skeleton.bones[id];
-        const r = projectBone(rest.get(id), b.length, vp);
-        restProj.push(r);
-        curProj.push(projectBone(pose.get(id), b.length, vp, r.angle));
-      }
-      const restM = partMatrix(rp, rp, part);
-      const grid = buildSkinGrid(img, restM, restProj, part.skin.falloff, part.skin.cell);
-      const posArr = deformGrid(grid, restProj, curProj, part.foreshorten);
-      if (!gridIsAtRest(grid, posArr)) {
-        rasterizeSkinnedGrid(out, size, size, img, grid, posArr, alpha);
-        continue;
-      }
-    }
-    blitNearest(out, size, size, img, snapMatrix(partMatrix(rp, cp, part)), alpha);
-  }
-  if (derived) flipXPixelsInPlace(out, size, size);
-  return out;
-}
-
-// ../ThreeSprite/src/core/io/exportBundle.ts
-function collectFrames(project, animIds, onProgress) {
-  const N = project.views.count;
-  const anims = project.animationOrder.filter((id) => animIds.includes(id)).map((id) => project.animations[id]);
-  const total = anims.reduce((a, x2) => a + x2.frameCount, 0) * N;
-  const animations = anims.map((a) => ({ name: a.name, fps: a.fps, loop: a.loop, frameCount: a.frameCount }));
-  const frames = [];
-  const buffers = [];
-  let done = 0;
-  anims.forEach((anim, ai) => {
-    for (let f = 0; f < anim.frameCount; f++) {
-      for (let v = 1; v <= N; v++) {
-        frames.push({ anim: ai, frame: f, view: v });
-        buffers.push(composeFrame(project, anim.id, f, v));
-        onProgress?.(++done, total);
-      }
-    }
-  });
-  return { animations, frames, buffers };
-}
-
-// ../ThreeSprite/src/domain/palette.ts
+// ../threesprite/src/domain/palette.ts
 var MAX_PALETTE = 256;
 var hex = (...list) => list.map((h) => {
   const v = parseInt(h, 16);
@@ -3680,15 +3555,70 @@ function createPalette(name, colors) {
 }
 var EMPTY_PALETTE = Object.freeze({ id: "", name: "", colors: Object.freeze([]) });
 
-// ../ThreeSprite/src/domain/project.ts
+// ../threesprite/src/domain/views.ts
+var MIN_VIEWS = 1;
+var MAX_VIEWS = 64;
+function clampViewCount(n) {
+  if (!Number.isFinite(n)) return 8;
+  return Math.min(MAX_VIEWS, Math.max(MIN_VIEWS, Math.round(n)));
+}
+function mirrorOf(N, k) {
+  return (N - (k - 1)) % N + 1;
+}
+function authoredViewCount(N, mirror) {
+  return mirror ? Math.floor(N / 2) + 1 : N;
+}
+function authoredViews(N, mirror) {
+  const n = authoredViewCount(N, mirror);
+  const out = [];
+  for (let k = 1; k <= Math.min(n, N); k++) out.push(k);
+  return out;
+}
+function isDerived(N, mirror, k) {
+  return mirror && k > authoredViewCount(N, mirror);
+}
+
+// ../threesprite/src/domain/project.ts
+var MAX_DEPTH_SCALE = 40;
+function clampDepthScale(n) {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(MAX_DEPTH_SCALE, Math.round(n * 10) / 10);
+}
+function partOrderFor(p, view) {
+  return p.partOrderByView[view] ?? p.partOrder;
+}
+function repairPartOrders(p) {
+  const warnings = [];
+  if (!p.partOrderByView || typeof p.partOrderByView !== "object") {
+    p.partOrderByView = {};
+    return warnings;
+  }
+  const authored = new Set(authoredViews(p.views.count, p.views.mirror));
+  for (const key of Object.keys(p.partOrderByView)) {
+    const view = Number(key);
+    const order = p.partOrderByView[view];
+    if (!authored.has(view) || !Array.isArray(order)) {
+      delete p.partOrderByView[view];
+      if (Array.isArray(order)) warnings.push(`dropped the layer order of view ${view}, which is not authored`);
+      continue;
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const kept = order.filter((id) => p.parts[id] && !seen.has(id) && seen.add(id));
+    for (const id of p.partOrder) if (!seen.has(id)) kept.push(id);
+    if (kept.length !== order.length || kept.some((id, i2) => id !== order[i2])) warnings.push(`repaired the layer order of view ${view}`);
+    p.partOrderByView[view] = kept;
+  }
+  return warnings;
+}
 var isVec3 = (v) => !!v && typeof v === "object" && ["r", "u", "f"].every((k) => Number.isFinite(v[k]));
 function validate(p) {
   const errs = [];
   if (p.formatVersion !== FORMAT_VERSION) errs.push(`unsupported formatVersion ${p.formatVersion}`);
-  if (!SPRITE_NAME_RE.test(p.spriteName)) errs.push(`spriteName "${p.spriteName}" must be 4 chars [A-Z0-9]`);
+  if (!SPRITE_NAME_RE.test(p.spriteName)) errs.push(`spriteName "${p.spriteName}" must be 1\u2013${MAX_SPRITE_NAME} characters: letters, digits, _ or -`);
   if (p.canvas.size < MIN_CANVAS || p.canvas.size > MAX_CANVAS) errs.push(`canvas size ${p.canvas.size} out of range`);
   if (p.views.count !== clampViewCount(p.views.count)) errs.push(`views.count ${p.views.count} out of range`);
   if (!Number.isFinite(p.views.elevationDeg)) errs.push("views.elevationDeg invalid");
+  if (p.views.depthScale !== clampDepthScale(p.views.depthScale)) errs.push(`views.depthScale ${p.views.depthScale} out of range`);
   const bones = p.skeleton.bones;
   const boneIds = new Set(Object.keys(bones));
   const seen = /* @__PURE__ */ new Set();
@@ -3717,6 +3647,11 @@ function validate(p) {
   const partIds = Object.keys(p.parts);
   if (partIds.length !== p.partOrder.length || partIds.some((id) => !p.partOrder.includes(id))) errs.push("partOrder is not a permutation of parts");
   const authored = new Set(authoredViews(p.views.count, p.views.mirror));
+  for (const [key, order] of Object.entries(p.partOrderByView)) {
+    const view = Number(key);
+    if (!authored.has(view)) errs.push(`view ${view} has a layer order but is not authored`);
+    else if (!order || order.length !== p.partOrder.length || order.some((id) => !p.parts[id]) || new Set(order).size !== order.length) errs.push(`view ${view} layer order is not a permutation of the parts`);
+  }
   for (const part of Object.values(p.parts)) {
     if (!bones[part.boneId]) errs.push(`part ${part.name} is on missing bone ${part.boneId}`);
     if (!part.variants[part.defaultVariant]) errs.push(`part ${part.name} default variant missing`);
@@ -3797,7 +3732,153 @@ function repairPalettes(p) {
   if (!palettes[p.activePaletteId]) p.activePaletteId = order[0];
 }
 
-// ../ThreeSprite/src/core/io/projectFile.ts
+// ../threesprite/src/core/raster/rasterizer.ts
+function imageKey(partId, variantId, view) {
+  return `${partId}/${variantId}/${view}`;
+}
+var SNAP_EPS = 1e-6;
+function snapMatrix(m) {
+  const q = (v) => Math.abs(v) < SNAP_EPS ? 0 : Math.abs(v - 1) < SNAP_EPS ? 1 : Math.abs(v + 1) < SNAP_EPS ? -1 : v;
+  const a = q(m.a), b = q(m.b), c = q(m.c), d = q(m.d);
+  const axisAligned = (a === 0 || a === 1 || a === -1) && (b === 0 || b === 1 || b === -1) && (c === 0 || c === 1 || c === -1) && (d === 0 || d === 1 || d === -1);
+  return {
+    a: axisAligned ? a : m.a,
+    b: axisAligned ? b : m.b,
+    c: axisAligned ? c : m.c,
+    d: axisAligned ? d : m.d,
+    tx: Math.round(m.tx),
+    ty: Math.round(m.ty)
+  };
+}
+function blitNearest(dst, dw, dh, src, m, alphaMul = 1) {
+  const sw = src.width;
+  const sh = src.height;
+  const sp = src.pixels;
+  if (sw <= 0 || sh <= 0 || alphaMul <= 0) return;
+  const cx = [m.tx, m.a * sw + m.tx, m.c * sh + m.tx, m.a * sw + m.c * sh + m.tx];
+  const cy = [m.ty, m.b * sw + m.ty, m.d * sh + m.ty, m.b * sw + m.d * sh + m.ty];
+  const x0 = Math.max(0, Math.floor(Math.min(cx[0], cx[1], cx[2], cx[3])));
+  const x1 = Math.min(dw, Math.ceil(Math.max(cx[0], cx[1], cx[2], cx[3])));
+  const y0 = Math.max(0, Math.floor(Math.min(cy[0], cy[1], cy[2], cy[3])));
+  const y1 = Math.min(dh, Math.ceil(Math.max(cy[0], cy[1], cy[2], cy[3])));
+  if (x0 >= x1 || y0 >= y1) return;
+  const inv = invert(m);
+  if (!inv) return;
+  const ia = inv.a, ib = inv.b, ic = inv.c, id = inv.d, itx = inv.tx, ity = inv.ty;
+  for (let dy = y0; dy < y1; dy++) {
+    const py = dy + 0.5;
+    const rowBase = dy * dw;
+    for (let dx = x0; dx < x1; dx++) {
+      const px = dx + 0.5;
+      const sx = ia * px + ic * py + itx;
+      const sy = ib * px + id * py + ity;
+      const si = Math.floor(sx);
+      const sj = Math.floor(sy);
+      if (si < 0 || sj < 0 || si >= sw || sj >= sh) continue;
+      const s = (sj * sw + si) * 4;
+      let sa = sp[s + 3];
+      if (sa === 0) continue;
+      if (alphaMul !== 1) sa *= alphaMul;
+      const d = (rowBase + dx) * 4;
+      if (sa >= 255) {
+        dst[d] = sp[s];
+        dst[d + 1] = sp[s + 1];
+        dst[d + 2] = sp[s + 2];
+        dst[d + 3] = 255;
+        continue;
+      }
+      const a = sa / 255;
+      const da = dst[d + 3] / 255;
+      const outA = a + da * (1 - a);
+      if (outA <= 0) continue;
+      const wS = a / outA;
+      const wD = da * (1 - a) / outA;
+      dst[d] = sp[s] * wS + dst[d] * wD;
+      dst[d + 1] = sp[s + 1] * wS + dst[d + 1] * wD;
+      dst[d + 2] = sp[s + 2] * wS + dst[d + 2] * wD;
+      dst[d + 3] = outA * 255;
+    }
+  }
+}
+function composeFrame(project, animId, frame, view, opts = {}) {
+  const size = project.canvas.size;
+  const N = project.views.count;
+  const out = opts.out ?? new Uint8ClampedArray(size * size * 4);
+  if (opts.out) out.fill(0);
+  const derived = isDerived(N, project.views.mirror, view);
+  const srcView = derived ? mirrorOf(N, view) : view;
+  const vp = viewProj(project, srcView);
+  const anim = animId ? project.animations[animId] ?? null : null;
+  const pose = evalPose(project.skeleton, anim, frame);
+  const rest = anim ? evalPose(project.skeleton, null, 0) : pose;
+  for (const partId of partOrderFor(project, srcView)) {
+    if (opts.only && !opts.only.has(partId)) continue;
+    const part = project.parts[partId];
+    if (!part) continue;
+    const bone = project.skeleton.bones[part.boneId];
+    const world = pose.get(part.boneId);
+    const restWorld = rest.get(part.boneId);
+    if (!bone || !world || !restWorld) continue;
+    const s = samplePart(anim, part, frame);
+    if (!s.visible) continue;
+    const alpha = opts.dim && opts.dim.except !== partId ? opts.dim.alpha : 1;
+    if (part.solids) {
+      const img2 = renderSolids(part.solids, world, vp, anim ? restWorld : void 0);
+      blitNearest(out, size, size, img2, IDENTITY, alpha);
+      continue;
+    }
+    const variantId = part.variants[s.variantId] ? s.variantId : part.defaultVariant;
+    const key = imageKey(partId, variantId, srcView);
+    const img = opts.overrides?.get(key) ?? part.variants[variantId]?.images[srcView];
+    if (!img) continue;
+    const rp = projectBone(restWorld, bone.length, vp);
+    const cp = anim ? projectBone(world, bone.length, vp, rp.angle) : rp;
+    const extra = part.skin ? part.skin.bones.filter((id) => id !== part.boneId && project.skeleton.bones[id] && pose.has(id) && rest.has(id)) : [];
+    if (anim && (extra.length || boneDepthTapers(rp, cp, vp))) {
+      const restProj = [rp];
+      const curProj = [cp];
+      for (const id of extra) {
+        const b = project.skeleton.bones[id];
+        const r = projectBone(rest.get(id), b.length, vp);
+        restProj.push(r);
+        curProj.push(projectBone(pose.get(id), b.length, vp, r.angle));
+      }
+      const restM = partMatrix(rp, rp, part);
+      const grid = buildSkinGrid(img, restM, restProj, part.skin?.falloff ?? size, part.skin?.cell ?? 4);
+      const posArr = deformGrid(grid, restProj, curProj, part.foreshorten, vp);
+      if (!gridIsAtRest(grid, posArr)) {
+        rasterizeSkinnedGrid(out, size, size, img, grid, posArr, alpha);
+        continue;
+      }
+    }
+    blitNearest(out, size, size, img, snapMatrix(partMatrix(rp, cp, part, vp)), alpha);
+  }
+  if (derived) flipXPixelsInPlace(out, size, size);
+  return out;
+}
+
+// ../threesprite/src/core/io/exportBundle.ts
+function collectFrames(project, animIds, onProgress) {
+  const N = project.views.count;
+  const anims = project.animationOrder.filter((id) => animIds.includes(id)).map((id) => project.animations[id]);
+  const total = anims.reduce((a, x2) => a + x2.frameCount, 0) * N;
+  const animations = anims.map((a) => ({ name: a.name, fps: a.fps, loop: a.loop, frameCount: a.frameCount }));
+  const frames = [];
+  const buffers = [];
+  let done = 0;
+  anims.forEach((anim, ai) => {
+    for (let f = 0; f < anim.frameCount; f++) {
+      for (let v = 1; v <= N; v++) {
+        frames.push({ anim: ai, frame: f, view: v });
+        buffers.push(composeFrame(project, anim.id, f, v));
+        onProgress?.(++done, total);
+      }
+    }
+  });
+  return { animations, frames, buffers };
+}
+
+// ../threesprite/src/core/io/projectFile.ts
 function decodeProject(bytes) {
   let entries;
   try {
@@ -3837,6 +3918,13 @@ function decodeProject(bytes) {
     }
   }
   if (raw.views.elevationDeg === void 0) raw.views.elevationDeg = 0;
+  if (raw.views.depthScale === void 0) {
+    const d = raw.views.cameraDistance;
+    raw.views.depthScale = d && d > 0 ? clampDepthScale(1 / d) : 0;
+    delete raw.views.cameraDistance;
+  }
+  if (!raw.partOrderByView) raw.partOrderByView = {};
+  warnings.push(...repairPartOrders(raw));
   const problems = validate(raw);
   if (problems.length) warnings.push(...problems.map((p) => `Repairing: ${p}`));
   repairPalettes(raw);
@@ -3925,7 +4013,7 @@ function imageFromPng(bytes) {
   return { width: d.width, height: d.height, pixels: out };
 }
 
-// ../ThreeSprite/runtime/src/angles.ts
+// ../threesprite/runtime/src/angles.ts
 var TAU = Math.PI * 2;
 var mod1 = (turns) => (turns % 1 + 1) % 1;
 function relativeTurns(bearingTurns, facingTurns) {
@@ -3939,7 +4027,7 @@ function viewAngleTurns(count, view) {
   return (view - 1) / Math.max(1, Math.round(count));
 }
 
-// ../ThreeSprite/runtime/src/manifest.ts
+// ../threesprite/runtime/src/manifest.ts
 var ManifestError = class extends Error {
   constructor(message) {
     super(`ThreeSprite manifest: ${message}`);
@@ -3985,7 +4073,7 @@ function parseManifest(input) {
   return m;
 }
 
-// ../ThreeSprite/runtime/src/playback.ts
+// ../threesprite/runtime/src/playback.ts
 function frameAt(timing, seconds) {
   const n = Math.max(1, Math.floor(timing.frameCount));
   if (n <= 1 || !(timing.fps > 0) || !(seconds > 0)) return 0;
@@ -4002,7 +4090,7 @@ function isFinished(timing, seconds) {
   return d > 0 && seconds >= d;
 }
 
-// ../ThreeSprite/runtime/src/sheet.ts
+// ../threesprite/runtime/src/sheet.ts
 var TSpriteSheet = class _TSpriteSheet {
   constructor(manifest) {
     this.manifest = manifest;
@@ -4101,7 +4189,7 @@ var TSpriteSheet = class _TSpriteSheet {
   }
 };
 
-// ../ThreeSprite/runtime/src/tsprite.ts
+// ../threesprite/runtime/src/tsprite.ts
 function loadTsprite(bytes, options = {}) {
   const { project, warnings } = decodeProject(bytes);
   const wanted = options.animations;

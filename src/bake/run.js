@@ -15,7 +15,7 @@
 /** The studio's own bakers. A plugin's are added from its plugin.json (registry.bakersFor). */
 export const BUILTIN_BAKERS = [
   { id: 'texproj', version: '2', kinds: ['file:texture'], url: new URL('./texproj.js', import.meta.url).href },
-  { id: 'tsprite', version: '1', kinds: ['file:tsprite'], url: new URL('./tsprite.js', import.meta.url).href }
+  { id: 'tsprite', version: '2', kinds: ['file:tsprite'], url: new URL('./tsprite.js', import.meta.url).href }
 ]
 
 export async function sha256 (bytes) {

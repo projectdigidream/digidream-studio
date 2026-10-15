@@ -10,7 +10,9 @@
 //
 import { loadTsprite } from '../../vendor/tsprite.js'
 
-export const version = '1'
+// 2: ThreeSprite's runtime with each view's own layer order (partOrderByView);
+// sheets baked by 1 drew every view in the one order, so they are baked again.
+export const version = '2'
 
 export async function bake ({ key, bytes }) {
   const r = loadTsprite(bytes)
