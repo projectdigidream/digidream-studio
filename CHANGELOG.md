@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- An edit in the DAW plugin made before its audio had started did not mark
+  the editor "changed" (no draft, and the plugin test waited for it for
+  good): the DAW now reports edits at once (DigidreamSynth, Unreleased).
+
 ### Added
 
 - **What a sync plugin needs** (docs/PLUGINS.md, "A plugin that keeps modules
