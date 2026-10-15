@@ -27,6 +27,13 @@ export class FakeGitHub {
     this.calls = []
     this.beforeMove = null // a test's hook: runs before a branch moves (another device pushing first)
     this.offline = false
+    // Misbehaving as GitHub does: a tree of more entries than this times out
+    // ("Sorry, your request timed out..."), the next N requests answer 502, and
+    // the next N writes hit the secondary rate limit (403 with Retry-After).
+    this.treeLimit = Infinity
+    this.fail502 = 0
+    this.limited = 0
+    this.treePosts = []
     if (!empty) this.writeFiles('main', { 'README.md': Buffer.from('# modules\n') }, 'first')
   }
 
@@ -143,6 +150,8 @@ export class FakeGitHub {
     const method = init.method ?? 'GET'
     const body = init.body ? JSON.parse(init.body) : null
     this.calls.push(`${method} ${u.pathname}`)
+    if (this.fail502 > 0) { this.fail502--; return json(502, { message: 'Server Error' }) }
+    if (this.limited > 0 && method !== 'GET') { this.limited--; return json(403, { message: 'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.' }, { 'retry-after': '7' }) }
     const auth = init.headers?.Authorization ?? init.headers?.authorization
     if (auth !== `Bearer ${this.token}`) return json(401, { message: 'Bad credentials' })
     if (u.pathname === '/user') return json(200, { login: this.login })
@@ -191,9 +200,15 @@ export class FakeGitHub {
       return json(201, { sha: this.putBlob(Buffer.from(body.content, body.encoding === 'base64' ? 'base64' : 'utf8')) })
     }
     if (path === '/git/trees' && method === 'POST') {
+      this.treePosts.push({ base: !!body.base_tree, entries: body.tree.length })
+      if (body.tree.length > this.treeLimit) return json(502, { message: 'Sorry, your request timed out. It\'s likely that your input was too large to process. Consider building the tree incrementally, or building the commits you need in a local clone of the repository and then pushing them to GitHub.' })
       const flat = body.base_tree ? this.flat(body.base_tree) : {}
       for (const e of body.tree) {
-        if (e.sha === null) delete flat[e.path]
+        if (e.type === 'tree') {
+          // A folder put whole: what was under that path goes, its files come.
+          for (const k of Object.keys(flat)) if (k.startsWith(e.path + '/')) delete flat[k]
+          if (e.sha) for (const [k, v] of Object.entries(this.flat(e.sha))) flat[`${e.path}/${k}`] = v
+        } else if (e.sha === null) delete flat[e.path]
         else if (!this.blobs.has(e.sha)) return json(422, { message: `tree.sha ${e.sha} is not a valid blob` })
         else flat[e.path] = e.sha
       }
@@ -228,8 +243,8 @@ export class FakeGitHub {
   }
 }
 
-function json (status, body) {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+function json (status, body, headers = {}) {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } })
 }
 
 /**

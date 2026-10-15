@@ -37,7 +37,7 @@ const same = (a, b) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b))
     `three-way: changed on one side takes that side, deletions too, both sides is a conflict (${JSON.stringify(p)})`)
   const k = plan({ d: 'y' }, { d: 'z' }, { d: '4' }, { d: { side: 'remote', remote: 'z' } })
   const stale = plan({ d: 'y' }, { d: 'w' }, { d: '4' }, { d: { side: 'remote', remote: 'z' } })
-  check(same(k.pull, ['d']) && stale.conflicts.length === 1, 'a choice settles its conflict, but not when GitHub moved on since it was made')
+  check(same(k.pull, ['d']) && same(stale.pull, ['d']), 'a choice settles its conflict, even when GitHub moved on since it was made')
   check(plan({ a: '1' }, { a: '1' }, {}).pull.length + plan({ a: '1' }, { a: '1' }, {}).push.length === 0, 'the same file on both sides with no base is nothing to do')
 }
 
@@ -148,10 +148,10 @@ await sync(B, 'cave')
   // GitHub moves on before the choice is used: the choice no longer counts.
   A.studio.edit('cave', { 'maps/map01.studio.json': 'mac a third time' })
   await sync(A, 'cave')
-  const r = await sync(B, 'cave', { keep: { [c[0].path]: { side: 'local', remote: c[0].remote } } })
-  check(r.result === 'conflict', 'a choice made before GitHub moved on is asked again')
-  const r2 = await sync(B, 'cave', { keep: { [r.conflicts[0].path]: { side: 'local', remote: r.conflicts[0].remote } } })
-  check(r2.result === 'synced' && fake.read('main', 'cave')['maps/map01.studio.json'] === 'phone again', 'kept mine: the phone\'s map01 goes up over the Mac\'s')
+  const r2 = await sync(B, 'cave', { keep: { [c[0].path]: { side: 'local' } } })
+  check(r2.result === 'synced' && fake.read('main', 'cave')['maps/map01.studio.json'] === 'phone again',
+    'kept mine, chosen before the Mac pushed again: the choice holds, the phone\'s map01 goes up (the Mac\'s newer one is in history)')
+  check(fake.log().some((l) => l.includes('cave:') && l.includes('Mac')) && fake.log().length > 3, '...and the Mac\'s versions are still commits in the history')
   await sync(A, 'cave')
   check(A.studio.text('cave')['maps/map01.studio.json'] === 'phone again', '...and the Mac takes it (its version is in GitHub\'s history)')
 }
@@ -225,6 +225,58 @@ B.studio.beforeWrite = (s) => s.edit('cave', { 'maps/map05.studio.json': 'typed 
   await syncModule({ id: 'cave', studio: s2, gh: g, store: new MemStore(), get: true, progress: (p) => seen2.push(p) })
   const down = seen2.filter((p) => p.step === 'downloading')
   check(down.length === 4 && down.at(-1).done === 3 && seen2.some((p) => p.step === 'saving'), `a pull says downloading of 4, then saving (${seen2.map((p) => p.step).join(' ')})`)
+}
+
+// BIG PUSHES (GitHub: "Sorry, your request timed out... build the tree
+// incrementally"): the module's folder is built on its own, in batches, a
+// batch that times out halved; brief failures and the secondary rate limit are
+// waited out.
+{
+  const f4 = new FakeGitHub()
+  const g = new GitHub({ token: 'tok', repo: 'me/modules', fetch: f4.fetch })
+  const waits = []
+  g.sleep = async (ms) => { waits.push(ms) }
+  const s1 = new FakeStudio()
+  const maps = {}
+  for (let i = 0; i < 230; i++) maps[`m${String(i).padStart(3, '0')}`] = `map ${i}`
+  s1.put('huge', mod('huge', maps))
+  f4.writeFiles('main', Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`other/f${i}.txt`, `x${i}`])), 'another module, big')
+  f4.treeLimit = 60
+  const seen = []
+  const storeA = new MemStore()
+  const r = await syncModule({ id: 'huge', studio: s1, gh: g, store: storeA, progress: (p) => seen.push(p) })
+  const up = f4.read('main', 'huge')
+  check(r.result === 'synced' && Object.keys(up).length === 231 && up['maps/m229.studio.json'] === 'map 229' && Object.keys(f4.read('main', 'other')).length === 300,
+    `231 files where GitHub times out over 60 entries a tree: synced, the other module untouched (${f4.treePosts.length} tree requests)`)
+  check(f4.treePosts.every((t) => t.entries <= 100) && f4.treePosts.some((t) => t.entries > 60) && f4.treePosts.filter((t) => t.entries <= 60).length >= 4,
+    `batches of 100, halved after a timeout (${f4.treePosts.map((t) => t.entries).join(',')})`)
+  check(f4.treePosts.at(-1).entries === 1, 'the root tree gets the folder as one entry')
+  check(seen.some((p) => p.step === 'committing' && p.total === 231), 'the batches are counted for the bar')
+  const again = await syncModule({ id: 'huge', studio: s1, gh: g, store: storeA })
+  check(again.result === 'synced' && again.pushed.length === 0, 'and the next sync finds nothing to do')
+  s1.edit('huge', { 'maps/m007.studio.json': 'changed', 'maps/m100.studio.json': null })
+  f4.fail502 = 2
+  f4.limited = 1
+  const r2 = await syncModule({ id: 'huge', studio: s1, gh: g, store: storeA })
+  const up2 = f4.read('main', 'huge')
+  check(r2.result === 'synced' && up2['maps/m007.studio.json'] === 'changed' && !('maps/m100.studio.json' in up2) && f4.limited === 0,
+    'two 502s and a rate limit along the way do not fail the sync')
+  check(waits.includes(7000) && waits.includes(1000) && waits.includes(3000), `waited 1 s, 3 s for the 502s and GitHub's 7 s for the rate limit (${waits})`)
+  const fresh = new FakeGitHub()
+  const g2 = new GitHub({ token: 'tok', repo: 'me/modules', fetch: fresh.fetch })
+  g2.sleep = async () => {}
+  fresh.fail502 = 9
+  let e = null
+  try { await g2.user() } catch (x) { e = x }
+  check(e?.status === 502, 'a GitHub that stays down is reported, not waited on for ever')
+  // A request that never answers (a stalled connection): given up, tried again.
+  fresh.fail502 = 0
+  let stall = 1
+  const g3 = new GitHub({ token: 'tok', repo: 'me/modules', fetch: (u, i) => (stall-- > 0 ? new Promise(() => {}) : fresh.fetch(u, i)) })
+  g3.sleep = async () => {}
+  g3.timeout = 50
+  const who = await g3.user()
+  check(who.login === 'me', 'a request that never answers is given up after the time limit and tried again')
 }
 
 // REPOSITORIES: listed (only ones the token can write to), and made.

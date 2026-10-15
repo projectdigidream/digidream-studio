@@ -32,14 +32,17 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new'
 const page = await browser.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
-await page.setRequestInterception(true)
-page.on('request', async (req) => {
+const intercept = async (pg) => {
+await pg.setRequestInterception(true)
+pg.on('request', async (req) => {
   const u = req.url()
   if (!u.startsWith('https://api.github.com/')) return req.continue()
   if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: CORS })
   const r = await fake.handle(u, { method: req.method(), headers: req.headers().authorization ? { Authorization: req.headers().authorization } : {}, body: req.postData() })
   req.respond({ status: r.status, headers: { ...CORS, 'Content-Type': 'application/json' }, body: await r.text() })
 })
+}
+await intercept(page)
 
 await page.goto(URL_)
 await page.waitForFunction(() => window.__studio?.router?.current && window.__studio.rec, { timeout: 60000 })
@@ -152,6 +155,50 @@ check(await until(() => /Renamed on this device/.test(fake.read('main', id)['mod
   check(await until(() => S(() => window.__studio.module.name === 'GitHub wins')), 'kept GitHub\'s: the module takes it')
   const snaps = await S(async () => (await window.__studio.snaps.list(window.__studio.rec.id)).map((s) => s.reason))
   check(snaps.some((l) => /before sync from GitHub sync/.test(l)), `this device's version is in the Snapshots (${snaps.slice(0, 3).join('; ')})`)
+}
+
+// A MIXED CHOICE (the map from this device, the module's settings from
+// GitHub), first with the module open in a second tab too. GitHub's files are
+// not written into a module another tab has open (that tab would save its old
+// copy back over them); the badge says why, and closing the tab lets it through.
+{
+  const page2 = await browser.newPage()
+  page2.on('pageerror', (e) => errors.push(`tab 2: ${e.message}`))
+  await intercept(page2)
+  await page2.goto(URL_)
+  await page2.waitForFunction(() => window.__studio?.rec && document.querySelector('iframe[data-service="github/sync"]'), { timeout: 60000 })
+  await settle(1500)
+  const files = fake.read('main', id)
+  const map = Object.keys(files).find((p) => p.startsWith('maps/'))
+  const m = JSON.parse(files['module.studio.json']); m.name = 'Mixed, from GitHub'
+  const d = JSON.parse(files[map]); d.remoteMark = 1
+  fake.writeFiles('main', { [`${id}/module.studio.json`]: JSON.stringify(m, null, 2) + '\n', [`${id}/${map}`]: JSON.stringify(d, null, 2) + '\n' }, `${id}: elsewhere again`)
+  await S(() => { const St = window.__studio; St.module.name = 'Mixed, from here'; St.doc.localMark = 1; St.moduleChanged() })
+  await settle(900)
+  await click(await sec(), `[data-module="${id}"] [data-action="sync"]`)
+  const shown = await until(async () => { const t = await (await sec()).$$eval('.conflict .what', (els) => els.map((e) => e.title)); return t.length === 2 ? t : null })
+  check(!!shown && shown.includes(map) && shown.includes('module.studio.json'), `both files are asked about (${shown})`)
+  check(JSON.parse(fake.read('main', id)['module.studio.json']).name === 'Mixed, from GitHub', 'and GitHub\'s change was not pushed over by either tab')
+  await (await sec()).evaluate((map) => {
+    for (const row of document.querySelectorAll('.conflict .file')) row.querySelectorAll('input[type=radio]')[row.querySelector('.what').title === map ? 0 : 1].click()
+  }, map)
+  await click(await sec(), '[data-action="resolve"]')
+  const said = await until(async () => (await sec()).evaluate((m) => (document.querySelector(`[data-conflict="${m}"][data-applying]`) ? 'applying' : null), id), 5000)
+  check(said === 'applying', '"Keep these" says it is applying the choice')
+  const blocked = await until(() => S(() => /another tab/.test(window.__studio.shell.moduleStatus?.text ?? '') && window.__studio.shell.moduleStatus.text))
+  check(!!blocked && await S(() => window.__studio.module.name) === 'Mixed, from here', `open in two tabs, nothing is written into it, and the badge says why (${blocked})`)
+  check(await until(async () => (await sec()).evaluate((m) => !document.querySelector(`[data-conflict="${m}"][data-applying]`) && !!document.querySelector(`[data-conflict="${m}"]`), id)), 'the choice can be made again')
+  await page2.close()
+  await settle(500)
+  await (await sec()).evaluate((map) => {
+    for (const row of document.querySelectorAll('.conflict .file')) row.querySelectorAll('input[type=radio]')[row.querySelector('.what').title === map ? 0 : 1].click()
+  }, map)
+  await click(await sec(), '[data-action="resolve"]')
+  check(await until(() => S(() => window.__studio.module.name === 'Mixed, from GitHub' && window.__studio.doc.localMark === 1)), 'the other tab closed: the module takes GitHub\'s settings and keeps this device\'s map')
+  check(await until(() => JSON.parse(fake.read('main', id)[map]).localMark === 1 && !('remoteMark' in JSON.parse(fake.read('main', id)[map]))), 'GitHub takes this device\'s map')
+  await settle(5000)
+  const after = await (await sec()).evaluate((m) => !!document.querySelector(`[data-conflict="${m}"]`), id)
+  check(!after && await S(() => window.__studio.shell.moduleStatus?.level === 'ok'), 'and it stays settled')
 }
 
 // A MODULE ONLY ON GITHUB: Get.

@@ -13,7 +13,7 @@
 import { inSuite, connectSuite } from './suite-sdk.js'
 import { GitHub, GitHubError, isOffline } from './github.js'
 import { syncModule } from './sync.js'
-import { CHANNEL, getConfig, setConfig, modules, status, deviceName } from './state.js'
+import { CHANNEL, TAB, getConfig, setConfig, modules, status, deviceName } from './state.js'
 
 const SAVED_DELAY = 4000
 const POLL = 120000
@@ -25,6 +25,30 @@ let openId = null
 
 const changed = (id = null) => chan.postMessage({ t: 'changed', id })
 
+// THE MODULE OPEN IN THIS TAB, marked for the other tabs (a shared Web Lock
+// per module, held while it is open). Writing GitHub's files into a module
+// another tab has open would leave that tab with the old one in memory, and
+// its next save would put the old one back -- and the sync would then send
+// that to GitHub over the change it had just taken.
+const openLock = (id) => `dnp-github-open:${id}`
+let markedFor = null
+let unmark = null
+function markOpen (id) {
+  markedFor = id
+  unmark?.(); unmark = null
+  if (!id || !globalThis.navigator?.locks) return
+  navigator.locks.request(openLock(id), { mode: 'shared' }, () => (markedFor !== id ? undefined : new Promise((resolve) => { unmark = resolve })))
+}
+
+/** Is the module open in another tab of the studio in this browser? */
+async function openElsewhere (id) {
+  if (!globalThis.navigator?.locks?.query) return false
+  const { held = [] } = await navigator.locks.query()
+  return held.filter((l) => l.name === openLock(id)).length > (markedFor === id ? 1 : 0)
+}
+
+class OpenElsewhere extends Error {}
+
 // The studio, as sync.js wants it.
 const studio = {
   async files (id) {
@@ -33,7 +57,10 @@ const studio = {
       throw e
     }
   },
-  write: (id, baseRev, files) => api.query('module-write', { id, baseRev, files }, { timeout: 60000 })
+  async write (id, baseRev, files) {
+    if (await openElsewhere(id)) throw new OpenElsewhere()
+    return api.query('module-write', { id, baseRev, files }, { timeout: 60000 })
+  }
 }
 
 const tracked = (id) => !!cfg?.tracked?.includes(id)
@@ -53,7 +80,7 @@ let working = false
 // current run of modules is.
 const steps = new Map() // id -> { step, done, total }
 const batch = { done: 0, total: 0 }
-const tell = () => chan.postMessage({ t: 'progress', steps: Object.fromEntries(steps), batch, waiting: [...queue.keys()] })
+const tell = () => chan.postMessage({ t: 'progress', tab: TAB, steps: Object.fromEntries(steps), batch, waiting: [...queue.keys()] })
 
 function schedule (id, opts = {}) {
   if (!cfg || !id) return
@@ -70,7 +97,10 @@ async function work () {
     while (queue.size) {
       const [id, opts] = queue.entries().next().value
       queue.delete(id)
-      await syncOne(id, opts)
+      // One sync at a time across every tab of the studio in this browser: two
+      // services on one module and one store would undo each other's work.
+      if (globalThis.navigator?.locks) await navigator.locks.request('dnp-github-sync', () => syncOne(id, opts))
+      else await syncOne(id, opts)
       batch.done++
       tell()
     }
@@ -81,9 +111,15 @@ async function work () {
   }
 }
 
-async function syncOne (id, { get = false, keep = {} } = {}) {
+async function syncOne (id, { get = false, keep = {}, asked = false } = {}) {
   if (!cfg) return
+  // Open in another tab and not here: that tab's service syncs it.
+  if (markedFor !== id && await openElsewhere(id)) {
+    if (asked) await say(id, 'open in another tab: it syncs there', 'info')
+    return
+  }
   const gh = new GitHub({ token: cfg.token, repo: cfg.repo, branch: cfg.branch })
+  gh.onWait = ({ seconds }) => { steps.set(id, { step: `GitHub busy, ${seconds}s` }); tell() }
   await say(id, 'syncing…', 'info')
   try {
     let r
@@ -102,7 +138,8 @@ async function syncOne (id, { get = false, keep = {} } = {}) {
       await say(id, 'gone from GitHub; this device keeps its copy', 'warn')
     }
   } catch (e) {
-    if (isOffline(e)) await say(id, 'offline; it will sync when GitHub can be reached', 'info')
+    if (e instanceof OpenElsewhere) await say(id, 'open in another tab too: close one to sync it', 'warn')
+    else if (isOffline(e)) await say(id, 'offline; it will sync when GitHub can be reached', 'info')
     else await say(id, `sync failed: ${e.message}`, 'error', { error: e instanceof GitHubError ? e.status : 0 })
   }
 }
@@ -137,10 +174,11 @@ if (inSuite()) {
   api = await connectSuite({
     async onServiceInit (m) {
       openId = m.module
+      markOpen(m.module)
       await start()
     },
     onEvent (name, m) {
-      if (name === 'module-opened') { openId = m.id; schedule(m.id) }
+      if (name === 'module-opened') { openId = m.id; markOpen(m.id); schedule(m.id) }
       else if (name === 'module-saved') {
         clearTimeout(savedTimers.get(m.id))
         savedTimers.set(m.id, setTimeout(() => { savedTimers.delete(m.id); schedule(m.id) }, SAVED_DELAY))
@@ -154,6 +192,8 @@ if (inSuite()) {
 
 chan.onmessage = async (e) => {
   const m = e.data ?? {}
+  // What a Sync page asks is for the service in its own tab.
+  if (['ping', 'sync', 'forget'].includes(m.t) && m.tab && m.tab !== TAB) return
   if (m.t === 'ping') { chan.postMessage({ t: 'pong', running: !!api, busy: working }); tell() }
   else if (m.t === 'config') {
     // Settings changed on the page: connected, disconnected, modules ticked.
@@ -162,7 +202,7 @@ chan.onmessage = async (e) => {
     for (const id of was?.tracked ?? []) if (!tracked(id)) api?.status({ module: id, text: '' })
     if (cfg) syncAll()
   } else if (m.t === 'sync') {
-    if (m.id) schedule(m.id, { get: !!m.get, keep: m.keep ?? {} })
+    if (m.id) schedule(m.id, { get: !!m.get, keep: m.keep ?? {}, asked: true })
     else syncAll()
   } else if (m.t === 'forget') {
     // Sync this module as if for the first time (after it was removed from GitHub).

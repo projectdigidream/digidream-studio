@@ -26,8 +26,10 @@ export async function shas (files) {
 
 /**
  * Local, remote and base, each { path: sha } -> what to do with each path.
- * `keep` settles conflicts: { path: { side: 'local'|'remote', remote: sha } };
- * a choice made against a remote that has moved on since does not count.
+ * `keep` settles conflicts: { path: { side: 'local'|'remote' } }. A choice
+ * holds even if GitHub moved on after it was made: asking again only showed the
+ * same question (a device that pushes as it saves moves it on all the time),
+ * and whichever side loses is kept -- in GitHub's history or in a snapshot.
  */
 export function plan (L, R, B, keep = {}) {
   const pull = []
@@ -41,7 +43,7 @@ export function plan (L, R, B, keep = {}) {
     if (l === b) { pull.push(p); continue }
     if (r === b) { push.push(p); continue }
     const k = keep[p]
-    if (k && (k.remote ?? null) === r) (k.side === 'remote' ? pull : push).push(p)
+    if (k?.side === 'remote' || k?.side === 'local') (k.side === 'remote' ? pull : push).push(p)
     else conflicts.push({ path: p, local: l, remote: r })
   }
   return { pull, push, conflicts }
@@ -127,15 +129,17 @@ export async function syncModule ({ id, studio, gh, store, device = 'a device', 
           progress({ step: 'uploading', done: sent++, total: sending.length })
           const sha = await gh.createBlob(bytes.get(p))
           if (sha !== L[p]) throw new GitHubError(0, `GitHub stored ${p} as ${sha}, not ${L[p]}`, '/git/blobs')
-          entries.push({ path: `${id}/${p}`, sha })
-        } else entries.push({ path: `${id}/${p}`, sha: null })
+          entries.push({ path: p, sha })
+        } else entries.push({ path: p, sha: null })
       }
       progress({ step: 'committing' })
-      const tree = await gh.createTree(head.tree, entries)
+      const { root: tree, dir: newDir } = await gh.putDir(head.tree, id, entries, {
+        progress: ({ done, total }) => progress({ step: 'committing', ...(total > 100 ? { done, total } : {}) })
+      })
       const message = `${id}: ${summary(push)}\n\nFrom the studio on ${device}.`
       const commit = await gh.createCommit(message, tree, [head.commit])
       if (!(await gh.moveBranch(commit))) continue
-      base = { id, files: { ...L }, dir: await gh.dir(tree, id), commit, rev: local.rev, conflicts: null, synced: now() }
+      base = { id, files: { ...L }, dir: newDir, commit, rev: local.rev, conflicts: null, synced: now() }
       await store.put(id, base)
       for (const p of push) pushed.add(p)
       return { result: 'synced', state: base, pulled: [...pulled], pushed: [...pushed] }

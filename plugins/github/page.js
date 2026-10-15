@@ -9,13 +9,15 @@ import { inSuite, connectSuite } from './suite-sdk.js'
 import { wearSkin } from './suite-skin.js'
 import { GitHub } from './github.js'
 import { remoteModules } from './sync.js'
-import { CHANNEL, getConfig, setConfig, modules, status, deviceName } from './state.js'
+import { CHANNEL, TAB, getConfig, setConfig, modules, status, deviceName } from './state.js'
 
 const NEW_REPO = 'https://github.com/new?name=digidream-modules&visibility=private'
 const NEW_TOKEN = 'https://github.com/settings/personal-access-tokens/new'
 
 const app = document.getElementById('app')
 const chan = new BroadcastChannel(CHANNEL)
+// Asks for this tab's service (sync, forget, ping); settings changes go to all.
+const ask = (msg) => chan.postMessage({ ...msg, tab: TAB })
 let api = null
 let draft = { token: '', device: deviceName() }
 let connectError = ''
@@ -27,6 +29,10 @@ let remoteError = ''
 const CHOICES = 'dnp.github.choices'
 const choices = new Map((() => { try { return Object.entries(JSON.parse(sessionStorage.getItem(CHOICES) ?? '{}')) } catch { return [] } })())
 const keepChoices = () => { try { sessionStorage.setItem(CHOICES, JSON.stringify(Object.fromEntries(choices))) } catch {} }
+// Module id -> the conflicts a choice was sent for (same survival reason).
+const APPLYING = 'dnp.github.applying'
+const applying = new Map((() => { try { return Object.entries(JSON.parse(sessionStorage.getItem(APPLYING) ?? '{}')) } catch { return [] } })())
+const keepApplying = () => { try { sessionStorage.setItem(APPLYING, JSON.stringify(Object.fromEntries(applying))) } catch {} }
 
 // ------------------------------------------------------------ bits of DOM
 
@@ -228,7 +234,7 @@ async function connectedView (cfg) {
         h('div', { class: 'name' }, [h('button', { class: 'link', onclick: () => open(repoUrl), text: cfg.repo }), ` · ${cfg.branch}`]),
         h('div', { class: 'dim', text: `Signed in as ${cfg.login}. This device: ${cfg.device}.${cfg.private === false ? ' The repository is public: anyone can read these modules.' : ''}` })
       ]),
-      h('button', { class: 'primary', 'data-action': 'sync-all', onclick: () => { chan.postMessage({ t: 'sync' }); refreshRemote() }, text: 'Sync now' }),
+      h('button', { class: 'primary', 'data-action': 'sync-all', onclick: () => { ask({ t: 'sync' }); refreshRemote() }, text: 'Sync now' }),
       h('button', { 'data-action': 'change-repo', onclick: () => { openPicker(cfg.token, cfg.login, { back: 'connected' }); render() }, text: 'Change repository' }),
       h('button', { 'data-action': 'disconnect', onclick: disconnect, text: 'Disconnect' })
     ]),
@@ -248,7 +254,7 @@ async function connectedView (cfg) {
         : elsewhere.length ? h('div', { class: 'mods' }, elsewhere.map((m) => h('div', { class: 'mod', 'data-remote': m.id }, [
           h('div', { class: 'row' }, [
             h('div', { class: 'grow' }, [h('div', { class: 'name', text: m.id }), said[m.id] && said[m.id].text !== 'not on this device' ? h('div', { class: `state ${said[m.id].level}` }, [h('span', { class: 'dot' }), said[m.id].text]) : null]),
-            h('button', { 'data-action': 'get', onclick: () => chan.postMessage({ t: 'sync', id: m.id, get: true }), text: 'Get' })
+            h('button', { 'data-action': 'get', onclick: () => ask({ t: 'sync', id: m.id, get: true }), text: 'Get' })
           ])
         ])))
           : h('p', { class: 'dim', text: 'Nothing: every module on GitHub is here too.' })
@@ -264,14 +270,14 @@ function moduleRow (m, cfg, st, said) {
       on && said ? h('div', { class: `state ${said.level}`, 'data-state': said.level }, [h('span', { class: 'dot' }), said.note && said.level === 'ok' ? said.note : said.text, said.level === 'ok' && st?.synced ? h('span', { class: 'dim', text: ` · ${ago(st.synced)}` }) : null])
         : h('div', { class: 'state dim', text: on ? 'waiting for its first sync' : 'not synced' })
     ]),
-    on ? h('button', { 'data-action': 'sync', onclick: () => chan.postMessage({ t: 'sync', id: m.id }), text: 'Sync' }) : null,
+    on ? h('button', { 'data-action': 'sync', onclick: () => ask({ t: 'sync', id: m.id }), text: 'Sync' }) : null,
     h('label', { class: 'switch' }, [h('input', { type: 'checkbox', checked: on, 'data-track': m.id, onchange: (e) => track(m.id, e.target.checked) }), 'sync'])
   ])]
-  if (on && st?.conflicts?.length) kids.push(conflictBox(m.id, st.conflicts))
+  if (on && st?.conflicts?.length) kids.push(conflictBox(m.id, st.conflicts, said))
   if (on && said?.text?.startsWith('gone from GitHub')) {
     kids.push(h('div', { class: 'row' }, [
       h('span', { class: 'dim grow', text: 'It was removed from the repository after it was synced. Upload this device\'s copy again, or stop syncing it.' }),
-      h('button', { 'data-action': 'reupload', onclick: () => chan.postMessage({ t: 'forget', id: m.id }), text: 'Upload again' })
+      h('button', { 'data-action': 'reupload', onclick: () => ask({ t: 'forget', id: m.id }), text: 'Upload again' })
     ]))
   }
   return h('div', { class: 'mod', 'data-module': m.id }, kids)
@@ -285,7 +291,18 @@ function label (path) {
   return path.replace(/^(assets|sources)\//, '')
 }
 
-function conflictBox (id, conflicts) {
+function conflictBox (id, conflicts, said) {
+  // Chosen and sent: said so until the service says how it went -- anything
+  // it says after the click, other than that it is at it.
+  const sent = applying.get(id)
+  const pending = sent && sent.paths === conflicts.map((c) => c.path).join('\n') && (!said || said.at < sent.at || said.text === 'syncing…')
+  if (pending) {
+    return h('div', { class: 'conflict', 'data-conflict': id, 'data-applying': '' }, [h('div', { class: 'row' }, [
+      h('p', { class: 'grow', text: 'Applying your choice…' }),
+      h('button', { class: 'link', onclick: () => { applying.delete(id); keepApplying(); render() }, text: 'choose again' })
+    ])])
+  }
+  if (applying.delete(id)) keepApplying()
   const pick = choices.get(id) ?? {}
   choices.set(id, pick)
   const set = (side) => { for (const c of conflicts) pick[c.path] = side; keepChoices(); render() }
@@ -309,10 +326,13 @@ function conflictBox (id, conflicts) {
         'data-action': 'resolve',
         disabled: !ready,
         onclick: () => {
-          const keep = Object.fromEntries(conflicts.map((c) => [c.path, { side: pick[c.path], remote: c.remote }]))
+          const keep = Object.fromEntries(conflicts.map((c) => [c.path, { side: pick[c.path] }]))
           choices.delete(id)
           keepChoices()
-          chan.postMessage({ t: 'sync', id, keep })
+          applying.set(id, { paths: conflicts.map((c) => c.path).join('\n'), at: Date.now() })
+          keepApplying()
+          ask({ t: 'sync', id, keep })
+          render()
         },
         text: 'Keep these'
       })
@@ -421,6 +441,7 @@ let soon = null
 const renderSoon = () => { clearTimeout(soon); soon = setTimeout(render, 120) }
 
 chan.onmessage = (e) => {
+  if (e.data?.t === 'progress' && e.data.tab && e.data.tab !== TAB) return
   if (e.data?.t === 'progress') { prog = { steps: e.data.steps ?? {}, batch: e.data.batch ?? { done: 0, total: 0 }, waiting: e.data.waiting ?? [] }; paintProgress(); return }
   if (e.data?.t !== 'changed') return
   if (quiet() && !e.data.id) return render()
@@ -433,7 +454,7 @@ chan.onmessage = (e) => {
 const fonts = { '--bg': 'color.bg.app', '--panel': 'color.bg.panel', '--raised': 'color.bg.raised', '--line': 'color.line.main', '--fg': 'color.text.primary', '--dim': 'color.text.secondary', '--accent': 'color.accent', '--on-accent': 'color.text.inverse', '--ok': 'color.ok', '--warn': 'color.warn', '--bad': 'color.error', '--info': 'color.info' }
 if (inSuite()) {
   api = await connectSuite({
-    onSectionInit: () => { render(); refreshRemote(); chan.postMessage({ t: 'ping' }) },
+    onSectionInit: () => { render(); refreshRemote(); ask({ t: 'ping' }) },
     onEvent: () => { if (!quiet()) render() },
     onSkin: (bundle, mode, pointer) => wearSkin(bundle, mode, pointer, { vars: fonts })
   })

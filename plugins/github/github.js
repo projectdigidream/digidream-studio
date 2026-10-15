@@ -17,6 +17,12 @@ export class GitHubError extends Error {
   }
 }
 
+/**
+ * GitHub gave up on a request too big to do in time ("Sorry, your request
+ * timed out..."): the same request again would too, so the caller sends less.
+ */
+export const isTooBig = (e) => e instanceof GitHubError && /timed out|too large/i.test(e.message)
+
 /** True when an error is the network, not GitHub saying no. */
 export const isOffline = (e) => !(e instanceof GitHubError) && /fetch|network|load failed/i.test(String(e?.message ?? e))
 
@@ -98,11 +104,47 @@ export class GitHub {
     this.repo = repo
     this.branch = branch
     this.fetch = fetch
+    this.sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    this.onWait = null // told { seconds } while GitHub has asked us to wait
+    this.timeout = 60000 // ms a request may take, plus a second per 100 KB sent
   }
 
+  /**
+   * One request, tried again when GitHub only had a moment: a 502/503/504, or
+   * its secondary rate limit (writes made too fast -- a first push of many
+   * files), waited out as long as GitHub says. Every request a sync makes is
+   * safe to repeat: blobs and trees are by content, a commit made twice is an
+   * unused copy, and the branch moves forward only.
+   */
   async req (method, path, body) {
+    for (let attempt = 0; ; attempt++) {
+      try { return await this.once(method, path, body) } catch (e) {
+        if (!(e instanceof GitHubError) || attempt >= 4 || isTooBig(e)) throw e
+        const busy = [408, 502, 503, 504].includes(e.status)
+        const limited = (e.status === 403 || e.status === 429) && (e.retryAfter || /secondary rate limit/i.test(e.message))
+        if (!busy && !limited) throw e
+        const seconds = e.retryAfter ?? (limited ? 60 : [1, 3, 8, 15][attempt])
+        if (seconds > 300) throw e
+        this.onWait?.({ seconds })
+        await this.sleep(seconds * 1000)
+      }
+    }
+  }
+
+  async once (method, path, body) {
     const url = path.startsWith('/repos/') || path.startsWith('/user') ? API + path : `${API}/repos/${this.repo}${path}`
-    const r = await this.fetch(url, {
+    // A request that never answers (a stalled connection) would hold every sync
+    // behind it: it is given up after a while, and tried again like a 504.
+    const sent = body ? JSON.stringify(body) : undefined
+    const ms = this.timeout + Math.round((sent?.length ?? 0) / 100)
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null
+    let timer
+    // Raced as well as aborted: a fetch that ignores the signal cannot hold on.
+    const late = new Promise((_resolve, reject) => { timer = setTimeout(() => { ctl?.abort(); reject(new GitHubError(408, `GitHub did not answer within ${Math.round(ms / 1000)} s`, path)) }, ms) })
+    let r
+    try {
+      r = await Promise.race([late, this.fetch(url, {
+      signal: ctl?.signal,
       method,
       // A ref answered from the browser's cache (GitHub says max-age=60) is a
       // minute stale, and a sync must see the branch as it is.
@@ -113,8 +155,12 @@ export class GitHub {
         'X-GitHub-Api-Version': '2022-11-28',
         ...(body ? { 'Content-Type': 'application/json' } : {})
       },
-      body: body ? JSON.stringify(body) : undefined
-    })
+      body: sent
+      })])
+    } catch (e) {
+      if (ctl?.signal.aborted && !(e instanceof GitHubError)) throw new GitHubError(408, `GitHub did not answer within ${Math.round(ms / 1000)} s`, path)
+      throw e
+    } finally { clearTimeout(timer) }
     if (r.status === 204) return null
     const text = await r.text()
     let json = null
@@ -126,7 +172,10 @@ export class GitHub {
       if (why.length) msg = `${msg} ${why.join('; ')}`
       if (r.status === 401) msg = 'GitHub refused the token (expired, revoked or mistyped)'
       else if (r.status === 403 && r.headers?.get?.('x-ratelimit-remaining') === '0') msg = 'GitHub\'s rate limit is used up for now; it resets within the hour'
-      throw new GitHubError(r.status, msg, path)
+      const err = new GitHubError(r.status, msg, path)
+      const after = Number(r.headers?.get?.('retry-after'))
+      if (after > 0) err.retryAfter = after
+      throw err
     }
     return json
   }
@@ -212,10 +261,38 @@ export class GitHub {
     return (await this.req('POST', '/git/blobs', { content: toBase64(bytes), encoding: 'base64' })).sha
   }
 
-  /** entries: [{ path, sha }] where sha null removes the file. */
+  /** entries: [{ path, sha, type? }] where sha null removes the file; type 'tree' puts a folder. */
   async createTree (baseTree, entries) {
-    const tree = entries.map((e) => ({ path: e.path, mode: '100644', type: 'blob', sha: e.sha }))
+    const tree = entries.map((e) => (e.type === 'tree'
+      ? { path: e.path, mode: '040000', type: 'tree', sha: e.sha }
+      : { path: e.path, mode: '100644', type: 'blob', sha: e.sha }))
     return (await this.req('POST', '/git/trees', baseTree ? { base_tree: baseTree, tree } : { tree })).sha
+  }
+
+  /**
+   * The root tree with the folder `dir` changed by `entries` ({ path, sha }
+   * relative to it; sha null removes). Built as GitHub asks of big changes:
+   * the folder on its own (only its files to look through, not the whole
+   * repository), a batch of files at a time, each batch over the last; a
+   * batch GitHub gives up on is halved and sent again. Then the folder is put
+   * in the root in one entry. -> { root, dir } (the two trees' shas)
+   */
+  async putDir (rootTree, dir, entries, { batch = 100, progress = () => {} } = {}) {
+    let cur = rootTree ? await this.dir(rootTree, dir) : null
+    let size = batch
+    for (let i = 0; i < entries.length;) {
+      const part = entries.slice(i, i + size)
+      progress({ done: i, total: entries.length })
+      try {
+        cur = await this.createTree(cur, part)
+        i += part.length
+      } catch (e) {
+        if (!isTooBig(e) || size <= 5) throw e
+        size = Math.ceil(size / 2)
+      }
+    }
+    const root = await this.createTree(rootTree, [{ path: dir, type: 'tree', sha: cur }])
+    return { root, dir: cur }
   }
 
   async createCommit (message, tree, parents) {

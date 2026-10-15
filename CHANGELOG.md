@@ -11,6 +11,19 @@ Built on engine 0.1.4.1.
 
 ### Fixed
 
+- GitHub sync: a big push no longer fails with "Sorry, your request timed
+  out": a module's folder is built on its own, in batches GitHub can take
+  (smaller ones when it still times out), and brief GitHub failures, its
+  rate limit for fast writes and requests that never answer are waited out
+  and tried again.
+- GitHub sync: a conflict could keep coming back after "Keep these". A choice
+  now holds even when GitHub moved on since (the version not kept stays in its
+  history), the page says it is applying it, and only one studio tab syncs at a
+  time.
+- GitHub sync: with a module open in two tabs of the same browser, GitHub's
+  change could be written into one tab and then saved over from the other --
+  and pushed over GitHub's change. A module open in another tab is no longer
+  written into; its badge says to close one.
 - **On Android, GitHub sync could not fetch the repository** (and the update
   check never answered): the Android shell refused every request off the
   app. The studio's shell now reaches the hosts its plugins declare (engine

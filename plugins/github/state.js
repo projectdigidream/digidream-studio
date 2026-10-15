@@ -13,6 +13,15 @@
 const DB = 'dnp-github-sync'
 export const CHANNEL = 'dnp-github-sync'
 
+/**
+ * This studio tab, as its Sync page and its service both see it (they share
+ * the parent window). The channel reaches every tab; what the page asks is
+ * meant for its own tab's service.
+ */
+export const TAB = (() => {
+  try { return (globalThis.parent.__dnpGithubTab ??= Math.random().toString(36).slice(2)) } catch { return 'solo' }
+})()
+
 let opening = null
 function open () {
   opening ??= new Promise((resolve, reject) => {
