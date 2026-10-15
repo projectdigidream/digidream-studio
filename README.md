@@ -63,6 +63,7 @@ The Studio opens other Digidream tools inside itself, on the module's files:
 | DigidreamSynth | music: tracks, piano roll, patches | [digidream-midisynth](https://github.com/projectdigidream/digidream-midisynth) |
 | Code | the module's Lua scripts | |
 | Packager | the module as an app (the **Package** page) | [digidream-packager](https://github.com/projectdigidream/digidream-packager) |
+| GitHub sync | keeps modules in a GitHub repository and brings them to your other devices (the **Sync** page; a token you paste there) | |
 
 ## Making it a game
 
