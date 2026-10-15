@@ -15,7 +15,8 @@ anything not released yet is under **Unreleased**.
 
 - **Sync with GitHub** (the Sync page, a bundled plugin): keep modules in a
   GitHub repository and open them on your other devices. Paste a token for
-  one repository and the modules sync by themselves -- on open, a few seconds
+  one repository -- or one for all of them, and pick from your repositories
+  or make a new private one on the Sync page -- and the modules sync by themselves -- on open, a few seconds
   after a save, when the app comes back -- each sync a commit. Edits to
   different maps on two devices merge; a file changed on both asks which to
   keep, and the other stays in GitHub's history or the Snapshots. Modules
