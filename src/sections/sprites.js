@@ -15,12 +15,15 @@ import { frameKey, parseAtlas } from '/src/render/atlas.js'
 import { withIcon } from '../ui.js'
 import { duplicateSprite } from '../assetcopy.js'
 import { exportButtons, askCopyName } from './assetbuttons.js'
+import { animationEditor, editableSheet, ANIM_CSS } from './animeditor.js'
 
 let S = null
 
 const sourceOf = (n) => S.rec.assets?.[`sources/sprites/${n}.tsprite`]
 
-function showSprites (open = null) {
+// `anim`: the animation open in the editor of an imported sheet (animeditor.js).
+async function showSprites (open = null, anim = null) {
+  if (!document.getElementById('st-anim-css')) document.head.appendChild(el('style', { id: 'st-anim-css', text: ANIM_CSS }))
   const names = Object.keys(S.module.sprites ?? {}).sort()
   const editors = S.plugins.editorsFor('file:tsprite').filter((e) => !e.builtin)
   const body = [
@@ -54,9 +57,10 @@ function showSprites (open = null) {
     const baked = S.module.baked?.[`sources/sprites/${open}.tsprite`]
     body.push(el('div', { class: 'st-card', 'data-open-sprite': open }, [
       el('div', { class: 'st-entry', text: open }),
-      muted(`${(rec.animations ?? []).length} animation(s): ${(rec.animations ?? []).join(', ') || '—'}`),
+      // The sheet's own list when the module's record of it has none (an imported file).
+      ((names) => muted(`${names.length} animation(s): ${names.join(', ') || '—'}`))(rec.animations?.length ? rec.animations : (S.sheets.get(open)?.atlas?.animations ?? []).map((a) => a.name)),
       muted(users.length ? `drawn by ${users.join(', ')}` : 'no prop draws it yet'),
-      muted(sourceOf(open) ? `baked from its ThreeSprite project${baked ? ` (baker ${baked.baker} ${baked.version})` : ''}` : 'imported as a finished sheet: no project to edit (import its .tsprite to have one)'),
+      muted(sourceOf(open) ? `baked from its ThreeSprite project${baked ? ` (baker ${baked.baker} ${baked.version})` : ''}: its animations are the project's, edited in ThreeSprite` : 'imported as a finished sheet: its animations are edited below; its pictures are the sheet\'s (import its .tsprite to edit those)'),
       el('div', { class: 'st-row' }, [
         ...(sourceOf(open) ? (S.editButtons?.('file:tsprite', open) ?? []) : []),
         // A copy: the sheet and its ThreeSprite project under a new name, a variant to change.
@@ -73,8 +77,10 @@ function showSprites (open = null) {
           showSprites(to)
         }),
         ...exportButtons(S, 'sprite', open)
-      ])
-    ]))
+      ]),
+      // An imported sheet's animations: name, fps, loop and frames.
+      editableSheet(S, open) ? await animationEditor(S, open, anim, (n, a) => showSprites(n, a)) : null
+    ].filter(Boolean)))
   }
   S.ui.showSheet('Sprites', body)
 }

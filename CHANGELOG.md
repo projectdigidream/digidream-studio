@@ -5,6 +5,21 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **An imported sprite sheet's animations are edited on the Sprites page**: a
+  finished sheet (an atlas .json + .png) shows its animations, and the one
+  picked plays beside its name, fps and loop; its frames can be moved,
+  repeated and taken out, and any frame the sheet already has added; a new
+  animation is made from the one shown, and one can be deleted. Only the
+  sheet's JSON changes (checked by the client's own parser), never its
+  pixels; a renamed animation is followed by the props and weapon views that
+  name it. A sheet baked from a ThreeSprite project is still edited there.
+
+### Fixed
+
+- An imported sheet's card said "0 animation(s)": it now lists the sheet's own.
+
 ## 0.3.4.1 -- 2026-10-15
 
 Built on engine 0.1.5.

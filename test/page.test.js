@@ -2663,6 +2663,66 @@ await page.keyboard.press('Escape')
   check(listed.route === 'map' && listed.doc === 'broken', 'tapping the line opens the map it is about')
 }
 
+// AN IMPORTED SHEET'S ANIMATIONS, EDITED ON THE SPRITES PAGE (animeditor.js):
+// a rename that the props drawn with it follow, fps, a frame moved, one of the
+// sheet's own frames added, a new animation and a deletion -- each kept in the
+// sheet's JSON and read back by the client's parser; undo takes one back.
+{
+  const ae = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = async (fn, ms = 4000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)) } return null }
+    const sheet = 'SPIR'
+    const json = async () => JSON.parse(await S.rec.assets[`sprites/${sheet}.json`].text())
+    const anim = async (n) => (await json()).animations.find((a) => a.name === n)
+    const field = (label) => [...document.querySelectorAll('[data-anim-editor] .st-row')].find((r) => r.textContent.trim().startsWith(label))?.querySelector('input')
+    await S.go('sprites'); await S.showSprites(sheet, 'walk')
+    if (!await wait(() => document.querySelector('[data-anim-editor] [data-anim="walk"][data-on="1"]'))) return { opened: false }
+    const out = { opened: true }
+    const walk0 = await anim('walk')
+    // fps.
+    const fps = field('fps'); fps.value = '12'; fps.dispatchEvent(new Event('change'))
+    out.fps = await wait(async () => (await anim('walk'))?.fps === 12)
+    // A frame moved later: the first two swap.
+    await wait(() => document.querySelector('[data-anim-editor] [data-frame="0"] [data-move="right"]'))
+    document.querySelector('[data-anim-editor] [data-frame="0"] [data-move="right"]').click()
+    out.moved = await wait(async () => { const a = await anim('walk'); return a && JSON.stringify(a.frames[1].views) === JSON.stringify(walk0.frames[0].views) && JSON.stringify(a.frames[0].views) === JSON.stringify(walk0.frames[1].views) })
+    // One of the sheet's frames added at the end (from another animation).
+    await wait(() => document.querySelector('[data-anim-editor] [data-pick]'))
+    const pickBtn = [...document.querySelectorAll('[data-anim-editor] [data-pick]')].find((b) => /^death/.test(b.dataset.from))
+    pickBtn.click()
+    out.added = await wait(async () => (await anim('walk'))?.frames.length === walk0.frames.length + 1)
+    // A rename, which the prop drawn with the sheet follows.
+    const spirit = S.module.props.find((p) => p.art?.sheet === sheet && Object.values(p.art.states ?? {}).includes('walk'))
+    await wait(() => field('name'))
+    const nm = field('name'); nm.value = 'stride'; nm.dispatchEvent(new Event('change'))
+    out.renamed = await wait(async () => !!(await anim('stride')) && !(await anim('walk')))
+    out.followed = spirit ? Object.values(spirit.art.states).includes('stride') && !Object.values(spirit.art.states).includes('walk') : null
+    out.parsed = !!S.sheets.get(sheet)?.atlas?.byName?.get('stride')
+    // A new animation, then deleted.
+    await wait(() => [...document.querySelectorAll('[data-anim-editor] button')].find((b) => /new animation/.test(b.textContent)))
+    const before = (await json()).animations.length
+    // ask() is the studio's own dialog: answer it.
+    ;[...document.querySelectorAll('[data-anim-editor] button')].find((b) => /new animation/.test(b.textContent)).click()
+    const dlg = await wait(() => document.querySelector('dialog[open] input'))
+    if (dlg) { dlg.value = 'stride_copy'; dlg.closest('dialog').querySelector('button[type=submit]').click() }
+    out.made = await wait(async () => (await json()).animations.length === before + 1 && !!(await anim('stride_copy')))
+    // Undo takes the last step back.
+    S.undoModule()
+    out.undone = await wait(async () => !(await anim('stride_copy')))
+    // Back as it was: the original manifest kept for the scenarios after.
+    S.rec.assets[`sprites/${sheet}.json`] = new Blob([JSON.stringify({ ...(await json()), animations: (await json()).animations.map((a) => (a.name === 'stride' ? { ...walk0 } : a)) })])
+    if (spirit) for (const k of Object.keys(spirit.art.states)) if (spirit.art.states[k] === 'stride') spirit.art.states[k] = 'walk'
+    const { parseAtlas } = await import('/src/render/atlas.js')
+    S.sheets.set(sheet, { ...S.sheets.get(sheet), atlas: parseAtlas(await json(), sheet) })
+    S.moduleChanged()
+    await S.go('map')
+    return out
+  })
+  check(ae.opened && ae.fps && ae.moved && ae.added, `an imported sheet's animation: its fps, a frame moved, one of the sheet's frames added (${JSON.stringify(ae)})`)
+  check(ae.renamed && ae.followed !== false && ae.parsed, 'renamed in the sheet, the prop drawn with it follows, and the client\'s parser reads it')
+  check(ae.made && ae.undone, 'a new animation is made from the one shown, and undo takes it back')
+}
+
 // A MONSTER'S OWN STATE NUMBERS (a leap in 5): its Body tab lists them, named
 // by the brain states that use them, and they can be given an animation; the
 // preview can play them.
