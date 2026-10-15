@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **0.3.4.1 and 0.3.4.2 on Windows, Linux and macOS were studio 0.3.4**: the
+  desktop builds took the studio's pages from the engine kit they were built
+  on (the packager's build_studio.mjs). They now come from the studio, and a
+  release refuses a build whose studio/VERSION is not the one released.
+
 ### Added
 
 - **Which animations loop, for a sheet baked from a ThreeSprite project**: its
