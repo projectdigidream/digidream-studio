@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **On Android, GitHub sync could not fetch the repository** (and the update
+  check never answered): the Android shell refused every request off the
+  app. The studio's shell now reaches the hosts its plugins declare (engine,
+  Unreleased).
+
 ## 0.3.2 -- 2026-10-15
 
 Built on engine 0.1.3.
