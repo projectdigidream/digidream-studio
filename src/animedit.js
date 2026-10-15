@@ -126,3 +126,17 @@ export function referencesTo (module, sheet, name) {
   }
   return out
 }
+
+/**
+ * THE MODULE'S WORD ON LOOPING, over a sheet baked from a ThreeSprite project:
+ * `loops` is { animation: true | false } (module.sprites[NAME].loops), kept by
+ * the studio because every bake writes the manifest afresh and ThreeSprite's
+ * own flag is often left at its default. Applied to each bake (bake/apply.js);
+ * an animation not named keeps the project's.
+ */
+export function applyLoops (manifest, loops) {
+  if (!loops || !Object.keys(loops).length) return manifest
+  const m = clone(manifest)
+  for (const a of m.animations ?? []) if (typeof loops[a.name] === 'boolean') a.loop = loops[a.name]
+  return m
+}

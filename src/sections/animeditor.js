@@ -7,7 +7,7 @@
 // it is kept, and one undo step each.
 //
 import { el, button, muted, ask, number, toggle, text, confirmDialog, withIcon } from '../ui.js'
-import { framePalette, renameAnim, setAnim, setFrames, addAnim, removeAnim, renameReferences, referencesTo } from '../animedit.js'
+import { framePalette, renameAnim, setAnim, setFrames, addAnim, removeAnim, renameReferences, referencesTo, applyLoops } from '../animedit.js'
 import { parseAtlas } from '/src/render/atlas.js'
 
 const asText = async (b) => (typeof b === 'string' ? b : await b?.text?.())
@@ -138,6 +138,37 @@ export async function animationEditor (S, n, pick, reopen) {
       }, 'st-danger')
     ]),
     picker
+  ])
+}
+
+/**
+ * A SHEET BAKED FROM A THREESPRITE PROJECT: which of its animations loop. The
+ * module keeps the choice (module.sprites[NAME].loops) and every bake takes it
+ * (bake/apply.js); here it is put on the sheet as it is now too, so the game
+ * and the previews have it before the next bake.
+ */
+export async function loopRows (S, n, reopen) {
+  const m = await sheetManifest(S, n)
+  if (!m) return null
+  const rec = (S.module.sprites[n] ??= {})
+  const set = async (anim, v) => {
+    rec.loops = { ...(rec.loops ?? {}), [anim]: v }
+    const next = applyLoops(m, { [anim]: v })
+    let parsed
+    try { parsed = parseAtlas(next, n) } catch (e) { S.status(`not kept: ${e.message}`, 'error'); return }
+    S.rec.assets[`sprites/${n}.json`] = new Blob([JSON.stringify(next)], { type: 'application/json' })
+    S.sheets.set(n, { ...S.sheets.get(n), atlas: parsed })
+    S.sprites?.forgetAll?.()
+    S.moduleChanged()
+    S.status(`${n} ${anim}: ${v ? 'loops' : 'plays once, then holds its last frame'}`, 'ok')
+    reopen(n)
+  }
+  return el('div', { class: 'st-anim-editor', 'data-loop-editor': n }, [
+    el('div', { class: 'st-section-head' }, withIcon('section.sprites', 'which animations loop')),
+    muted('The project says how each animation is drawn; whether it loops is the studio\'s to say here, kept through every bake. One that does not loop plays once and holds its last frame (a death, an attack).'),
+    ...m.animations.map((a) => el('div', { 'data-loop-anim': a.name }, [
+      toggle(`${a.name} · ${a.frames.length} frames at ${a.fps ?? 10} fps`, a.loop !== false, (v) => set(a.name, v))
+    ]))
   ])
 }
 

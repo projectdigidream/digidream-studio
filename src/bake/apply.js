@@ -14,6 +14,7 @@ import { Baker, BUILTIN_BAKERS } from './run.js'
 import { bakeCache } from './cache.js'
 import { SOURCES, sourcesIn } from '../plugins/kinds.js'
 import { sheetRecord } from '../sheets.js'
+import { applyLoops } from '../animedit.js'
 
 const MIME = { png: 'image/png', json: 'application/json', mstk: 'application/octet-stream' }
 const mimeOf = (path) => MIME[path.split('.').pop()] ?? 'application/octet-stream'
@@ -45,7 +46,10 @@ export function installBaking (S, { parseAtlas }) {
       S.imageUrls.set(key, URL.createObjectURL(blob))
       S.textures?.forget(key)
     } else if (kind === 'file:tsprite') {
-      const manifest = r.meta.manifest
+      // The module's own loop choices over the project's (animedit.js), on every bake.
+      const loops = S.module.sprites?.[key]?.loops
+      const manifest = applyLoops(r.meta.manifest, loops)
+      if (manifest !== r.meta.manifest) assets[`sprites/${key}.json`] = new Blob([JSON.stringify(manifest)], { type: 'application/json' })
       const atlas = parseAtlas(manifest, key)                     // the client's own check: throws on a bad sheet
       ;(S.module.sprites ??= {})[key] = { ...(S.module.sprites[key] ?? {}), ...sheetRecord(manifest) }
       const old = S.sheets.get(key)

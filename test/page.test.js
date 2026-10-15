@@ -2723,6 +2723,39 @@ await page.keyboard.press('Escape')
   check(ae.made && ae.undone, 'a new animation is made from the one shown, and undo takes it back')
 }
 
+// A SHEET BAKED FROM A THREESPRITE PROJECT: whether each animation loops is the
+// studio's to say (ThreeSprite leaves it at its default), and the choice is
+// kept through the next bake.
+{
+  const lp = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = async (fn, ms = 6000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)) } return null }
+    const n = 'LOOPT'
+    const bytes = new Uint8Array(await (await fetch('/studio/test/fixtures/spirit.tsprite')).arrayBuffer())
+    S.rec.assets[`sources/sprites/${n}.tsprite`] = new Blob([bytes])
+    const b1 = await S.bakeSource('file:tsprite', n)
+    const json = async () => JSON.parse(await S.rec.assets[`sprites/${n}.json`].text())
+    const loopOf = async (a) => (await json()).animations.find((x) => x.name === a)?.loop
+    const out = { baked: b1.ok, before: await loopOf('death') }
+    await S.go('sprites'); await S.showSprites(n)
+    const row = await wait(() => document.querySelector(`[data-loop-editor="${n}"] [data-loop-anim="death"] .ui-switch`))
+    out.row = !!row
+    if (row) row.click()
+    out.now = await wait(async () => (await loopOf('death')) === false)
+    out.kept = S.module.sprites[n]?.loops?.death === false
+    // Baked again (a changed project would be): the choice stands.
+    const b2 = await S.bakeSource('file:tsprite', n)
+    out.rebaked = b2.ok && (await loopOf('death')) === false && (await loopOf('idle')) === true
+    out.atlas = S.sheets.get(n)?.atlas?.byName?.get('death')?.loop === false
+    delete S.rec.assets[`sources/sprites/${n}.tsprite`]; delete S.rec.assets[`sprites/${n}.json`]; delete S.rec.assets[`sprites/${n}.png`]
+    delete S.module.sprites[n]; delete S.module.baked?.[`sources/sprites/${n}.tsprite`]; S.sheets.delete(n); S.moduleChanged()
+    await S.go('map')
+    return out
+  })
+  check(lp.baked && lp.before === true && lp.row && lp.now && lp.kept, `a baked sheet's animation is set not to loop on the Sprites page (${JSON.stringify(lp)})`)
+  check(lp.rebaked && lp.atlas, 'and stays so through the next bake, the others as the project has them')
+}
+
 // A MONSTER'S OWN STATE NUMBERS (a leap in 5): its Body tab lists them, named
 // by the brain states that use them, and they can be given an animation; the
 // preview can play them.

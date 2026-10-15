@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs'
 import { readPack } from '../src/pack.js'
-import { framePalette, renameAnim, setAnim, setFrames, addAnim, removeAnim, renameReferences, referencesTo, animNameOk } from '../src/animedit.js'
+import { framePalette, renameAnim, setAnim, setFrames, addAnim, removeAnim, renameReferences, referencesTo, animNameOk, applyLoops } from '../src/animedit.js'
 import { parseAtlas } from '../../engine/client/src/render/atlas.js'
 
 const name = 'animedit'
@@ -60,6 +60,12 @@ check(moved === 3 && module.props[0].art.states[1] === 'stride' && module.viewmo
       'a rename follows the props and weapon views drawn with the sheet')
 check(module.props[1].art.states[1] === 'walk', 'CONTROL: another sheet\'s "walk" is left alone')
 check(animNameOk('idle_2') && animNameOk('walk.left') && !animNameOk('') && !animNameOk('a b'), 'names: letters, digits, _ . -')
+
+// The module's loop choices over a baked sheet's.
+const looped = applyLoops(sheet, { death: false, Attack: false })
+check(parses(looped) && looped.animations.find((a) => a.name === 'death').loop === false && looped.animations.find((a) => a.name === 'idle').loop === sheet.animations.find((a) => a.name === 'idle').loop,
+      'the module\'s loop choices are applied, the animations it names nothing about keep theirs')
+check(applyLoops(sheet, null) === sheet && applyLoops(sheet, {}) === sheet, 'CONTROL: no choices, the manifest as it came')
 
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

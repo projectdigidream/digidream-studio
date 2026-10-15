@@ -15,7 +15,7 @@ import { frameKey, parseAtlas } from '/src/render/atlas.js'
 import { withIcon } from '../ui.js'
 import { duplicateSprite } from '../assetcopy.js'
 import { exportButtons, askCopyName } from './assetbuttons.js'
-import { animationEditor, editableSheet, ANIM_CSS } from './animeditor.js'
+import { animationEditor, editableSheet, loopRows, ANIM_CSS } from './animeditor.js'
 
 let S = null
 
@@ -79,7 +79,9 @@ async function showSprites (open = null, anim = null) {
         ...exportButtons(S, 'sprite', open)
       ]),
       // An imported sheet's animations: name, fps, loop and frames.
-      editableSheet(S, open) ? await animationEditor(S, open, anim, (n, a) => showSprites(n, a)) : null
+      editableSheet(S, open) ? await animationEditor(S, open, anim, (n, a) => showSprites(n, a))
+        // Baked from a project: which of its animations loop, the studio's to say.
+        : sourceOf(open) ? await loopRows(S, open, (n) => showSprites(n)) : null
     ].filter(Boolean)))
   }
   S.ui.showSheet('Sprites', body)

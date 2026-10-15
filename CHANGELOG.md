@@ -5,6 +5,14 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Which animations loop, for a sheet baked from a ThreeSprite project**: its
+  card on the Sprites page has a "loops" switch per animation. ThreeSprite
+  leaves the flag at its default (every animation looping, a death too); the
+  studio keeps its choice in the module and applies it to every bake, and an
+  animation that does not loop plays once and holds its last frame.
+
 ## 0.3.4.2 -- 2026-10-15
 
 Built on engine 0.1.5.
