@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **This map's limits on the shared world's grid**: when the map has a cell on
+  a metamap with a pitch, the map editor outlines that cell with a thick,
+  bright band (the skin's `map.cell.edge`), the same thickness on screen at
+  any zoom, so where it ends and a neighbour begins reads at a glance.
+
 ### Fixed
 
 - **A sprite's per-view layer order from ThreeSprite was not baked**: a view

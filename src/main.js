@@ -51,7 +51,7 @@ import { showPlayScreen } from './playscreen.js'
 import { recordFromEntries, recordToEntries } from './record.js'
 import { checkForUpdate } from './updates.js'
 import { Vocab } from './vocab.js'
-import { Viewport, COLORS, ALPHA, FILL, wearSkin as wearCanvasSkin } from './viewport.js'
+import { Viewport, COLORS, ALPHA, FILL, WIDTH, wearSkin as wearCanvasSkin } from './viewport.js'
 import { Preview } from './preview.js'
 import { TextureCache } from './textures.js'
 import { SpriteLibrary } from './sprites.js'
@@ -1272,7 +1272,9 @@ function redraw () {
   const mm = S.module.metamap
   if (mm?.enabled && mm.pitch && mm.cells?.[S.docName]) {
     const [pw, ph] = mm.pitch
-    lines.push({ points: [{ x: 0, y: 0, z: 0 }, { x: pw, y: 0, z: 0 }, { x: pw, y: ph, z: 0 }, { x: 0, y: ph, z: 0 }], closed: true, ...tint('cell') })
+    // This map's own limits on the shared world's grid: thick and opaque, so
+    // where it ends and a neighbour begins reads at any zoom.
+    lines.push({ points: [{ x: 0, y: 0, z: 0 }, { x: pw, y: 0, z: 0 }, { x: pw, y: ph, z: 0 }, { x: 0, y: ph, z: 0 }], closed: true, ...tint('cellEdge'), width: Math.max(3, WIDTH.cellEdge ?? 4) })
     for (const nb of S.neighbourInfo ?? []) {
       badges.push({ x: nb.offset.x + pw / 2, y: nb.offset.y + ph / 2, z: 0, label: `${nb.name}${nb.failed ? ' (does not bake)' : ''}`, ...tint('cell') })
       // Dimmed, so the one map under a finger is the one that looks it.

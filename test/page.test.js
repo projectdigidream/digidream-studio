@@ -2602,6 +2602,31 @@ await page.keyboard.press('Escape')
   })
   check(near.drawn === 1 && near.at?.[0] === 16 && near.badge, `the map editor draws the neighbour one pitch east, named (${JSON.stringify(near)})`)
   check(near.seams.includes('joined:east'), `and the side both maps opened is a joined seam (${near.seams.join(', ')})`)
+  // This map's limits on the grid: a thick, opaque band around its cell,
+  // the same thickness on screen at any zoom.
+  const band = await page.evaluate(async () => {
+    const S = window.__studio
+    const v = S.viewport
+    const one = () => {
+      const b = v.bands?.[0]
+      if (!b) return null
+      const pos = b.geometry.getAttribute('position')
+      let minX = Infinity; let maxX = -Infinity
+      for (let i = 0; i < pos.count; i++) { minX = Math.min(minX, pos.getX(i)); maxX = Math.max(maxX, pos.getX(i)) }
+      return { bands: v.bands.length, width: b.userData.band.width, opaque: !b.material.transparent, span: maxX - minX, perPx: v.viewHeight / innerHeight }
+    }
+    v.render()
+    const a = one()
+    v.viewHeight *= 3; v.resize(); v.render()
+    const b = one()
+    v.viewHeight /= 3; v.resize(); v.render()
+    return { a, b }
+  })
+  // The band runs past the cell by half its width each side: span - pitch = width in world units.
+  const px = (x) => (x.span - 16) / x.perPx
+  check(band.a && band.a.bands === 1 && band.a.width >= 4 && band.a.opaque && Math.abs(px(band.a) - band.a.width) < 1 && Math.abs(px(band.b) - band.b.width) < 1,
+        `the map's cell is outlined by a thick opaque band, as thick on screen zoomed out as in (${band.a && px(band.a).toFixed(1)} px, then ${band.b && px(band.b).toFixed(1)} px)`)
+  await page.screenshot({ path: process.env.DNP_SHOT_DIR ? `${process.env.DNP_SHOT_DIR}/metamap-cell.png` : '/dev/null' }).catch(() => {})
   const txt = await page.evaluate(async () => {
     const S = window.__studio
     const { metamapText } = await import('/studio/src/metamap.js')

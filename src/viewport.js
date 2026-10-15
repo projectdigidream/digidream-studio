@@ -51,11 +51,15 @@ export const SKIN_KEYS = {
   climb: ['map', 'climb'],
   // The metamap: a map's cell, and how its boundary sides meet a neighbour's.
   cell: ['map', 'cell'], neighbourShade: ['map', 'neighbour', 'fill'],
+  // The open map's own cell, on the shared world's grid: bright and thick.
+  cellEdge: ['map', 'cell.edge'],
   seam_joined: ['map', 'seam.joined'], seam_oneway: ['map', 'seam.oneway'], seam_walls: ['map', 'seam.walls'], seam_loose: ['map', 'seam.loose']
 }
 export const COLORS = {}
 export const ALPHA = {}
 export const FILL = {}
+// How thick the skin draws each, in pixels (lines given a `width` are drawn that thick).
+export const WIDTH = {}
 // The badge a marker without a picture is drawn as: map.marker's fill, text colour, border, corner and font.
 export const BADGE = {}
 // Until a skin is worn: the loud magenta of a missing key (runtime.js).
@@ -68,6 +72,7 @@ export function wearSkin (skin) {
     const c = colorParts(part ? spec[part] ?? spec.color : spec.color)
     COLORS[k] = c.hex
     ALPHA[k] = c.alpha * (spec.alpha ?? 1)
+    WIDTH[k] = Number.isFinite(spec.width) ? spec.width : 1
     FILL[k] = colorParts(spec.fill ?? spec.color).alpha
   }
   Object.assign(BADGE, skin.canvas('map', 'marker'))
@@ -228,6 +233,7 @@ export class Viewport {
     // Animated textures (a sprite sheet, a frame list): the client's animator, on one clock.
     this.texAnimator?.update(performance.now() / 1000)
     this.#place()
+    this.#shapeBands()
     if (this.sky) {
       const show = this.mode !== 'plan' && this.sky.sky.kind !== 0
       this.sky.background.visible = show
@@ -355,11 +361,25 @@ export class Viewport {
     this.dirty = true
   }
 
-  /** Closed or open polylines: [{ points: [{x,y,z}], color, closed }]. */
+  /**
+   * Closed or open polylines: [{ points: [{x,y,z}], color, closed, width? }].
+   * `width`: drawn as a band that many screen pixels thick (WebGL draws every
+   * line one pixel wide, whatever it is asked) -- kept that thick as the view
+   * zooms (render() rebuilds the bands when the scale moves).
+   */
   setLines (lines) {
     for (const l of this.lines.children) { l.geometry.dispose(); l.material.dispose() }
     this.lines.clear()
+    this.bands = []
     for (const l of lines) {
+      if (l.width) {
+        const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: l.color ?? COLORS.outline, depthTest: false, side: THREE.DoubleSide, ...opacity(l.alpha) }))
+        mesh.renderOrder = 10
+        mesh.userData.band = l
+        this.lines.add(mesh)
+        this.bands.push(mesh)
+        continue
+      }
       const pts = l.points.map((p) => new THREE.Vector3(toThreeX(p.x), toThreeY(p.z) + 0.02, toThreeZ(p.y)))
       if (l.closed && pts.length) pts.push(pts[0].clone())
       const geo = new THREE.BufferGeometry().setFromPoints(pts)
@@ -383,7 +403,43 @@ export class Viewport {
         }
       }
     }
+    this.bandScale = 0
+    this.#shapeBands()
     this.dirty = true
+  }
+
+  /** World units per screen pixel at the view's target (both cameras frame viewHeight over the window). */
+  #worldPerPixel () { return this.viewHeight / Math.max(1, innerHeight) }
+
+  // The bands' geometry for the current scale: each segment a quad, half the
+  // width either side and running on past both ends by as much, so corners
+  // close without mitres. Rebuilt only when the scale has moved by a tenth.
+  #shapeBands () {
+    if (!this.bands?.length) return
+    const k = this.#worldPerPixel()
+    if (this.bandScale && Math.abs(k - this.bandScale) / this.bandScale < 0.1) return
+    this.bandScale = k
+    for (const mesh of this.bands) {
+      const l = mesh.userData.band
+      const h = (l.width / 2) * k
+      const pts = l.points.slice()
+      if (l.closed && pts.length) pts.push(pts[0])
+      const pos = []
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i]; const b = pts[i + 1]
+        const dx = b.x - a.x; const dy = b.y - a.y
+        const len = Math.hypot(dx, dy)
+        if (!len) continue
+        const ux = dx / len; const uy = dy / len
+        const nx = -uy * h; const ny = ux * h
+        const ax = a.x - ux * h; const ay = a.y - uy * h; const bx = b.x + ux * h; const by = b.y + uy * h
+        const q = [[ax + nx, ay + ny, a.z], [ax - nx, ay - ny, a.z], [bx - nx, by - ny, b.z], [bx + nx, by + ny, b.z]]
+        for (const j of [0, 1, 2, 0, 2, 3]) { const [x, y, z] = q[j]; pos.push(toThreeX(x), toThreeY(z) + 0.03, toThreeZ(y)) }
+      }
+      mesh.geometry.dispose()
+      mesh.geometry = new THREE.BufferGeometry()
+      mesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    }
   }
 
   /**
