@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.3.4.2 -- 2026-10-15
+
+Built on engine 0.1.5.
+
 ### Added
 
 - **An imported sprite sheet's animations are edited on the Sprites page**: a
