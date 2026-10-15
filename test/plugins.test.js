@@ -38,7 +38,22 @@ check(/wants (suite|studio) >=9.0.0/.test(errs({ ...good, suite: '>=9.0.0' })), 
 check(/neither the studio's nor declared/.test(errs({ ...good, editors: [{ entry: 'h.html', kinds: ['file:psd'] }] })), 'an editor for a kind nobody declared is refused')
 check(validateManifest({ ...good, kinds: [{ id: 'file:psd' }], editors: [{ entry: 'h.html', kinds: ['file:psd'] }] }, { suiteVersion: '0.1.0', knownKinds: SUITE_KINDS }).ok, 'a plugin may declare a kind of its own and edit it')
 check(/relative path/.test(errs({ ...good, editors: [{ entry: '../../studio/src/main.js', kinds: ['file:tsprite'] }] })), 'an entry outside the plugin is refused')
-check(/no editors, bakers or sections/.test(errs({ ...good, editors: [] })), 'a plugin that brings nothing is refused')
+check(/no editors, bakers, sections or services/.test(errs({ ...good, editors: [] })), 'a plugin that brings nothing is refused')
+// Services and permissions (the sync plugin's needs).
+{
+  const sync = { id: 'sync', name: 'Sync', version: '1.0.0', protocol: 1, services: [{ id: 'sync', entry: 'service.html' }], sections: [{ id: 'sync', entry: 'index.html' }], permissions: ['module-write', 'background', 'net:github.com', 'net:api.github.com'] }
+  const r = validateManifest(sync, { suiteVersion: '0.1.0', knownKinds: SUITE_KINDS })
+  check(r.ok && r.plugin.services[0].entry === 'service.html' && r.plugin.permissions.join() === 'module-write,background,net:github.com,net:api.github.com', `a service and its permissions are accepted (${r.errors})`)
+  check(/background/.test(errs({ ...sync, permissions: ['module-write'] })), 'a service without the "background" permission is refused')
+  check(/permissions\[0\]/.test(errs({ ...good, permissions: ['everything'] })) && /permissions\[0\]/.test(errs({ ...good, permissions: ['net:*'] })), 'an unknown permission, or a host that is not one, is refused')
+  check(validateManifest({ ...good, services: [] }, { suiteVersion: '0.1.0', knownKinds: SUITE_KINDS }).plugin.permissions.length === 0, 'CONTROL: a plugin asking for nothing has no permissions')
+  const reg = new PluginRegistry({ suiteVersion: '0.1.0', knownKinds: SUITE_KINDS })
+  reg.add(sync, { baseUrl: '/p/sync/' }); reg.add(good, { baseUrl: '/p/sprite-ed/' })
+  check(reg.can('sync', 'module-write') && !reg.can('sprite-ed', 'module-write') && !reg.can('nobody', 'module-write'), 'a plugin may do only what it declared')
+  check(reg.services().length === 1 && reg.services()[0].url === '/p/sync/service.html', 'the registry lists the services to start')
+  reg.setEnabled('sync', false)
+  check(!reg.can('sync', 'module-write') && reg.services().length === 0, 'a plugin switched off may do nothing and runs no service')
+}
 check(/version/.test(errs({ ...good, bakers: [{ entry: 'b.js', kinds: ['file:tsprite'] }] })), 'a baker without a version is refused (the version keys the bake cache)')
 check(/twice/.test(errs({ ...good, editors: [{ id: 'a', entry: 'a.html', kinds: ['file:tsprite'] }, { id: 'a', entry: 'b.html', kinds: ['file:tsprite'] }] })), 'two editors with one id are refused')
 check(/lowercase/.test(errs({ ...good, id: 'Bad Id' })), 'an id is lowercase letters, digits, _ and -')

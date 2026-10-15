@@ -7,6 +7,15 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **What a sync plugin needs** (docs/PLUGINS.md, "A plugin that keeps modules
+  somewhere else"): every module's files, unbaked and byte-stable
+  (`record-files`, `modules`); a revision per module that rises on every save;
+  `module-write`, which replaces a module -- the open one in place, keeping
+  the map and view, after a snapshot -- and refuses one edited since; events
+  (`module-opened`, `module-saved`, `foreground`); background **services**
+  (hidden pages that run all session); **permissions** in plugin.json
+  (`module-write`, `background`, `net:<host>`), shown when a plugin is
+  installed and on the Plugins page; and `status` badges on Home and the rail.
 - **A starting map** (Settings): the map the game starts on. **Play on Home
   starts there** -- it used to start on whichever map was open in the editor;
   Play in the map editor still starts on the map being edited. Unset, it is

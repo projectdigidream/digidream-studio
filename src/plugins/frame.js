@@ -44,6 +44,29 @@ export function choose (question, answers) {
   })
 }
 
+// EVERY PLUGIN PAGE THAT IS RUNNING -- a service, a section on show, an
+// editor -- with the plugin it belongs to: where the studio's events go
+// (module-opened, module-saved, foreground), and how a page's `status` and
+// `query` are answered as that plugin (S.pluginQuery checks its permissions).
+const live = new Set()
+
+/** Wire a page's port to the studio as plugin `plugin`; returns the detach. */
+export function attachPort (S, port, { plugin, where = {} }) {
+  const entry = { port, plugin }
+  live.add(entry)
+  port.on('query', async (m) => {
+    try { port.send('query-result', { reqId: m.reqId, result: await S.pluginQuery(m.what, m.arg, { ...where, plugin }) }) } catch (e) { port.send('query-result', { reqId: m.reqId, error: String(e.message ?? e) }) }
+  })
+  // A badge on Home and the rail (a sync's state), for a module: { module, text, level }.
+  port.on('status', (m) => S.pluginStatus?.(plugin, m))
+  return () => live.delete(entry)
+}
+
+/** Tell every running plugin page: { t: 'event', name, ...data }. */
+export function emitPluginEvent (name, data = {}) {
+  for (const e of live) { try { e.port.send('event', { name, ...data }) } catch {} }
+}
+
 /** One document open in one plugin editor. */
 class EditorSession {
   constructor (S, { editor, kind, key, from }) {
@@ -119,9 +142,7 @@ class EditorSession {
     p.on('close', (m) => this.finish(m.save !== false))
     p.on('error', (m) => this.status(m.message, 'error'))
     p.on('diagnostics', (m) => { const n = (m.items ?? []).length; this.status(n ? `${n} problem${n > 1 ? 's' : ''}` : '', n ? 'warn' : '') })
-    p.on('query', async (m) => {
-      try { p.send('query-result', { reqId: m.reqId, result: await S.pluginQuery(m.what, m.arg, { kind: this.kindId, key: this.key }) }) } catch (e) { p.send('query-result', { reqId: m.reqId, error: String(e.message ?? e) }) }
-    })
+    this.detach = attachPort(S, p, { plugin: this.editor.plugin, where: { kind: this.kindId, key: this.key } })
   }
 
   /** The app is going to the background: what the editor has now, kept. */
@@ -182,6 +203,7 @@ class EditorSession {
 
   close () {
     this.hs?.stop()
+    this.detach?.()
     this.offSkin?.()
     try { this.port?.send('dispose') } catch {}
     this.port?.close()
@@ -204,7 +226,7 @@ export function installPluginSections (S) {
   for (const { plugin, section, url } of S.plugins.sections()) {
     const id = sectionRoute(plugin, section.id)
     if (S.router.sections.has(id)) continue
-    let hs = null, port = null, iframe = null, offSkin = null
+    let hs = null, port = null, iframe = null, offSkin = null, detach = null
     S.router.register({
       id, label: section.label, icon: section.icon,
       mount: async (arg) => {
@@ -219,12 +241,7 @@ export function installPluginSections (S) {
         hs = handshake(iframe.contentWindow, { origin: location.origin })
         let ready = null
         try { ({ port, ready } = await hs.done) } catch (e) { S.status(`${section.label} did not start: ${e.message}`, 'error'); return }
-        port.on('query', async (m) => {
-          try {
-            const result = await S.pluginQuery(m.what, m.arg, { section: id })
-            port.send('query-result', { reqId: m.reqId, result })
-          } catch (e) { port.send('query-result', { reqId: m.reqId, error: String(e.message ?? e) }) }
-        })
+        detach = attachPort(S, port, { plugin, where: { section: id } })
         port.on('error', (m) => S.status(`${section.label}: ${m.message}`, 'error'))
         port.on('close', () => S.go('home'))
         port.send('section-init', { section: section.id, arg })
@@ -232,6 +249,7 @@ export function installPluginSections (S) {
       },
       unmount: () => {
         hs?.stop()
+        detach?.(); detach = null
         offSkin?.(); offSkin = null
         try { port?.send('dispose') } catch {}
         port?.close()
@@ -241,6 +259,35 @@ export function installPluginSections (S) {
     })
   }
   S.shell?.drawRail?.()
+}
+
+/**
+ * THE PLUGINS' SERVICES (plugin.json `services`, which need the `background`
+ * permission): a hidden page each, started once at boot and never unmounted,
+ * so a sync goes on whatever page is shown. Same protocol: it is told
+ * `service-init`, asks with `query`, hears `event`s, sets badges with `status`.
+ * A plugin installed later starts its services when this is called again.
+ */
+const started = new Map() // 'plugin/service' -> { iframe, port }
+export function startPluginServices (S) {
+  for (const { plugin, service, url } of S.plugins.services()) {
+    const key = `${plugin}/${service.id}`
+    if (started.has(key) || !S.plugins.can(plugin, 'background')) continue
+    const u = new URL(url, location.href)
+    u.searchParams.set('host', 'suite')
+    u.searchParams.set('proto', '1')
+    const iframe = el('iframe', { class: 'sx-service', title: `${plugin} (background)`, 'data-service': key, src: u.href, 'aria-hidden': 'true', tabindex: '-1' })
+    document.body.appendChild(iframe)
+    const rec = { iframe, port: null }
+    started.set(key, rec)
+    const hs = handshake(iframe.contentWindow, { origin: location.origin, timeout: 60000 })
+    hs.done.then(({ port }) => {
+      rec.port = port
+      attachPort(S, port, { plugin, where: { service: service.id } })
+      port.on('error', (m) => console.warn(`[studio] ${key}:`, m.message))
+      port.send('service-init', { service: service.id, module: S.module?.id ?? null, rev: S.rec?.rev ?? 0 })
+    }, (e) => console.warn(`[studio] ${key} did not start: ${e.message}`))
+  }
 }
 
 /**
@@ -261,6 +308,8 @@ const CSS = `
 .sx-status[data-tone=error]{color:var(--dnp-color-error)}.sx-status[data-tone=warn]{color:var(--dnp-color-warn)}
 .sx-frame{flex:1 1 auto;width:100%;border:0;background:var(--dnp-color-bg-app);display:block}
 .sx-section{height:100%}
+/* A service runs, but is not seen and takes no room or focus. */
+.sx-service{position:fixed;width:0;height:0;border:0;left:-10px;top:-10px;opacity:0;pointer-events:none}
 .sx-choose .st-actions{flex-wrap:wrap}
 `
 

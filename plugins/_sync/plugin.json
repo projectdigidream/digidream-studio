@@ -1,0 +1,11 @@
+{
+  "id": "_sync",
+  "name": "Sync test",
+  "version": "1.0.0",
+  "protocol": 1,
+  "suite": ">=0.3.0",
+  "hidden": true,
+  "description": "A background service that only listens and answers the page test: what a sync plugin is given (every module's files, module-write, events, status). For the studio's own tests.",
+  "services": [{ "id": "sync", "entry": "service.html" }],
+  "permissions": ["module-write", "background"]
+}

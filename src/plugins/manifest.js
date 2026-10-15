@@ -6,7 +6,16 @@
 //     "kinds":    [{ "id": "file:tsprite", "label": "sprite", "ext": [".tsprite"] }],
 //     "editors":  [{ "id": "main", "entry": "host.html", "kinds": ["file:tsprite"], "label": "ThreeSprite", "priority": 10 }],
 //     "bakers":   [{ "id": "tsprite", "entry": "bake.js", "version": "1", "kinds": ["file:tsprite"] }],
-//     "sections": [{ "id": "packager", "entry": "index.html", "label": "Package", "icon": "📦" }] }
+//     "sections": [{ "id": "packager", "entry": "index.html", "label": "Package", "icon": "📦" }],
+//     "services": [{ "id": "sync", "entry": "service.html" }],
+//     "permissions": ["module-write", "background", "net:github.com"] }
+//
+// SERVICES are pages that run hidden from boot to the end, never unmounted:
+// work that must go on whatever page is shown (a sync). PERMISSIONS say what
+// a plugin needs beyond editing what it is handed: `module-write` (replace a
+// whole module, any module), `background` (run a service), `net:<host>`
+// (talk to that host -- declared, and shown when it is installed). A bundled
+// plugin is trusted with what it declares; an installed one is asked about.
 //
 // Three things a plugin can bring, each optional: EDITORS (a page that edits
 // one document and hands it back), BAKERS (a function turning a source into
@@ -23,6 +32,18 @@ export const PROTOCOL = 1
 const ID = /^[a-z0-9_][a-z0-9_-]{0,47}$/
 const KIND = /^(file|record):[a-z0-9_-]{1,32}$/
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/
+/** The permissions a plugin may ask for. */
+export const PERMISSIONS = ['module-write', 'background']
+const NET = /^net:[a-z0-9-]+(\.[a-z0-9-]+)+$/
+export const validPermission = (x) => PERMISSIONS.includes(x) || NET.test(String(x))
+
+/** What a permission lets a plugin do, in a sentence for the install question. */
+export function describePermission (x) {
+  if (x === 'module-write') return 'replace whole modules (any module here), as a sync does'
+  if (x === 'background') return 'keep running in the background, whatever page is open'
+  if (NET.test(String(x))) return `talk to ${x.slice(4)}`
+  return x
+}
 
 /** '1.2.3' -> [1,2,3], or null. */
 export function parseVersion (v) {
@@ -72,7 +93,7 @@ export function validateManifest (json, { suiteVersion = '0.0.0', protocol = PRO
   const p = {
     id: json.id, name: json.name ?? json.id, version: json.version, protocol: json.protocol, suite: json.suite ?? '*',
     author: json.author ?? '', description: json.description ?? '', hidden: !!json.hidden,
-    kinds: [], editors: [], bakers: [], sections: []
+    kinds: [], editors: [], bakers: [], sections: [], services: [], permissions: []
   }
   if (!ID.test(String(p.id ?? ''))) bad(`id "${p.id}" must be lowercase letters, digits, _ or -`)
   if (typeof p.name !== 'string' || !p.name) bad('name is missing')
@@ -120,6 +141,17 @@ export function validateManifest (json, { suiteVersion = '0.0.0', protocol = PRO
     if (!ID.test(sectionIds[i])) bad(`sections[${i}]: id "${sectionIds[i]}" must be lowercase letters, digits, _ or -`)
     p.sections.push({ id: sectionIds[i], entry: s.entry, label: s.label ?? p.name, icon: s.icon ?? '◈' })
   }
-  if (!p.editors.length && !p.bakers.length && !p.sections.length) bad('it brings no editors, bakers or sections')
+  for (const [i, x] of [].concat(json.permissions ?? []).entries()) {
+    if (!validPermission(x)) bad(`permissions[${i}]: "${x}" is not one of ${PERMISSIONS.join(', ')} or net:<host>`)
+    else if (!p.permissions.includes(x)) p.permissions.push(x)
+  }
+  const serviceIds = ids(json.services ?? [], 'service')
+  for (const [i, s] of (json.services ?? []).entries()) {
+    if (!safeEntry(s?.entry)) { bad(`services[${i}]: entry "${s?.entry}" must be a relative path inside the plugin`); continue }
+    if (!ID.test(serviceIds[i])) bad(`services[${i}]: id "${serviceIds[i]}" must be lowercase letters, digits, _ or -`)
+    p.services.push({ id: serviceIds[i], entry: s.entry })
+  }
+  if (p.services.length && !p.permissions.includes('background')) bad('it has services but does not ask for the "background" permission')
+  if (!p.editors.length && !p.bakers.length && !p.sections.length && !p.services.length) bad('it brings no editors, bakers, sections or services')
   return { ok: errors.length === 0, errors, plugin: errors.length ? null : p }
 }

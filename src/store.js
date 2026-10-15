@@ -64,7 +64,29 @@ export class Store {
 
   async load (id) { return tx(this.db, 'readonly', (o) => o.get(id)) }
 
-  async save (rec) { rec.opened = Date.now(); return tx(this.db, 'readwrite', (o) => o.put(rec)) }
+  /**
+   * Save, one revision higher: `rec.rev` counts every save of the module and
+   * only ever rises -- past the stored one too, so a record put back from a
+   * snapshot (an older rev) cannot take a number the module already had. A
+   * plugin that pulled at one rev is told "changed since" by any other
+   * (main.js, module-write).
+   */
+  async save (rec) {
+    rec.opened = Date.now()
+    return new Promise((resolve, reject) => {
+      const t = this.db.transaction(STORE, 'readwrite')
+      const o = t.objectStore(STORE)
+      const got = o.get(rec.id)
+      got.onsuccess = () => {
+        rec.rev = Math.max(rec.rev ?? 0, got.result?.rev ?? 0) + 1
+        o.put(rec)
+      }
+      // Whoever listens (plugins, main.js): one call per save, after it is in.
+      t.oncomplete = () => { resolve(rec.rev); try { this.onSave?.(rec) } catch {} }
+      t.onerror = () => reject(t.error)
+      t.onabort = () => reject(t.error)
+    })
+  }
 
   async remove (id) { return tx(this.db, 'readwrite', (o) => o.delete(id)) }
 }
@@ -115,8 +137,10 @@ export async function importSuite (store, { done = () => false, mark = () => {} 
 export function debounce (fn, ms = 600) {
   let timer = null
   let args = null
-  const flush = () => { timer = null; if (args) { const a = args; args = null; fn(...a) } }
+  // flush() runs what is waiting at once and returns its promise (or what fn
+  // returned), so a caller may wait for the save to be in.
+  const flush = () => { timer = null; if (args) { const a = args; args = null; return fn(...a) } }
   const d = (...a) => { args = a; if (!timer) timer = setTimeout(flush, ms) }
-  d.flush = () => { if (timer) { clearTimeout(timer); flush() } }
+  d.flush = () => { if (timer) { clearTimeout(timer); return flush() } }
   return d
 }

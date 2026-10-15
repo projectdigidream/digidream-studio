@@ -11,6 +11,8 @@
 //       onSave: () => bytesOrText(),          // asked on Back, and for drafts
 //       onUndo, onRedo, onRevert, onDispose,
 //       onSkin: (bundle, mode, pointer) => …  // optional: wear the studio's skin
+//       onEvent: (name, { id, rev }) => …     // module-opened, module-saved, foreground
+//       onSectionInit, onServiceInit           // a rail page / a background service starting
 //     })
 //     editor.onChange(() => { suite.dirty(true); suite.draft(bytesOrText()) })
 //   }
@@ -58,6 +60,11 @@ export function serveEditor (port, handlers = {}, { caps = [] } = {}) {
     close: (save = true) => send('close', { save: !!save }),
     error: (message) => send('error', { message: String(message) }),
     diagnostics: (items) => send('diagnostics', { items }),
+    /**
+     * A word on a module for Home and the rail (a sync's state): { module, text,
+     * level: 'info'|'ok'|'warn'|'error' }. Empty text takes it away.
+     */
+    status: ({ module = null, text = '', level = 'info' } = {}) => send('status', { module, text, level }),
     /** Ask the suite something read-only about the module (docs/PLUGINS.md, Queries). */
     query (what, arg = null, { timeout = 15000 } = {}) {
       const reqId = next++
@@ -95,6 +102,11 @@ export function serveEditor (port, handlers = {}, { caps = [] } = {}) {
         // uikit bundle, and the mode and pointer the studio wears it in.
         case 'skin': await handlers.onSkin?.(m.bundle, m.mode, m.pointer); break
         case 'query-result': pending.get(m.reqId)?.(m); pending.delete(m.reqId); break
+        // A section's page or a background service starting (no document).
+        case 'section-init': await handlers.onSectionInit?.(m); break
+        case 'service-init': await handlers.onServiceInit?.(m); break
+        // The studio's events: module-opened, module-saved, foreground ({ name, id, rev }).
+        case 'event': await handlers.onEvent?.(m.name, m); break
       }
     } catch (err) {
       send('error', { message: String(err?.message ?? err) })

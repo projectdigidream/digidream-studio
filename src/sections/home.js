@@ -58,7 +58,9 @@ async function showHome () {
       el('div', { class: 'st-muted', text: m.about || 'A module: maps, and everything they share.' }),
       el('div', { class: 'st-row sd-version-row' }, [
         el('span', { class: 'st-muted sd-version', 'data-version': STUDIO_VERSION, text: `studio ${STUDIO_VERSION}` }),
-        el('button', { class: 'sd-check-update', 'data-action': 'check-update', onclick: (e) => checkNow(e.currentTarget) }, 'check for updates')
+        el('button', { class: 'sd-check-update', 'data-action': 'check-update', onclick: (e) => checkNow(e.currentTarget) }, 'check for updates'),
+        // A plugin's word on this module (a sync's state), kept current by main.js.
+        syncBadge(m.id)
       ]),
       ...updateRows(),
       el('div', { class: 'st-row' }, [button(withIcon('transport.play', `play from ${startMapOf(m, maps) ?? 'the start'}`), () => S.play({ start: startMapOf(m, maps) })), button(withIcon('action.export', 'export'), () => S.exportPack()), button(withIcon('action.import', 'import pack'), () => S.importPack()),
@@ -99,11 +101,21 @@ async function showHome () {
     // The style the studio wears, chosen (or brought in) here as well as in Settings.
     lookCard(S, showHome, { title: 'Style', about: false }),
     list.length > 1 ? el('div', { class: 'st-section-head' }, withIcon('action.swap', 'other modules')) : null,
-    list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null
+    list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: S.moduleBadge?.(r.id)?.text ? `${r.id} · ${S.moduleBadge(r.id).text}` : r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null
   ])
 }
 
 /** What is wrong anywhere in the module, each line a way to where it is. */
+// The badge a plugin set for a module: a dot and its words. Always drawn
+// (hidden when empty) so main.js can fill it in place as the state changes.
+export function syncBadge (id) {
+  const b = S.moduleBadge?.(id)
+  const level = b?.level && b.level !== 'info' ? ` ui-dot--${b.level}` : ''
+  const node = el('span', { class: 'sd-sync st-muted', 'data-badge-module': id, 'data-status-level': b?.level ?? 'info' }, [el('span', { class: `ui-dot${level}` }), el('span', { class: 'sd-sync-text', text: b?.text ?? '' })])
+  node.hidden = !b?.text
+  return node
+}
+
 // A NEWER STUDIO, when there is one (updates.js; main.js asks at boot): what
 // it is, what changed, and the way to it. "Not now" keeps it away until a
 // later one is out.

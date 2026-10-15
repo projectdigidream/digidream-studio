@@ -3631,6 +3631,187 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(r.launched[2] === `${r.editing}.dnpm`, `the map editor's Play starts on the map being edited (${r.launched[2]})`)
 }
 
+// WHAT A SYNC PLUGIN NEEDS (the hidden _sync plugin's background service):
+// every module and its unbaked files with their revision; module-write, which
+// replaces the open module in place and refuses one edited since; the
+// studio's events; a badge on Home and the rail; and none of it for a plugin
+// that did not ask.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)) } return null }
+    S.plugins.showHidden = true
+    const { startPluginServices } = await import('/studio/src/plugins/frame.js')
+    startPluginServices(S)
+    const frame = document.querySelector('iframe[data-service="_sync/sync"]')
+    const svc = await wait(() => frame?.contentWindow?.__sync?.api && frame.contentWindow.__sync.init && frame.contentWindow.__sync)
+    if (!svc) return { started: false }
+    const out = { started: true, hidden: frame.getBoundingClientRect().width === 0, init: svc.init }
+    const id = S.rec.id
+    await S.go('map')
+    const mapBefore = S.docName
+    const view = { x: S.viewport.target.x, h: S.viewport.viewHeight }
+    // Every module, and this one's files.
+    const mods = await svc.api.query('modules')
+    out.listed = mods.some((m) => m.id === id && m.open && Number.isInteger(m.rev))
+    const got = await svc.api.query('record-files', { id })
+    out.files = got.files.length
+    out.unbaked = !got.files.some((f) => /\.(dnpm|lua)$/.test(f.path))
+    // A pull: the module renamed and a room added to the open map, written at the rev it was read at.
+    const dec = new TextDecoder(); const enc = new TextEncoder()
+    const files = got.files.map((f) => {
+      if (f.path === 'module.studio.json') { const m = JSON.parse(dec.decode(f.bytes)); m.name = 'Pulled'; return { path: f.path, bytes: enc.encode(JSON.stringify(m)) } }
+      return f
+    })
+    const snapsBefore = (await S.snaps?.list?.(id).catch(() => []))?.length ?? null
+    const w = await svc.api.query('module-write', { id, baseRev: got.rev, files }, { timeout: 30000 })
+    out.write = w
+    out.nameNow = S.module.name
+    out.mapKept = S.docName === mapBefore
+    out.viewKept = S.viewport.target.x === view.x && S.viewport.viewHeight === view.h
+    out.snapshot = snapsBefore === null ? 'n/a' : ((await S.snaps.list(id)).length > snapsBefore)
+    out.revNow = (await S.store.load(id)).rev
+    // Stale: written against the rev before.
+    out.stale = await svc.api.query('module-write', { id, baseRev: got.rev, files }, { timeout: 30000 })
+    // An edit, saved: one module-saved event with its rev.
+    svc.events.length = 0
+    S.module.about = (S.module.about ?? '') + ' '
+    S.moduleChanged()
+    out.saved = await wait(() => svc.events.find((e) => e.name === 'module-saved' && e.id === id))
+    out.savedOnce = svc.events.filter((e) => e.name === 'module-saved').length
+    // The app back in front (the Android shell's word).
+    globalThis.__dnpAppHidden?.(false)
+    out.front = await wait(() => svc.events.find((e) => e.name === 'foreground'))
+    // A badge for the module, on the rail and Home.
+    svc.api.status({ module: id, text: '2 changes to push', level: 'warn' })
+    await S.go('home'); await S.router.remount()
+    out.rail = await wait(() => document.querySelector('.sd-mod .sd-modstatus')?.title)
+    out.home = await wait(() => { const n = document.querySelector(`.sd-page [data-badge-module="${id}"]`); return n && !n.hidden && n.textContent })
+    svc.api.status({ module: id, text: '' })
+    out.cleared = await wait(() => !document.querySelector('.sd-mod .sd-modstatus') && document.querySelector(`.sd-page [data-badge-module="${id}"]`)?.hidden)
+    // A plugin that did not ask may not write.
+    try { await S.pluginQuery('module-write', { id, baseRev: out.revNow, files }, { plugin: '_echo' }); out.denied = false } catch (e) { out.denied = /may not write/.test(e.message) }
+    await S.go('map')
+    return out
+  })
+  check(r.started && r.hidden && r.init?.service === 'sync', `a plugin's service starts hidden and is told it started (${JSON.stringify(r.init)})`)
+  check(r.listed && r.files > 2 && r.unbaked, `it is given every module with its revision, and a module's files unbaked (${r.files} files)`)
+  check(r.write?.ok && r.write.rev > 0 && r.nameNow === 'Pulled' && r.mapKept && r.viewKept && r.snapshot !== false,
+        `module-write replaces the open module in place, the map and view kept, a snapshot first (${JSON.stringify({ write: r.write, name: r.nameNow, map: r.mapKept, view: r.viewKept, snap: r.snapshot })})`)
+  check(r.stale && r.stale.ok === false && r.stale.reason === 'changed' && r.stale.rev === r.revNow, `a write made against an older revision is refused (${JSON.stringify(r.stale)})`)
+  check(r.saved && r.saved.rev > r.revNow && r.savedOnce === 1 && r.front, `the service hears each save once, with its revision, and the app coming back (${JSON.stringify({ saved: r.saved, once: r.savedOnce, front: !!r.front })})`)
+  check(r.rail === '2 changes to push' && /2 changes to push/.test(r.home ?? '') && r.cleared, `its status is a badge on the rail and Home, and empty text takes it away (${r.rail} / ${r.home})`)
+  check(r.denied === true, 'CONTROL: a plugin that did not ask for "module-write" is refused')
+}
+
+// An editor open on a document a write changes: clean, it is given the new
+// one; with unsaved work, it keeps it and is told.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)) } return null }
+    const svc = document.querySelector('iframe[data-service="_sync/sync"]').contentWindow.__sync
+    const id = S.rec.id
+    ;(S.module.scripts ??= {})['sync_test.lua'] = '-- as it was'
+    S.moduleChanged()
+    await S.go('edit', '_echo/text~record:script~sync_test.lua')
+    const echo = await wait(() => { const w = document.querySelector('.sx-editor iframe.sx-frame')?.contentWindow; return w?.__echo?.text?.value === '-- as it was' && w.__echo })
+    if (!echo) return { opened: false }
+    const pull = async (body) => {
+      const got = await svc.api.query('record-files', { id })
+      const dec = new TextDecoder(); const enc = new TextEncoder()
+      const files = got.files.map((f) => {
+        if (f.path !== 'module.studio.json') return f
+        const m = JSON.parse(dec.decode(f.bytes)); m.scripts['sync_test.lua'] = body; return { path: f.path, bytes: enc.encode(JSON.stringify(m)) }
+      })
+      return svc.api.query('module-write', { id, baseRev: got.rev, files }, { timeout: 30000 })
+    }
+    const out = { opened: true }
+    out.w1 = await pull('-- from GitHub')
+    out.clean = await wait(() => echo.text.value === '-- from GitHub')
+    // Unsaved work in the editor: kept, and the bar says so.
+    echo.text.value = '-- mine'; echo.text.dispatchEvent(new Event('input'))
+    await wait(() => S.editorSession?.dirty)
+    out.w2 = await pull('-- from GitHub again')
+    await new Promise((r) => setTimeout(r, 300))
+    out.kept = echo.text.value
+    out.said = document.querySelector('.sx-editor .sx-status')?.textContent ?? ''
+    S.editorSession.dirty = false
+    await S.editorSession.finish(false)
+    delete S.module.scripts['sync_test.lua']; S.moduleChanged()
+    await S.go('map')
+    return out
+  })
+  check(r.opened && r.w1?.ok && r.clean, `an editor with nothing unsaved is given the document a write changed (${JSON.stringify(r.w1)})`)
+  check(r.w2?.ok && r.kept === '-- mine' && /changed by .* while you edit/.test(r.said), `an editor with unsaved work keeps it, and is told (${r.said})`)
+}
+
+// The rest of what a sync relies on: revisions never repeat (an older record
+// put back still takes a new number); a module that is not open is read and
+// written the same way, and a new one can be made; files that are not a
+// module, or name another id, are refused; opening a module is an event; the
+// Plugins page says what a plugin may do; openUrl without a shell opens a tab.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 50)) } return null }
+    const svc = document.querySelector('iframe[data-service="_sync/sync"]').contentWindow.__sync
+    const id = S.rec.id
+    const out = {}
+    // Revisions only rise: the stored record saved back from an older copy.
+    const stored = await S.store.load(id)
+    const older = { ...stored, rev: 1 }
+    const back = await S.store.save(older)
+    out.monotonic = back > stored.rev
+    // Another module, not open: made by a write (baseRev 0), read back, written again.
+    const mine = await svc.api.query('record-files', { id })
+    const enc = new TextEncoder(); const dec = new TextDecoder()
+    const asOther = (name) => mine.files.map((f) => {
+      if (f.path !== 'module.studio.json') return f
+      const m = JSON.parse(dec.decode(f.bytes)); m.id = 'synctwo'; m.name = name; return { path: f.path, bytes: enc.encode(JSON.stringify(m)) }
+    })
+    await S.store.remove('synctwo').catch(() => {})
+    out.made = await svc.api.query('module-write', { id: 'synctwo', baseRev: 0, files: asOther('Two') }, { timeout: 30000 })
+    out.listed = (await svc.api.query('modules')).find((m) => m.id === 'synctwo')
+    const two = await svc.api.query('record-files', { id: 'synctwo' })
+    out.readOther = two.rev === out.made.rev && two.files.length === mine.files.length
+    out.writeOther = await svc.api.query('module-write', { id: 'synctwo', baseRev: two.rev, files: asOther('Two again') }, { timeout: 30000 })
+    out.stillOpen = S.rec.id === id && (await S.store.load('synctwo')).module.name === 'Two again'
+    // Refusals.
+    out.notModule = await svc.api.query('module-write', { id: 'synctwo', baseRev: out.writeOther.rev, files: [{ path: 'readme.txt', bytes: enc.encode('hi') }] })
+    out.otherId = await svc.api.query('module-write', { id, baseRev: (await S.store.load(id)).rev, files: asOther('x') })
+    // Opening a module is an event; then back.
+    svc.events.length = 0
+    await S.openModule('synctwo')
+    out.opened = await wait(() => svc.events.find((e) => e.name === 'module-opened' && e.id === 'synctwo'))
+    await S.openModule(id)
+    await S.store.remove('synctwo')
+    // The Plugins page says what the plugin may do.
+    S.devPlugins = true
+    await S.go('plugins'); await new Promise((r) => setTimeout(r, 300))
+    out.perms = document.querySelector('[data-plugin="_sync"] [data-permissions]')?.textContent ?? ''
+    S.devPlugins = false
+    // openUrl with no shell: a new tab.
+    const opened = []
+    const realOpen = window.open
+    window.open = (u, t) => { opened.push([u, t]); return null }
+    const { shell } = await import('/studio/src/bridge.js')
+    await shell.openUrl('https://github.com/projectdigidream/digidream-studio/releases/latest')
+    window.open = realOpen
+    out.tab = opened
+    await S.go('map')
+    return out
+  })
+  check(r.monotonic, 'a record put back from an older copy still takes a new, higher revision')
+  check(r.made?.ok && r.listed && r.readOther && r.writeOther?.ok && r.writeOther.rev > r.made.rev && r.stillOpen,
+        `a module that is not open is made, listed, read and written, and the open one stays open (${JSON.stringify({ made: r.made, write: r.writeOther })})`)
+  check(r.notModule?.ok === false && /not a studio module/.test(r.notModule.reason) && r.otherId?.ok === false && /says "synctwo"/.test(r.otherId.reason),
+        `files that are not a module, or name another module, are refused (${r.notModule?.reason} / ${r.otherId?.reason})`)
+  check(!!r.opened, 'opening a module is an event the service hears')
+  check(/replace whole modules/.test(r.perms) && /in the background/.test(r.perms), `the Plugins page says what a plugin may do (${r.perms})`)
+  check(r.tab.length === 1 && r.tab[0][1] === '_blank' && /releases\/latest$/.test(r.tab[0][0]), `openUrl without a shell opens a new tab (${JSON.stringify(r.tab)})`)
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

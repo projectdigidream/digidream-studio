@@ -11,8 +11,9 @@ import { el, button, muted, toggle, confirmDialog } from '../ui.js'
 import { shell } from '../bridge.js'
 import { BASE } from '../base.js'
 import { readPluginZip, installPlugin, uninstallPlugin, pluginBase } from '../plugins/install.js'
+import { describePermission } from '../plugins/manifest.js'
 import { SUITE_KINDS } from '../plugins/kinds.js'
-import { installPluginSections } from '../plugins/frame.js'
+import { installPluginSections, startPluginServices } from '../plugins/frame.js'
 import { STUDIO_VERSION } from '../version.js'
 import { compareVersions } from '../plugins/manifest.js'
 import { draftsOf, clearDraft } from '../plugins/drafts.js'
@@ -34,7 +35,8 @@ async function showPlugins () {
     const brings = [
       ...m.editors.map((e) => `edits ${e.kinds.map((k) => S.docKinds[k]?.label ?? k).join(', ')}`),
       ...m.bakers.map((b) => `bakes ${b.kinds.map((k) => S.docKinds[k]?.label ?? k).join(', ')}`),
-      ...m.sections.map((x) => `the ${x.label} page`)
+      ...m.sections.map((x) => `the ${x.label} page`),
+      ...(m.services ?? []).map(() => 'runs in the background')
     ]
     body.push(el('div', { class: 'st-card', 'data-plugin': m.id }, [
       el('div', { class: 'st-row' }, [
@@ -43,6 +45,7 @@ async function showPlugins () {
       ]),
       m.description ? muted(m.description) : null,
       muted(brings.join(' · ')),
+      (m.permissions ?? []).length ? el('div', { class: 'st-muted', 'data-permissions': m.permissions.join(' '), text: `may: ${m.permissions.map(describePermission).join('; ')}` }) : null,
       toggle('on', p.enabled, (v) => { S.plugins.setEnabled(m.id, v); S.savePluginState?.(); showPlugins() }),
       p.source === 'installed' ? el('div', { class: 'st-row' }, [button('uninstall', async () => {
         if (!await confirmDialog(`Uninstall ${m.name} ${m.version}? Unsaved work it left stays, for another editor to pick up. The studio reloads to finish.`)) return
@@ -104,14 +107,17 @@ async function installFromBytes (bytes) {
     S.status(`not installed: this studio comes with ${m.name} ${have.manifest.version}, which is not older`, 'warn')
     return false
   }
-  const brings = [...m.editors.map((e) => `edits ${e.kinds.join(', ')}`), ...m.bakers.map((b) => `bakes ${b.kinds.join(', ')}`), ...m.sections.map((x) => `a ${x.label} page`)].join('; ')
-  const ok = await confirmDialog(`Install ${m.name} ${m.version}${m.author ? ` by ${m.author}` : ''}${have ? ` (replacing ${have.manifest.version})` : ''}? It ${brings}. A plugin runs inside the studio with the same access as the studio: it can read and change every module here. Install only plugins you trust.`)
+  const brings = [...m.editors.map((e) => `edits ${e.kinds.join(', ')}`), ...m.bakers.map((b) => `bakes ${b.kinds.join(', ')}`), ...m.sections.map((x) => `a ${x.label} page`), ...(m.services ?? []).map((x) => `a background service (${x.id})`)].join('; ')
+  // What it asks for beyond that (plugin.json "permissions"), said before it is in.
+  const asks = (m.permissions ?? []).length ? ` It asks to ${m.permissions.map(describePermission).join('; ')}.` : ''
+  const ok = await confirmDialog(`Install ${m.name} ${m.version}${m.author ? ` by ${m.author}` : ''}${have ? ` (replacing ${have.manifest.version})` : ''}? It brings ${brings}.${asks} A plugin runs inside the studio with the same access as the studio: it can read and change every module here. Install only plugins you trust.`)
   if (!ok) return false
   const done = await installPlugin(BASE, r)
   if (have) S.plugins.remove(m.id)
   const add = S.plugins.add(r.json, { baseUrl: pluginBase(BASE, m.id, m.version), source: 'installed' })
   if (!add.ok) { S.status(`stored, but not loaded: ${add.errors.join('; ')}`, 'error'); return false }
   installPluginSections(S)
+  startPluginServices(S)
   S.status(`${m.name} ${m.version} installed${done.replaced ? ` (was ${done.replaced})` : ''}`, 'ok')
   showPlugins()
   return true

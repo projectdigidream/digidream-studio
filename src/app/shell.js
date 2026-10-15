@@ -116,6 +116,10 @@ const STYLE = `
 /* The module's home. */
 .sd-hero{display:flex;flex-direction:column;gap:6px;padding:4px 0 8px}
 .sd-hero-name{font-size:22px;font-weight:700;color:var(--dnp-color-text-primary)}
+.sd-modstatus{position:absolute;top:6px;right:6px}
+.sd-mod{position:relative}
+.sd-sync{display:inline-flex;align-items:center;gap:6px;font-size:12px}
+.sd-sync[hidden]{display:none}
 /* The version, a check for a newer one, and the notice when there is one (updates.js). */
 .sd-version-row{align-items:center;gap:10px}
 .sd-body.st-page .sd-check-update{height:auto;min-height:0;padding:2px 8px;font-size:12px}
@@ -161,6 +165,7 @@ export class Shell {
     this.pageClose = null
     this.badges = new Map()
     this.moduleName = ''
+    this.moduleStatus = null // { text, level } a plugin set for the open module (main.js, pluginStatus)
   }
 
   /** Draw the rail again: the module's name, every section, play and export. */
@@ -168,7 +173,9 @@ export class Shell {
     const cur = this.router.current
     const lit = cur?.section.parent ?? cur?.id
     const items = [el('button', { class: 'sd-mod ui-rail__item', title: 'the module', 'data-section': 'home', 'data-on': lit === 'home' ? '1' : '0',
-      onclick: () => this.router.go('home') }, [el('span', { class: 'ico' }, withIcon('section.home')), el('span', { class: 'lbl ui-rail__label', text: this.moduleName })])]
+      onclick: () => this.router.go('home') }, [el('span', { class: 'ico' }, withIcon('section.home')), el('span', { class: 'lbl ui-rail__label', text: this.moduleName }),
+      // A plugin's word on the open module (a sync's state): a dot, its text on hover.
+      this.moduleStatus?.text ? el('span', { class: `sd-modstatus ui-dot${this.moduleStatus.level && this.moduleStatus.level !== 'info' ? ` ui-dot--${this.moduleStatus.level}` : ''}`, title: this.moduleStatus.text, 'data-status-level': this.moduleStatus.level ?? 'info' }) : null].filter(Boolean))]
     for (const s of this.router.rail) {
       if (s.id === 'home') continue
       const n = this.badges.get(s.id) ?? 0

@@ -104,6 +104,22 @@ export class PluginRegistry {
     return out
   }
 
+  /** Pages that run hidden for the whole session: [{ plugin, service, url }] (enabled plugins only). */
+  services () {
+    const out = []
+    for (const p of this.list()) {
+      if (!p.enabled || (p.manifest.hidden && !this.showHidden)) continue
+      for (const s of p.manifest.services) out.push({ plugin: p.manifest.id, service: s, url: p.baseUrl + s.entry })
+    }
+    return out
+  }
+
+  /** May this plugin do that? Its manifest declared it (and, installed, the user agreed at install). */
+  can (pluginId, permission) {
+    const p = this.plugins.get(pluginId)
+    return !!(p && p.enabled && p.manifest.permissions.includes(permission))
+  }
+
   /** Rail pages the plugins bring: [{ plugin, section, url }]. */
   sections () {
     const out = []

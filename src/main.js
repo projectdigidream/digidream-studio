@@ -48,6 +48,7 @@ import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
 import { showPlayScreen } from './playscreen.js'
+import { recordFromEntries, recordToEntries } from './record.js'
 import { checkForUpdate } from './updates.js'
 import { Vocab } from './vocab.js'
 import { Viewport, COLORS, ALPHA, FILL, wearSkin as wearCanvasSkin } from './viewport.js'
@@ -75,7 +76,9 @@ import { writePack, readPack } from './pack.js'
 import { BASE, RUNTIME, WASM, PLUGINS } from './base.js'
 import { PluginRegistry, loadBundled } from './plugins/registry.js'
 import { makeKinds, SUITE_KINDS } from './plugins/kinds.js'
-import { installEditors, installPluginSections } from './plugins/frame.js'
+import { installEditors, installPluginSections, startPluginServices, emitPluginEvent } from './plugins/frame.js'
+import { sameBytes } from './plugins/protocol.js'
+import { getDraft } from './plugins/drafts.js'
 import { install as installPluginsPage } from './sections/plugins.js'
 import { install as installSprites } from './sections/sprites.js'
 import { installBaking } from './bake/apply.js'
@@ -192,6 +195,9 @@ S.servedSprites = await fetch('/sprites/index.json').then((r) => (r.ok ? r.json(
 stage('opening your work', 0.65)
 bootStep('opening the store (IndexedDB)')
 S.store = await Store.open()
+// The badge a plugin set per module (S.pluginStatus, below): here, before the first module opens.
+const badges = new Map() // module id -> { plugin, text, level }
+S.moduleBadge = (id) => badges.get(id) ?? null
 // Modules made in the suite (the studio's fork before 0.2.0), brought over once.
 try {
   const KEY = 'dnp.studio.suiteImported'
@@ -412,9 +418,25 @@ installPluginSections(S)
  * What a plugin may ask about the module (an editor's `query`): read-only,
  * and nothing the author could not see on a page. docs/PLUGINS.md, Queries.
  */
-S.pluginQuery = async (what, arg) => {
+S.pluginQuery = async (what, arg, ctx = {}) => {
   switch (what) {
-    case 'module': return { id: S.module.id, name: S.module.name ?? S.module.id, version: STUDIO_VERSION }
+    case 'module': return { id: S.module.id, name: S.module.name ?? S.module.id, version: STUDIO_VERSION, rev: S.rec?.rev ?? 0 }
+    // EVERY MODULE, not just the open one (a sync): their ids, names and revisions.
+    case 'modules': return (await S.store.list()).map((r) => ({ id: r.id, name: r.module?.name ?? r.id, rev: r.rev ?? 0, opened: r.opened ?? 0, open: r.id === S.rec?.id }))
+    // A module's files, unbaked (record.js), with the revision they are of:
+    // what module-write takes back. The open module: what is waiting saved first.
+    case 'record-files': {
+      const id = arg?.id ?? S.rec?.id
+      if (id === S.rec?.id) await settleSave()
+      const rec = await S.store.load(id)
+      if (!rec) throw new Error(`no module called ${id}`)
+      return { id, rev: rec.rev ?? 0, files: await recordToEntries(rec) }
+    }
+    // Replace a module from files (main.js, writeModule); needs the permission.
+    case 'module-write': {
+      if (!S.plugins.can(ctx.plugin, 'module-write')) throw new Error(`${ctx.plugin ?? 'this page'} may not write modules (its plugin.json does not ask for "module-write")`)
+      return writeModule({ id: arg?.id, baseRev: arg?.baseRev, files: arg?.files, by: S.plugins.plugins.get(ctx.plugin)?.manifest.name ?? ctx.plugin })
+    }
     case 'kinds': return Object.values(S.docKinds).map((k) => ({ id: k.id, label: k.label }))
     case 'list': return S.docKinds[arg]?.list() ?? []
     case 'read': {
@@ -446,6 +468,41 @@ S.pluginQuery = async (what, arg) => {
     default: throw new Error(`no such question: ${what}`)
   }
 }
+// A PLUGIN'S WORD ON A MODULE (its `status` message: a sync's "up to date",
+// "3 changes to push", "conflict"): a dot and the words on Home and the rail.
+// { module, text, level: info|ok|warn|error }; empty text takes it away.
+S.pluginStatus = (plugin, m) => {
+  const id = typeof m?.module === 'string' && m.module ? m.module : S.rec?.id
+  if (!id) return
+  const level = ['info', 'ok', 'warn', 'error'].includes(m.level) ? m.level : 'info'
+  if (!m.text) badges.delete(id); else badges.set(id, { plugin, text: String(m.text).slice(0, 120), level })
+  const b = badges.get(id) ?? null
+  if (id === S.rec?.id && S.shell) { S.shell.moduleStatus = b; S.shell.drawRail() }
+  for (const node of document.querySelectorAll(`[data-badge-module="${CSS.escape(id)}"]`)) {
+    node.hidden = !b
+    node.dataset.statusLevel = b?.level ?? 'info'
+    node.querySelector('.ui-dot').className = `ui-dot${b && b.level !== 'info' ? ` ui-dot--${b.level}` : ''}`
+    node.querySelector('.sd-sync-text').textContent = b?.text ?? ''
+  }
+}
+
+// THE STUDIO'S EVENTS, to every running plugin page (frame.js): a module
+// opened, each save (one per save, not per edit), and the app back in front.
+S.store.onSave = (rec) => emitPluginEvent('module-saved', { id: rec.id, rev: rec.rev ?? 0 })
+let lastFront = 0
+const backInFront = () => {
+  if (Date.now() - lastFront < 1000) return // the shell's word and the page's, for one return
+  lastFront = Date.now()
+  emitPluginEvent('foreground', { id: S.rec?.id ?? null, rev: S.rec?.rev ?? 0 })
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') backInFront() })
+// The Android shell's own lifecycle word (onResume), which a WebView's page
+// is not always told any other way.
+{
+  const before = globalThis.__dnpAppHidden
+  globalThis.__dnpAppHidden = (hidden) => { try { before?.(hidden) } catch {} if (!hidden) backInFront() }
+}
+
 new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
   dragStart: (i) => tools.onDragStart(S, i),
@@ -468,34 +525,7 @@ S.shell.moduleName = S.module.name || S.module.id
 
 // --- modules and maps --------------------------------------------------------------------
 
-/**
- * A store record from a module's files: module.studio.json, the map documents
- * and the pictures. Paths relative to the module root. Null when it is not a
- * studio module (no documents).
- */
-// What emitModule writes into assets/ from the documents, and must not be read
-// back as if it were the module's own: the merged sound bank, the screens.
-// A function, not a const: seedFromShell runs it at boot, long before a
-// const this far down is initialised (a fresh store -- the desktop app's
-// first launch -- stopped the boot at "opening your work" on exactly that).
-function isGenerated (path) { return /^assets\/(sounds\/bank\.sfxproj|ui\/[^/]+\.json)$/.test(path) }
-
-function recordFromEntries (entries) {
-  const dec = new TextDecoder()
-  const modEntry = entries.find((e) => e.path === 'module.studio.json')
-  if (!modEntry) return null
-  const module = JSON.parse(dec.decode(modEntry.bytes))
-  const docs = {}
-  const assets = {}
-  for (const e of entries) {
-    const m = /^maps\/(.+)\.studio\.json$/.exec(e.path)
-    if (m) docs[m[1]] = JSON.parse(dec.decode(e.bytes))
-    else if (e.path.startsWith('assets/') && !/(^|\/)(props\.txt|index\.json)$/.test(e.path) && !isGenerated(e.path)) assets[e.path.slice(7)] = new Blob([e.bytes])
-    // Sources (sound packs) are kept under their own path, as written.
-    else if (e.path.startsWith('sources/')) assets[e.path] = new Blob([e.bytes])
-  }
-  return Object.keys(docs).length ? { id: module.id, module, docs, assets } : null
-}
+// A store record from a module's files, and back: record.js.
 
 /**
  * The modules the app shipped, into the store -- once each. The shell seeded
@@ -705,21 +735,95 @@ async function openModule (id, { show = true } = {}) {
   if (S.shell) { S.shell.moduleName = S.module.name || S.module.id; S.shell.drawRail() }
   await rebuildAssetCaches(rec)
   await openDoc(Object.keys(S.docs)[0])
+  if (S.shell) { S.shell.moduleStatus = badges.get(rec.id) ?? null; S.shell.drawRail() }
+  emitPluginEvent('module-opened', { id: rec.id, rev: rec.rev ?? 0 })
   if (show && S.router?.current) {
     if (S.router.current.id === 'home') await S.router.remount()
     else await S.go('home')
   }
 }
 
-async function openDoc (name) {
+// `keepView`: the camera stays where it is (the module was replaced under the
+// author, by a sync: the same map, seen from the same place).
+async function openDoc (name, { keepView = false } = {}) {
   S.docName = name
   S.doc = S.docs[name]
   normalize(S.doc)
   S.history = new History(S.doc)
   S.selection = null
   S.draw = { corners: [], rect: null }
-  if (S.ui) { S.ui.hideSheet(); S.ui.setHistory(false, false); frameToDoc(); S.applyCamera(); redraw(); previewNow() }
+  if (S.ui) { S.ui.hideSheet(); S.ui.setHistory(false, false); if (!keepView) { frameToDoc(); S.applyCamera() } redraw(); previewNow() }
   S.applySky?.()
+}
+
+/**
+ * A MODULE REPLACED FROM OUTSIDE (a plugin's module-write: a sync pulling
+ * from GitHub). `files` are what recordToEntries writes; `baseRev` is the
+ * revision they were made against, and a module saved since is refused --
+ * a slow pull must not overwrite edits made while it ran. Otherwise: what was
+ * waiting to be saved is saved, a snapshot keeps the module as it was, and the
+ * record is replaced. The open module is reloaded in place -- the same map
+ * and view where it still exists -- and an editor open on a document that
+ * changed is given the new one if it has nothing unsaved, else warned.
+ * Returns { ok, rev } or { ok: false, reason, rev? }.
+ */
+async function writeModule ({ id, baseRev, files, by = 'a plugin' }) {
+  if (typeof id !== 'string' || !id) throw new Error('module-write needs { id, baseRev, files }')
+  if (!Array.isArray(files)) throw new Error('module-write: files must be [{ path, bytes }]')
+  const rec = recordFromEntries(files.map((f) => ({ path: String(f.path), bytes: f.bytes instanceof Uint8Array ? f.bytes : new TextEncoder().encode(String(f.bytes ?? '')) })))
+  if (!rec) return { ok: false, reason: 'not a studio module: it needs module.studio.json and at least one maps/<name>.studio.json' }
+  if (rec.module.id !== id) return { ok: false, reason: `module.studio.json says "${rec.module.id}", not "${id}"` }
+  const isOpen = S.rec?.id === id
+  const check = async () => {
+    if (isOpen) await settleSave()
+    const stored = await S.store.load(id)
+    const rev = stored?.rev ?? 0
+    return { stored, rev, ok: rev === (baseRev ?? 0) }
+  }
+  let c = await check()
+  if (!c.ok) return { ok: false, reason: 'changed', rev: c.rev }
+  if (c.stored) await S.snapshot(`before sync from ${by}`, { rec: c.stored, force: true })
+  // Edited while the snapshot was taken: refused all the same.
+  c = await check()
+  if (!c.ok) return { ok: false, reason: 'changed', rev: c.rev }
+  rec.rev = c.rev
+  if (c.stored?.opened) rec.opened = c.stored.opened
+  migrateModule(rec)
+  migratePlayer(rec.module, rec.docs)
+  if (isOpen) await reloadInPlace(rec, by)
+  const rev = await S.store.save(rec)
+  return { ok: true, rev }
+}
+S.writeModule = writeModule
+
+// The open module's record, replaced: everything made from it made again,
+// histories begun afresh (the snapshot is the way back), the map and view kept.
+async function reloadInPlace (rec, by) {
+  const session = S.editorSession
+  const was = session && !session.done ? { kind: session.kindId, key: session.key, before: session.original } : null
+  S.rec = rec
+  S.module = rec.module
+  S.docs = rec.docs
+  S.moduleHistory = new History({ module: S.module, docs: S.docs, assets: rec.assets ?? {} })
+  S.shell?.setHistory(false, false)
+  if (S.shell) { S.shell.moduleName = S.module.name || S.module.id; S.shell.drawRail() }
+  await rebuildAssetCaches(rec)
+  const name = S.docs[S.docName] ? S.docName : Object.keys(S.docs)[0]
+  await openDoc(name, { keepView: name === S.docName })
+  // A page showing the module (not the map, not an editor): drawn again from the new one.
+  const route = S.router?.current?.id
+  if (route && route !== 'map' && route !== 'edit') await S.router.remount()
+  if (was) {
+    const k = S.docKinds[was.kind]
+    const now = k?.has(was.key) ? (await k.read(was.key)).payload : null
+    if (now === null) session.status(`${was.key} is gone from the module (${by}); Back would put it back`, 'warn')
+    else if (!sameBytes(now, was.before)) {
+      const draft = await getDraft(S.module.id, was.kind, was.key).catch(() => null)
+      if (!session.dirty && !draft) { session.original = now; session.port?.send('revert', { payload: now }); session.status(`updated from ${by}`) }
+      else session.status(`changed by ${by} while you edit; Back keeps your version`, 'warn')
+    }
+  }
+  S.status(`${S.module.name || S.module.id} updated from ${by}`, 'ok')
 }
 
 // `fresh`: the doc is for a module not open yet, so it must not be given
@@ -784,11 +888,18 @@ function plainTextures () {
   return ['PLAIN_FLOOR', 'PLAIN_WALL']
 }
 
+// The save being written, if one is: what settleSave waits for besides the debounce.
+let saving = null
 const save = debounce(async () => {
-  try { await S.store.save(S.rec) } catch (e) { S.status(`could not save: ${e.message}`, 'error'); return }
+  try { await (saving = S.store.save(S.rec)) } catch (e) { S.status(`could not save: ${e.message}`, 'error'); return } finally { saving = null }
   // Every few minutes of editing, a snapshot (one the same as the last is not taken).
   if (Date.now() - (S.lastSnapAt ?? 0) > EVERY_MS) await S.snapshot('editing')
 }, 600)
+/** Whatever is waiting to be saved, saved, and in the store: before a module is read or replaced from outside. */
+async function settleSave () {
+  await save.flush()
+  await saving?.catch(() => {})
+}
 // Leaving the page (a browser tab closed): what is waiting to be saved, saved.
 addEventListener('pagehide', () => save.flush())
 addEventListener('beforeunload', () => save.flush())
@@ -1574,6 +1685,8 @@ async function finishBoot () {
   addEventListener('hashchange', () => S.router.follow())
   stage('ready', 1)
   boot.hidden = true
+  // The plugins' background pages (a sync), now that a module is open.
+  startPluginServices(S)
   // A newer studio on GitHub (updates.js): asked after the studio is up, never
   // in the way of it; Home shows it when there is one.
   checkForUpdate(STUDIO_VERSION).then((u) => {
