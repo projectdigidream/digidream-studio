@@ -121,6 +121,9 @@ export class GitHub {
     try { json = text ? JSON.parse(text) : null } catch {}
     if (!r.ok) {
       let msg = json?.message ?? `HTTP ${r.status}`
+      // Why a repository was refused is in `errors`, not the message.
+      const why = (json?.errors ?? []).map((x) => x?.message ?? x?.code).filter(Boolean)
+      if (why.length) msg = `${msg} ${why.join('; ')}`
       if (r.status === 401) msg = 'GitHub refused the token (expired, revoked or mistyped)'
       else if (r.status === 403 && r.headers?.get?.('x-ratelimit-remaining') === '0') msg = 'GitHub\'s rate limit is used up for now; it resets within the hour'
       throw new GitHubError(r.status, msg, path)
@@ -133,6 +136,38 @@ export class GitHub {
 
   /** The repository: { full_name, private, default_branch, permissions: { push } }. */
   info () { return this.req('GET', '') }
+
+  /**
+   * The repositories the token can write to, most recently pushed first:
+   * [{ full_name, private, default_branch, pushed_at }]. A fine-grained token
+   * sees only the repositories it was given.
+   */
+  async repos ({ pages = 5 } = {}) {
+    const out = []
+    for (let page = 1; page <= pages; page++) {
+      const list = await this.req('GET', `/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`)
+      out.push(...list)
+      if (list.length < 100) break
+    }
+    return out.filter((r) => r.permissions?.push !== false && !r.archived)
+  }
+
+  /**
+   * A new repository of the token's owner, with a first commit (so the git
+   * database API takes it at once). Private unless asked otherwise.
+   */
+  async createRepo (name, { isPrivate = true } = {}) {
+    try {
+      return await this.req('POST', '/user/repos', { name, private: isPrivate, auto_init: true, description: 'Digidream Studio modules' })
+    } catch (e) {
+      if (e.status === 422 && /already exists/i.test(e.message)) throw new GitHubError(422, `there is already a repository called ${name}`, e.path)
+      if (e.status === 403 || e.status === 404) {
+        throw new GitHubError(e.status, 'this token may not create repositories: it needs "All repositories" with the Administration permission (or a classic token with the repo scope). Make the repository on GitHub instead, then pick it here.', e.path)
+      }
+      if (e.status === 422) throw new GitHubError(422, `GitHub refused the name "${name}": ${e.message}`, e.path)
+      throw e
+    }
+  }
 
   /**
    * The branch's commit and that commit's root tree, or null when the branch

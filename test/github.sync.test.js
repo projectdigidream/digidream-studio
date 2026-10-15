@@ -209,6 +209,28 @@ B.studio.beforeWrite = (s) => s.edit('cave', { 'maps/map05.studio.json': 'typed 
     'a branch that does not exist yet is made from the default one, and only it gets the module')
 }
 
+// REPOSITORIES: listed (only ones the token can write to), and made.
+{
+  const f2 = new FakeGitHub()
+  f2.addRepo('me/other', { isPrivate: false })
+  f2.addRepo('them/read-only', { push: false })
+  const g = new GitHub({ token: 'tok', fetch: f2.fetch })
+  check(same((await g.repos()).map((r) => r.full_name), ['me/modules', 'me/other']), 'repos() lists what the token can write to')
+  const made = await g.createRepo('fresh')
+  check(made.full_name === 'me/fresh' && made.private === true && f2.log('main', 'me/fresh').length === 1, 'createRepo makes a private one with a first commit')
+  const s = new FakeStudio()
+  s.put('cave', mod('cave', { map01: 'x' }))
+  const r = await syncModule({ id: 'cave', studio: s, gh: new GitHub({ token: 'tok', repo: 'me/fresh', fetch: f2.fetch }), store: new MemStore() })
+  check(r.result === 'synced' && f2.read('main', 'cave', 'me/fresh')['maps/map01.studio.json'] === 'x', 'and a module syncs into it straight away')
+  let e = null
+  try { await g.createRepo('fresh') } catch (x) { e = x }
+  check(/already a repository called fresh/.test(e?.message), `a taken name: ${e?.message}`)
+  f2.canCreate = false
+  e = null
+  try { await g.createRepo('another') } catch (x) { e = x }
+  check(e?.status === 403 && /Administration/.test(e.message), 'a token that may not create says what it lacks')
+}
+
 // ERRORS say what is wrong.
 {
   const bad = new GitHub({ token: 'nope', repo: 'me/modules', fetch: fake.fetch })

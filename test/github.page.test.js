@@ -54,19 +54,40 @@ check(await until(() => S(() => !!document.querySelector('iframe[data-service="g
 await S(() => window.__studio.go('p-github-sync'))
 const sec = async () => (await (await page.waitForSelector('iframe.sx-section')).contentFrame())
 let f = await sec()
-await f.waitForSelector('[data-action="connect"]', { timeout: 30000 })
-await click(f, '[data-action="connect"]')
-check(/token|repository/i.test(await f.$eval('.err', (e) => e.textContent).catch(() => '')), 'Connect with nothing filled in says what is missing')
-await f.type('[data-field="repo"]', 'https://github.com/me/modules')
+await f.waitForSelector('[data-action="continue"]', { timeout: 30000 })
+await click(f, '[data-action="continue"]')
+check(/token/i.test(await f.$eval('.err', (e) => e.textContent).catch(() => '')), 'Continue with no token says what is missing')
 await f.type('[data-field="token"]', 'wrong')
-await click(f, '[data-action="connect"]')
+await click(f, '[data-action="continue"]')
 await f.waitForFunction(() => /refused the token/.test(document.querySelector('.err')?.textContent ?? ''), { timeout: 10000 }).catch(() => {})
 check(/refused the token/.test(await f.$eval('.err', (e) => e.textContent).catch(() => '')), 'a wrong token is refused, saying so')
 await f.$eval('[data-field="token"]', (e) => { e.value = '' })
 await f.type('[data-field="token"]', 'github_pat_test')
-await click(f, '[data-action="connect"]')
+await click(f, '[data-action="continue"]')
+
+// THE REPOSITORY: the ones the token can write to are listed, one it cannot
+// is not; a new one is made here.
+fake.addRepo('me/old-game', { isPrivate: false })
+fake.addRepo('someone/theirs', { push: false })
+await f.waitForSelector('[data-repo="me/modules"]', { timeout: 20000 })
+const listed = await f.$$eval('[data-repo]', (els) => els.map((e) => e.dataset.repo))
+check(listed.includes('me/modules') && listed.includes('me/old-game') && !listed.includes('someone/theirs'), `the token's repositories are listed, only ones it can write to (${listed})`)
+check(await f.$eval('[data-field="name"]', (e) => e.value) === 'digidream-modules', 'a new one is offered a free name')
+check(!/\bnull\b|undefined/.test(await f.evaluate(() => document.body.innerText)), 'nothing on the page reads null or undefined')
+await f.$eval('[data-field="name"]', (e) => { e.value = 'modules'; e.dispatchEvent(new Event('input')) })
+await click(f, '[data-action="create"]')
+await f.waitForFunction(() => /already a repository called modules/.test(document.querySelector('.err')?.textContent ?? ''), { timeout: 10000 }).catch(() => {})
+check(/already a repository called modules/.test(await f.$eval('.err', (e) => e.textContent).catch(() => '')), 'a taken name is refused, saying so')
+fake.canCreate = false
+await f.$eval('[data-field="name"]', (e) => { e.value = 'fresh'; e.dispatchEvent(new Event('input')) })
+await click(f, '[data-action="create"]')
+await f.waitForFunction(() => /Administration/.test(document.querySelector('.err')?.textContent ?? ''), { timeout: 10000 }).catch(() => {})
+check(/Administration/.test(await f.$eval('.err', (e) => e.textContent).catch(() => '')), 'a token that may not create repositories is told which permission it lacks')
+check(!fake.meta.has('me/fresh'), '...and nothing was made')
+fake.canCreate = true
+await click(f, '[data-repo="me/modules"] [data-action="use"]')
 await f.waitForSelector('[data-action="disconnect"]', { timeout: 20000 })
-check(true, 'the right one connects (a pasted repository address is taken as owner/name)')
+check(true, 'Use connects to a listed repository')
 check(!(await f.evaluate(() => document.body.textContent.includes('github_pat_test'))), 'the token is not shown on the page')
 
 // THE OPEN MODULE GOES UP.
@@ -129,10 +150,21 @@ check(await until(() => /Renamed on this device/.test(fake.read('main', id)['mod
   check(await until(async () => (await sec()).evaluate(() => !document.querySelector('[data-remote="from-github"]') && !!document.querySelector('[data-module="from-github"] input[data-track]:checked'))), 'and it moves to this device\'s list, synced from then on')
 }
 
+// CHANGE REPOSITORY to a new one made here: the modules that synced go there.
+{
+  await click(await sec(), '[data-action="change-repo"]')
+  await (await sec()).waitForSelector('[data-action="create"]', { timeout: 20000 })
+  await (await sec()).$eval('[data-field="name"]', (e) => { e.value = 'second-home'; e.dispatchEvent(new Event('input')) })
+  await click(await sec(), '[data-action="create"]')
+  check(await until(() => fake.meta.get('me/second-home')?.private === true), 'Create makes a private repository')
+  check(await until(() => fake.read('main', id, 'me/second-home')['module.studio.json']), 'and the synced modules go up to it')
+  check(await until(async () => (await sec()).evaluate(() => document.querySelector('.name button.link')?.textContent === 'me/second-home')), 'the page says which repository it syncs with now')
+}
+
 // THE GITHUB LINKS: in a browser, a new tab, opened inside the click (a tab
 // opened by the studio after the message would be blocked as a popup).
 {
-  const tab = browser.waitForTarget((t) => t.url().startsWith('https://github.com/me/modules'), { timeout: 10000 }).catch(() => null)
+  const tab = browser.waitForTarget((t) => t.url().startsWith('https://github.com/me/second-home'), { timeout: 10000 }).catch(() => null)
   await click(await sec(), '.name button.link')
   check(!!(await tab), 'the repository link opens GitHub in a new tab')
 }
