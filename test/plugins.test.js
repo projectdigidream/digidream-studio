@@ -26,6 +26,10 @@ const check = (ok, label) => {
 check(compareVersions('1.2.10', '1.2.9') > 0 && compareVersions('1.0.0', '1.0.0') === 0 && compareVersions('0.9.9', '1.0.0') < 0, 'versions compare numerically, not as text')
 check(satisfies('0.1.0', '>=0.1.0') && !satisfies('0.0.9', '>=0.1.0') && satisfies('1.4.0', '^1.2.0') && !satisfies('2.0.0', '^1.2.0') && satisfies('3.0.0', '*'), 'the ranges a plugin may ask for')
 check(!satisfies('1.0.0', '~1.0.0'), 'a range it cannot read is not satisfied (refused, not guessed)')
+// A studio with a fourth number (a rebuild: 0.3.3.1) still satisfies its plugins' ranges.
+check(satisfies('0.3.3.1', '>=0.3.1') && satisfies('0.3.3.1', '^0.3.0') && satisfies('0.3.3.1', '>=0.3.3') && !satisfies('0.3.3.1', '>=0.3.4') && compareVersions('0.3.3.1', '0.3.3') > 0,
+      'a four-part studio version is read, and compares above its three-part base')
+check(!satisfies('0.3.3.1.7', '>=0.1.0'), 'CONTROL: five parts is not a version')
 check(safeEntry('host.html') && safeEntry('dist/index.html') && !safeEntry('../x.html') && !safeEntry('/abs.html') && !safeEntry('https://evil/x.js') && !safeEntry('a//b'), 'an entry stays inside the plugin')
 
 // --- manifests --------------------------------------------------------------------------

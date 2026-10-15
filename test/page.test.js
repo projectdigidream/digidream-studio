@@ -60,7 +60,7 @@ globalThis.__assetUrlSupported = await page.evaluate(async () => !!(await import
 check(errors.length === 0, `no page errors during boot (${errors.slice(0, 3).join(' | ')})`)
 // THE LOADING LOG: each step and its time, kept for "copy this" when one fails.
 const bootText = await page.evaluate(() => window.__bootText?.() ?? '')
-check(/studio \d+\.\d+\.\d+ · /.test(bootText) && /opening the store/.test(bootText) && /✓ opening your work \(\d+ ms\)/.test(bootText) && /opened \S+: \d+ map/.test(bootText),
+check(/studio \d+\.\d+\.\d+(\.\d+)? · /.test(bootText) && /opening the store/.test(bootText) && /✓ opening your work \(\d+ ms\)/.test(bootText) && /opened \S+: \d+ map/.test(bootText),
       `the loading screen logs its steps, with times (${bootText.split('\n').length} lines)`)
 // A FIRST BOOT (a fresh profile: an empty store) opens a module made from the
 // starter template -- its monster and sheet -- not a blank room. It once ran
@@ -3483,7 +3483,7 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
     })
   }
   const reset = () => page.evaluate(() => { const S = window.__studio; Object.assign(S.style.sector, { floorTex: null, ceilTex: null }); Object.assign(S.style.edge, { middle: null, upper: null, lower: null }) })
-  const made = await page.evaluate(async () => { const S = window.__studio; await S.store.remove('tex-first').catch(() => {}); const r = await S.newFromTemplate('tex-first', 'Tex first'); if (r) await S.openModule('tex-first'); return !!r })
+  const made = await page.evaluate(async () => { const S = window.__studio; S.__texBack = S.rec.id; await S.store.remove('tex-first').catch(() => {}); const r = await S.newFromTemplate('tex-first', 'Tex first'); if (r) await S.openModule('tex-first'); return !!r })
   if (made) {
     await reset()
     const r = await drawn()
@@ -3508,6 +3508,9 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   void plain
   await page.evaluate(async () => {
     const S = window.__studio; [S.textureNames, S.textureSizes] = S.__served; delete S.__served
+    // Back to the module the scenarios before were on, then the two test modules gone:
+    // removing the OPEN one left later scenarios on a module the store no longer had.
+    await S.openModule(S.__texBack); delete S.__texBack
     await S.store.remove('tex-none'); await S.store.remove('tex-first')
   })
 }

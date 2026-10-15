@@ -31,7 +31,9 @@ export const PROTOCOL = 1
 
 const ID = /^[a-z0-9_][a-z0-9_-]{0,47}$/
 const KIND = /^(file|record):[a-z0-9_-]{1,32}$/
-const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/
+// major.minor.patch, and a fourth number where a rebuild carries one (the
+// studio itself: 0.3.3.1) -- a missing fourth is 0, so 0.3.3 < 0.3.3.1.
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$/
 /** The permissions a plugin may ask for. */
 export const PERMISSIONS = ['module-write', 'background']
 const NET = /^net:[a-z0-9-]+(\.[a-z0-9-]+)+$/
@@ -45,17 +47,17 @@ export function describePermission (x) {
   return x
 }
 
-/** '1.2.3' -> [1,2,3], or null. */
+/** '1.2.3' -> [1,2,3,0], '0.3.3.1' -> [0,3,3,1], or null. */
 export function parseVersion (v) {
   const m = SEMVER.exec(String(v ?? ''))
-  return m ? [+m[1], +m[2], +m[3]] : null
+  return m ? [+m[1], +m[2], +m[3], +(m[4] ?? 0)] : null
 }
 
 /** <0, 0, >0 like a sort comparator. Unparseable versions sort first. */
 export function compareVersions (a, b) {
   const x = parseVersion(a), y = parseVersion(b)
   if (!x || !y) return (x ? 1 : 0) - (y ? 1 : 0)
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
+  for (let i = 0; i < 4; i++) if (x[i] !== y[i]) return x[i] - y[i]
   return 0
 }
 
@@ -97,7 +99,7 @@ export function validateManifest (json, { suiteVersion = '0.0.0', protocol = PRO
   }
   if (!ID.test(String(p.id ?? ''))) bad(`id "${p.id}" must be lowercase letters, digits, _ or -`)
   if (typeof p.name !== 'string' || !p.name) bad('name is missing')
-  if (!parseVersion(p.version)) bad(`version "${p.version}" is not major.minor.patch`)
+  if (!parseVersion(p.version)) bad(`version "${p.version}" is not major.minor.patch (or major.minor.patch.build)`)
   if (!Number.isInteger(p.protocol)) bad('protocol is missing (the editor protocol version it speaks)')
   else if (p.protocol > protocol) bad(`it speaks editor protocol ${p.protocol}; this studio speaks ${protocol}`)
   if (!satisfies(suiteVersion, p.suite)) bad(`it wants studio ${p.suite}; this is ${suiteVersion}`)

@@ -12,7 +12,7 @@ let fails = 0
 const check = (ok, label) => { checks++; if (!ok) { fails++; console.log(`  FAIL ${label}`) } }
 
 const file = readFileSync(join(ROOT, 'studio', 'VERSION'), 'utf8').trim()
-check(/^\d+\.\d+\.\d+$/.test(file), `studio/VERSION is major.minor.patch (${file})`)
+check(/^\d+\.\d+\.\d+(\.\d+)?$/.test(file), `studio/VERSION is major.minor.patch, or with a fourth number for a rebuild (${file})`)
 check(STUDIO_VERSION === file, `src/version.js says the same as studio/VERSION (${STUDIO_VERSION} vs ${file})`)
 
 console.log(`version: ${checks} checks, ${fails} failures`)
