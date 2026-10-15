@@ -7,4 +7,4 @@
 // the user's permission. Plugins name the range they need against it
 // (plugin.json `suite`, docs/PLUGINS.md).
 //
-export const STUDIO_VERSION = '0.3.3.1'
+export const STUDIO_VERSION = '0.3.4'

@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.3.4 -- 2026-10-15
+
+Built on engine 0.1.5.
+
 ### Added
 
 - **This map's limits on the shared world's grid**: when the map has a cell on
