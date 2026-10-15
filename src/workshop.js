@@ -22,7 +22,7 @@ import { el, row, slider, select, button, chips, muted, text, ask, confirmDialog
 import { parseAtlas, frameKey, quadFor } from '/src/render/atlas.js'
 import { rotationFor, frameAt } from '/src/render/props.js'
 import { edgesOf, autoLayout, problemsByState, NODE_W, NODE_H, MOB_SHAPE, WEAPON_SHAPE } from './graph.js'
-import { newMonster, deleteMonster, bodyRows, brainRows, varsRows, stateRows, missilesSection, STATE_NAMES } from './brain.js'
+import { newMonster, deleteMonster, bodyRows, brainRows, varsRows, stateRows, missilesSection, STATE_NAMES, animUses, bodyStates } from './brain.js'
 import { newWeapon, deleteWeapon, newArsenal } from './weapons_emit.js'
 import { swingRows, newSwing, SwingPreview } from './swing.js'
 import { slashRows } from './slashform.js'
@@ -250,7 +250,9 @@ class Workshop {
     this.canvas = canvas
     const prop = this.prop
     const p = this.play
-    const stateChips = chips([0, 1, 2, 3, 4].map((st) => ({ id: st, label: `${st} ${STATE_NAMES[st]}${prop?.art?.states?.[st] ? ' · ' + prop.art.states[st] : ''}`, on: p.animName === null && p.anim === st })),
+    // Every state the body has or the brain uses, not only the five.
+    const states = bodyStates(prop, this.kind === 'mob' ? animUses(this.S.module.mobs?.mobs?.[this.mob]) : new Map())
+    const stateChips = chips(states.map((st) => ({ id: st, label: `${st} ${STATE_NAMES[st] ?? ''}${prop?.art?.states?.[st] ? ' · ' + prop.art.states[st] : ''}`.replace('  ', ' '), on: p.animName === null && p.anim === st })),
                              (it) => { p.anim = it.id; p.animName = null; p.t0 = performance.now(); this.render() })
     // Any animation of the sheet, by name, whether or not a state uses it.
     // A served sheet's list arrives when its manifest does (#drawPreview).

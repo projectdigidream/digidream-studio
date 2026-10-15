@@ -78,6 +78,8 @@ export function emitProps (module) {
     const art = p.art
     if (art?.kind === 'atlas') {
       for (const [state, anim] of Object.entries(art.states ?? {})) {
+        // A state given no animation yet (just added, or "(choose)"): not written.
+        if (!String(anim ?? '').trim()) continue
         L.push(`atlas ${p.id}${Number(state) ? ` state ${state}` : ''} sheet ${art.sheet} anim ${anim}`)
       }
     } else if (art?.kind === 'sprite') {

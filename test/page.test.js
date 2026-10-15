@@ -2663,6 +2663,98 @@ await page.keyboard.press('Escape')
   check(listed.route === 'map' && listed.doc === 'broken', 'tapping the line opens the map it is about')
 }
 
+// A MONSTER'S OWN STATE NUMBERS (a leap in 5): its Body tab lists them, named
+// by the brain states that use them, and they can be given an animation; the
+// preview can play them.
+{
+  const own = await page.evaluate(async () => {
+    const S = window.__studio
+    const { newMonster } = await import('/studio/src/brain.js')
+    const name = newMonster(S, 'leaper')
+    const mob = S.module.mobs.mobs[name]
+    mob.states.leap = { anim: 5, move: 'stop', face: 'target', ticks: 10, next: Object.keys(mob.states)[0] }
+    S.moduleChanged()
+    await S.go('monsters', name); await new Promise((r) => setTimeout(r, 300))
+    S.workshop.tab = 'body'; S.workshop.render()
+    const row = [...document.querySelectorAll('.wk-details .st-row')].find((x) => x.textContent.includes('state 5 · state leap'))
+    const ctl = row?.querySelector('select, input')
+    const prop = S.module.props.find((p) => p.name === name)
+    const anims = S.module.sprites?.[prop.art?.sheet]?.animations ?? []
+    const want = anims[anims.length - 1] ?? 'leap'
+    if (ctl) { ctl.value = want; ctl.dispatchEvent(new Event('change')) }
+    await new Promise((r) => setTimeout(r, 100))
+    const r = { row: !!row, set: prop.art?.states?.[5], want, chips: [...document.querySelectorAll('.wk-preview .st-chip')].map((c) => c.textContent).filter((t) => /^5\b/.test(t)) }
+    const { emitProps } = await import('/studio/src/props_emit.js')
+    r.written = new RegExp(`atlas ${prop.id} state 5 sheet \\S+ anim ${want}`).test(emitProps(S.module))
+    const { deleteMonster } = await import('/studio/src/brain.js')
+    deleteMonster(S, name); S.moduleChanged()
+    await S.go('map')
+    return r
+  })
+  check(own.row && own.set === own.want && own.written, `a monster's own state 5 is in its Body tab, given an animation, and written for the game (${JSON.stringify({ row: own.row, set: own.set, written: own.written })})`)
+  check(own.chips.length === 1, `the preview can play state 5 (${own.chips.join(', ')})`)
+}
+
+// THE PLAYER'S STATES, WITHOUT A MONSTER: the Player page makes a body of its
+// own and sets which animation each state plays; a body that also draws a
+// monster is said, and copied, after which the two are separate.
+{
+  const st = await page.evaluate(async () => {
+    const S = window.__studio
+    const mobsBefore = Object.keys(S.module.mobs?.mobs ?? {}).sort().join()
+    const keep = S.module.player
+    S.module.player = null; S.moduleChanged()
+    await S.go('player')
+    S.workshop.tab = 'skin'; S.workshop.render()
+    const chip = (t) => [...document.querySelectorAll('.wk-details .st-chip')].find((c) => c.textContent === t)
+    chip('+ a body of its own')?.click()
+    await new Promise((r) => setTimeout(r, 100))
+    const own = S.module.props.find((p) => p.name === S.module.player?.prop)
+    const r = { own: own?.name, isMob: !!S.module.mobs?.mobs?.[own?.name], mobsSame: Object.keys(S.module.mobs?.mobs ?? {}).sort().join() === mobsBefore,
+      // Its states matched to the sheet's animations at once (the sheet's own list, not only the module's record of it).
+      guessed: !!own?.art?.states?.[0] }
+    // State 1 (walk) given an animation from the skin tab.
+    const rowOf = (label) => [...document.querySelectorAll('.wk-details .st-row')].find((x) => x.textContent.includes(label))
+    const walk = rowOf('state 1 · walk')
+    const ctl = walk?.querySelector('select, input')
+    const anims = S.module.sprites?.[own?.art?.sheet]?.animations ?? []
+    const pick = anims.find((a) => a !== own?.art?.states?.[1]) ?? 'stride'
+    if (ctl?.tagName === 'SELECT') { ctl.value = pick; ctl.dispatchEvent(new Event('change')) } else if (ctl) { ctl.value = pick; ctl.dispatchEvent(new Event('change')) }
+    await new Promise((r) => setTimeout(r, 100))
+    r.walk = own?.art?.states?.[1]
+    r.wanted = pick
+    r.rows = ['state 0 · idle', 'state 2 · attack', 'state 4 · death'].every((l) => !!rowOf(l))
+    // What the game is given: the prop's states in props.txt.
+    const { emitProps } = await import('/studio/src/props_emit.js').catch(() => ({}))
+    r.emitted = emitProps ? emitProps(S.module).includes(own?.name) : null
+    // A body shared with a monster: said, then copied.
+    const mobName = Object.keys(S.module.mobs?.mobs ?? {}).find((n) => S.module.props.some((p) => p.name === n))
+    if (mobName) {
+      S.module.player.prop = mobName; S.moduleChanged()
+      S.workshop.tab = 'skin'; S.workshop.render()
+      const box = document.querySelector(`.wk-details [data-shared-body="${mobName}"]`)
+      r.warned = !!box
+      box?.querySelector('button')?.click()
+      await new Promise((r) => setTimeout(r, 100))
+      const copy = S.module.props.find((p) => p.name === S.module.player.prop)
+      const mobProp = S.module.props.find((p) => p.name === mobName)
+      r.copied = copy && copy.name !== mobName && copy.id !== mobProp.id && JSON.stringify(copy.art) === JSON.stringify(mobProp.art)
+      const before = JSON.stringify(mobProp.art)
+      copy.art.states[2] = 'changed-for-player'
+      r.separate = JSON.stringify(mobProp.art) === before
+      S.module.props = S.module.props.filter((p) => p !== copy)
+    }
+    S.module.props = S.module.props.filter((p) => p !== own)
+    S.module.player = keep; S.moduleChanged()
+    await S.go('map')
+    return { ...r, mobName }
+  })
+  check(st.own && !st.isMob && st.mobsSame && st.guessed, `the Player page makes the player a body of its own, its states matched to the sheet, and no monster (${st.own})`)
+  check(st.rows && st.walk === st.wanted, `its states are set on the Player page: state 1 plays ${st.walk}`)
+  check(st.emitted !== false, 'and the body is written for the game with them')
+  if (st.mobName) check(st.warned && st.copied && st.separate, `a body that also draws a monster is said, and copied; the copy's states are the player's alone (${JSON.stringify({ warned: st.warned, copied: st.copied, separate: st.separate })})`)
+}
+
 // THE PLAYER'S SOUNDS AND SCALE, and the window readable on a phone.
 {
   const pl = await page.evaluate(async () => {

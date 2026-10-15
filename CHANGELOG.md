@@ -5,6 +5,25 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **The player's states, without a monster**: the Player page's skin tab sets
+  the player's sprite sheet and which animation each of its states plays, and
+  can make the player a body of its own ("+ a body of its own"). Before, the
+  states could only be set from a monster's Body tab, so changing how the
+  player was drawn meant making a monster. A body that also draws a monster
+  is said, with a button to give the player a copy of its own.
+
+### Fixed
+
+- **A monster's own animation states could not be given an animation**: the
+  Body tab listed only states 0-4, so a brain state with `anim 5` (a leap, a
+  charge) or a `set_anim` to one had nothing to set. The list now holds every
+  state number the brain uses, named by the states that use it, and "+ another
+  state" adds one; the preview plays them too.
+- A state given no animation was written to props.txt as `anim` with nothing
+  after it; it is left out.
+
 ## 0.3.4 -- 2026-10-15
 
 Built on engine 0.1.5.

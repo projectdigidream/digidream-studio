@@ -57,16 +57,89 @@ export function deleteMonster (S, name) {
   if (module.swings?.monsters) { delete module.swings.monsters[name]; tidySwings(module) }
 }
 
+/**
+ * Which sheet draws a body, and which animation each of its five states plays
+ * (`prop.art.states`, props.txt). A monster's Body tab and the player's Skin
+ * tab both edit it: the player's states are its own prop's, not a monster's.
+ * `fitHeight`: picking a sheet makes the body as tall as the sheet (a
+ * monster's; the player's size is its Size tab's).
+ */
+/**
+ * The animation-state numbers a monster's brain uses: each state's `anim` and
+ * every `set_anim` in a sequence, with the brain states that use each --
+ * Map(number -> [state name]). Cinderfall's husk leaps in state 5.
+ */
+export function animUses (mob) {
+  const uses = new Map()
+  const add = (n, who) => { if (!Number.isInteger(n) || n < 0) return; if (!uses.has(n)) uses.set(n, []); if (!uses.get(n).includes(who)) uses.get(n).push(who) }
+  for (const [name, st] of Object.entries(mob?.states ?? {})) {
+    add(Number(st?.anim), name)
+    for (const a of st?.sequence ?? []) if (a?.action === 'set_anim') add(Number(a.anim), name)
+  }
+  return uses
+}
+
+/** The state numbers a body's list shows: the five, those it has, and those `uses` names. */
+export function bodyStates (prop, uses = new Map()) {
+  const n = new Set([0, 1, 2, 3, 4, ...Object.keys(prop?.art?.states ?? {}).map(Number).filter((x) => Number.isInteger(x) && x >= 0), ...uses.keys()])
+  return [...n].sort((a, b) => a - b)
+}
+
+/**
+ * A sheet's animation names: the module's record of it when it lists them,
+ * else the sheet itself as the studio parsed it (S.sheets) -- a sheet
+ * imported as a file is recorded by its image only.
+ */
+export function sheetAnims (S, name) {
+  const listed = S.module.sprites?.[name]?.animations
+  if (listed?.length) return listed
+  return S.sheets?.get?.(name)?.atlas?.animations?.map((a) => a.name) ?? []
+}
+
+export function artRows (S, prop, changed, { fitHeight = true, uses = new Map(), usedBy = 'state' } = {}) {
+  const module = S.module
+  const setSheet = (name) => {
+    const anims = sheetAnims(S, name)
+    prop.art = { kind: 'atlas', sheet: name, states: anims?.length ? guessStates(anims) : (prop.art?.states ?? {}) }
+    if (fitHeight && module.sprites?.[name]?.worldHeight) prop.height = module.sprites[name].worldHeight
+    changed()
+  }
+  return [
+    row('sprite sheet', chips([
+      ...Object.keys(module.sprites ?? {}).map((n) => ({ id: n, label: n, on: prop.art?.sheet === n })),
+      { id: '+', label: '+ import sheet…' }
+    ], async (it) => {
+      if (it.id === '+') { const name = await S.importSheet?.(); if (name) setSheet(name); else changed(); return }
+      setSheet(it.id)
+    })),
+    prop.art?.sheet && !module.sprites?.[prop.art.sheet] ? text('sheet name', prop.art.sheet, (v) => setSheet(v.toUpperCase().slice(0, 24)), { placeholder: 'a sheet the catalogue serves' }) : null,
+    ...bodyStates(prop, uses).map((st) => {
+      const anims = sheetAnims(S, prop.art?.sheet)
+      // The five have their names; a state of the monster's own says who uses it.
+      const who = uses.get(st)
+      const label = `state ${st} · ${STATE_NAMES[st] ?? (who?.length ? `${usedBy} ${who.join(', ')}` : 'its own')}`
+      const set = (v) => { if (prop.art?.kind !== 'atlas') prop.art = { kind: 'atlas', sheet: prop.art?.sheet ?? '', states: {} }; prop.art.states ??= {}; prop.art.states[st] = v.trim(); changed() }
+      return anims?.length
+        ? select(label, prop.art?.states?.[st] ?? '', [['', '(choose)'], ...anims], set)
+        : text(label, prop.art?.states?.[st] ?? '', set, { placeholder: 'animation name' })
+    }),
+    // A state number of its own (a leap, a charge): any the game can carry.
+    button('+ another state', async () => {
+      const v = await ask('which state number (5 and up; a monster state names it in its anim)', String(Math.max(5, ...bodyStates(prop, uses)) + 1))
+      const n = Math.round(Number(v))
+      if (!Number.isInteger(n) || n < 0 || n > 65535) return
+      if (prop.art?.kind !== 'atlas') prop.art = { kind: 'atlas', sheet: prop.art?.sheet ?? '', states: {} }
+      prop.art.states ??= {}
+      prop.art.states[n] ??= ''
+      changed()
+    })
+  ]
+}
+
 /** The body: size, speed, and which sheet draws it in which states. */
 export function bodyRows (S, prop, changed) {
   const module = S.module
   if (!prop) return [muted('No body record; the catalogue will not know this monster.')]
-  const setSheet = (name) => {
-    const anims = module.sprites?.[name]?.animations
-    prop.art = { kind: 'atlas', sheet: name, states: anims?.length ? guessStates(anims) : (prop.art?.states ?? {}) }
-    if (module.sprites?.[name]?.worldHeight) prop.height = module.sprites[name].worldHeight
-    changed()
-  }
   const sheet = prop.art?.kind === 'atlas' && module.sprites?.[prop.art.sheet] ? prop.art.sheet : null
   return [
     number('radius', prop.radius, { min: 0.1, max: 4, step: 0.05 }, (v) => { prop.radius = v; changed() }),
@@ -78,22 +151,7 @@ export function bodyRows (S, prop, changed) {
     sheet ? muted('height is what the body collides as. sprite height is how tall the sheet is drawn, for everything that uses it; scale multiplies that for this body alone.') : muted('scale multiplies how big the picture is drawn; the body it collides as stays height and radius.'),
     number('speed', prop.speed ?? 0, { min: 0, max: 30, step: 0.1 }, (v) => { prop.speed = v; changed() }),
     toggle('solid', !!prop.solid, (v) => { prop.solid = v; changed() }),
-    row('sprite sheet', chips([
-      ...Object.keys(module.sprites ?? {}).map((n) => ({ id: n, label: n, on: prop.art?.sheet === n })),
-      { id: '+', label: '+ import sheet…' }
-    ], async (it) => {
-      if (it.id === '+') { const name = await S.importSheet?.(); if (name) setSheet(name); else changed(); return }
-      setSheet(it.id)
-    })),
-    prop.art?.sheet && !module.sprites?.[prop.art.sheet] ? text('sheet name', prop.art.sheet, (v) => setSheet(v.toUpperCase().slice(0, 24)), { placeholder: 'a sheet the catalogue serves' }) : null,
-    ...[0, 1, 2, 3, 4].map((st) => {
-      const anims = module.sprites?.[prop.art?.sheet]?.animations
-      const label = `state ${st} · ${STATE_NAMES[st]}`
-      const set = (v) => { prop.art ??= { kind: 'atlas', sheet: '', states: {} }; prop.art.states[st] = v.trim(); changed() }
-      return anims?.length
-        ? select(label, prop.art?.states?.[st] ?? '', [['', '(choose)'], ...anims], set)
-        : text(label, prop.art?.states?.[st] ?? '', set, { placeholder: 'animation name' })
-    }),
+    ...artRows(S, prop, changed, { uses: animUses(module.mobs?.mobs?.[prop.name]) }),
     muted(`Prop id ${prop.id}. The numbers are what a state's \`anim\` names.`)
   ]
 }
