@@ -109,6 +109,7 @@ class ViewPreview {
 }
 
 let preview = null
+export { ViewPreview }
 
 /**
  * The rows for weapon `name`. `changed` saves the module and draws again.

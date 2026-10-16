@@ -119,6 +119,7 @@ export class NodeEditor {
         ammo: this.kind === 'weapon' ? (this.thing.ammo ? 50 : null) : undefined
       }),
       animOf: (st) => this.animOf(this.nodes[st]?.anim),
+      view: () => (this.kind === 'weapon' ? this.S.module.viewmodels?.weapons?.[this.name] ?? null : null),
       onState: () => this.markRunning()
     })
     this.preview.start()
@@ -127,7 +128,7 @@ export class NodeEditor {
 
   /** The animation a body-state number plays (its sheet's name for it). */
   animOf (n) {
-    if (this.kind !== 'mob') return n === undefined ? '' : `picture ${n}`
+    if (this.kind !== 'mob') return n === undefined ? 'its resting picture' : `picture ${n}`
     return animName(this.prop?.art, n) ?? (n === undefined ? '' : `state ${n}`)
   }
   sheetAnims () { return this.prop?.art?.sheet ? this.sheets.animations(this.prop.art.sheet) : [] }
@@ -422,7 +423,7 @@ export class NodeEditor {
       return el('div', { class: 'me-rule', 'data-live': live?.state === n && live.rule === i ? '1' : '0', 'data-todo': todo ? '1' : '0' }, segs)
     })
     const unreached = n !== this.initial && !this.react(n) && !this.refsTo(n)
-    const steps = (st.sequence ?? []).map((p, i) => ({ p, i })).sort((a, b) => (a.p.at ?? 0) - (b.p.at ?? 0))
+    const steps = (st.sequence ?? []).map((p, i) => ({ p, i })) // in the runtime's order, as the timeline lists them
     const run = this.preview?.running && this.preview.sim.state === n
     return el('article', { class: 'me-card', 'data-on': this.sel === n ? '1' : '0', 'data-run': run ? '1' : '0', 'data-card': n }, [
       el('div', { class: 'me-chead' }, [el('button', { class: 'me-cname', onclick: () => this.select(n) , icon: this.initial === n ? 'status.initial' : null, text: n }),
@@ -622,7 +623,7 @@ export class NodeEditor {
         el('button', { class: 'me-pvbar', 'aria-expanded': this.pvOpen ? 'true' : 'false', onclick: () => { this.pvOpen = !this.pvOpen; this.render() } }, [el('span', { icon: this.pvOpen ? 'action.collapse' : 'action.expand' }), el('b', { text: 'Preview' }), p ? p.stateEl : null]),
         el('button', { 'aria-label': p?.running ? 'Pause' : 'Run', icon: p?.running ? 'transport.pause' : 'transport.play', onclick: () => { p?.toggle(); this.pvOpen = true; this.render() } }),
         this.phone ? el('button', { 'aria-label': 'Close the panel', icon: 'action.right', onclick: () => { this.pvOpen = false; this.sel = null; this.render() } }) : null]),
-      ...(this.pvOpen && p ? [p.canvas, p.evEl, p.controls(), p.nowEl, p.varsEl] : [])
+      ...(this.pvOpen && p ? [p.stage, p.evEl, p.controls(), p.nowEl, p.varsEl] : [])
     ])
     side.append(pv)
     if (p && this.pvOpen) requestAnimationFrame(() => p.draw())

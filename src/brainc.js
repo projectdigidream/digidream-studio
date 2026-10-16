@@ -28,7 +28,8 @@
 //                steps, so a speed set during a flinch would stick.
 //   "further than N"
 //                is target_within N negated, which also holds with no target
-//                at all; `has_target` is added beside it.
+//                at all; the editor marks it `with_target`, and `has_target`
+//                is added beside it.
 //   brain.label  a monster's display name; dropped (a weapon's `label` is the engine's own).
 //
 // A rule with no target or no condition yet is the editor's unfinished rule:
@@ -48,11 +49,18 @@ const complete = (r) => r && typeof r.to === 'string' && r.to !== '' && !(Array.
 /** The hidden var that remembers rule i of `any` has fired. */
 export const onceVar = (i) => `__once${i + 1}`
 
-/** "further than": a negated target_within also needs a target. */
+/**
+ * "further than": the editor's negated target_within carries `with_target`,
+ * because "not within" also holds with no target at all. The marker becomes a
+ * `has_target` beside it. A negated target_within written by hand, without
+ * the marker, means what it says and is left alone.
+ */
 function withTarget (when) {
   if (!Array.isArray(when)) return when
   const out = when.map(clone)
-  if (out.some((c) => c.cond === 'target_within' && c.negate) && !out.some((c) => c.cond === 'has_target' && !c.negate)) out.push({ cond: 'has_target' })
+  const marked = out.some((c) => c.with_target)
+  for (const c of out) delete c.with_target
+  if (marked && !out.some((c) => c.cond === 'has_target' && !c.negate)) out.push({ cond: 'has_target' })
   return out
 }
 
@@ -98,11 +106,10 @@ function compileNodes (nodes, { kind, any, phases, baseSpeed }) {
       const v = fxOf(Number(ph?.speed ?? baseSpeed))
       if (v !== undefined) pre.push({ at: 0, action: 'set_param', param: 'move_speed', value: v })
     }
-    if (pre.length || n.sequence) {
-      const seq = [...pre, ...(n.sequence ?? [])]
-      // the runtime runs a sequence in order of `at`; keep same-tick steps in the order given
-      n.sequence = seq.map((s, j) => ({ s, j })).sort((a, b) => (a.s.at ?? 0) - (b.s.at ?? 0) || a.j - b.j).map((x) => x.s)
-    }
+    // The runtime walks a sequence IN ITS ORDER, a step running once its `at`
+    // has passed and every step before it has run -- so the order is the
+    // author's and is kept. The compiler's own steps are at tick 0, first.
+    if (pre.length) n.sequence = [...pre, ...(n.sequence ?? [])]
     out[name] = n
   }
   return { nodes: out, onceVars: rules.filter((r) => r.once).map((r) => onceVar(r.i)) }

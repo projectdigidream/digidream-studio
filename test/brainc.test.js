@@ -34,7 +34,7 @@ const boss = () => ({
   states: {
     idle: { anim: 0, move: 'stop', face: 'target', phase: 'p1', transitions: [{ to: 'chase', when: [{ cond: 'has_target' }] }, { to: 'chase', when: [] }] },
     chase: { anim: 1, move: 'chase', face: 'target', phase: 'p1',
-             transitions: [{ to: 'idle', when: [{ cond: 'target_within', distance: '30', negate: true }] }] },
+             transitions: [{ to: 'idle', when: [{ cond: 'target_within', distance: '30', negate: true, with_target: true }] }] },
     roar: { anim: 0, move: 'stop', face: 'target', phase: 'p2', ticks: 30, next: 'chase2',
             sequence: [{ at: 10, action: 'add_var', var: 'roars', by: 1 }],
             ends: [{ to: 'frenzy', when: [{ cond: 'var_at_least', var: 'phase', value: 3 }] }] },
@@ -62,7 +62,10 @@ const boss = () => ({
   const ends = c.states.roar.transitions.at(-1)
   check(ends.to === 'frenzy' && ends.when.some((x) => x.cond === 'state_elapsed' && x.ticks === 30), 'an end branch is a transition on the state\'s elapsed time, after its own')
   const far = c.states.chase.transitions.find((t) => t.to === 'idle')
-  check(far.when.some((x) => x.cond === 'has_target' && !x.negate), '"further than" also needs a target')
+  check(far.when.some((x) => x.cond === 'has_target' && !x.negate) && !far.when.some((x) => 'with_target' in x), '"further than" (the editor\'s, marked) also needs a target, and the marker is not written')
+  const hand = compileMob({ hp: 5, initial: 'a', states: { a: { anim: 0, transitions: [{ to: 'a', when: [{ cond: 'target_within', distance: '3', negate: true }] }], sequence: [{ at: 12, action: 'face' }, { at: 0, action: 'set_cooldown', var: 'r', ticks: 9 }] } } })
+  check(hand.states.a.transitions[0].when.length === 1, 'a negated target_within written by hand keeps its meaning (no has_target added)')
+  check(hand.states.a.sequence[0].at === 12 && hand.states.a.sequence[1].at === 0, 'and a sequence keeps its order: the runtime walks it in order, so a reorder would change when a step runs')
   const sp = (st) => c.states[st].sequence?.find((x) => x.action === 'set_param')
   check(sp('chase2')?.value === 6 && sp('chase2')?.param === 'move_speed', 'a phase\'s speed is set as its states begin')
   check(sp('chase')?.value === 4, 'a state of a phase with no speed of its own goes back to the body\'s')

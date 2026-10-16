@@ -27,7 +27,8 @@ function against (table, vocabList, kind, what) {
     if (!spec) continue
     const args = new Set((spec.args ?? []).map((a) => a.name))
     for (const part of ph.p) if (part[0] !== 't') check(args.has(part[1]), `${what} "${key}": "${part[1]}" is one of ${name}'s arguments (${[...args].join(', ')})`)
-    for (const k of Object.keys(ph.fixed ?? {})) check(args.has(k), `${what} "${key}": its fixed "${k}" is an argument`)
+    // with_target is the editor's own marker, compiled away by brainc.js (a has_target beside it)
+    for (const k of Object.keys(ph.fixed ?? {})) if (k !== 'with_target') check(args.has(k), `${what} "${key}": its fixed "${k}" is an argument`)
     // the defaults it writes are all the required arguments
     const made = kind === 'condition' ? newCond(table, key) : newAct(table, key, 0, { missile: 'flare', sound: 'boom', state: 'idle' })
     for (const a of spec.args ?? []) {

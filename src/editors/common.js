@@ -95,6 +95,9 @@ export const CSS = `
 .me-phname:hover{border-color:var(--dnp-color-line-main)}
 .me-pv{padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--dnp-color-line-main);flex:0 0 auto}
 .me-pvbar{display:flex !important;align-items:center;justify-content:flex-start !important;gap:8px;min-height:40px;background:transparent !important;border:0 !important;box-shadow:none !important;color:inherit;font:inherit;cursor:pointer;flex:1 1 auto;text-align:left}
+.me-fp{position:relative;width:100%}
+.me-fp .st-view-canvas{display:block;width:100%;max-width:none}
+.me-fp .me-over{position:absolute;inset:0;width:100%;height:100%;background:transparent}
 .me-stage{position:relative;width:100%;height:150px;background:var(--dnp-color-bg-sunken);border-radius:9px;overflow:hidden;display:block}
 .me-now{font-size:12px;color:var(--dnp-color-text-secondary)}
 .me-vars{font-size:12px;color:var(--dnp-color-text-secondary);font-family:var(--dnp-font-mono)}
@@ -270,17 +273,26 @@ export function stepsBlock (o) {
   const { node, table, ctx } = o
   const seq = node.sequence ?? []
   const len = Math.max(1, o.length)
-  const order = seq.map((p, i) => i).sort((a, b) => (seq[a].at ?? 0) - (seq[b].at ?? 0) || a - b)
+  // THE RUNTIME WALKS A SEQUENCE IN ITS ORDER (mobs.lua run_due): a step runs
+  // once its `at` has passed AND every step before it has run, so a step at 0
+  // listed after one at 12 runs at 12. The list is in that order, and says
+  // when each step really runs.
+  const when = []
+  for (let i = 0; i < seq.length; i++) when.push(Math.max(Number(seq[i].at ?? 0), i ? when[i - 1] : 0))
+  const late = seq.map((p, i) => when[i] > Number(p.at ?? 0))
   const rows = {}
-  const marks = order.map((i) => {
-    const p = seq[i]
-    const r = rows[p.at] = (rows[p.at] ?? -1) + 1
-    return el('button', { class: 'me-mk', 'data-k': kindOf(table, p), 'data-row': r ? '1' : '0', 'data-on': o.sel === i ? '1' : '0', style: `left:${Math.min(100, ((p.at ?? 0) / len) * 100)}%`,
-      'aria-label': `${secs(p.at)} s: ${sentence(table, p)}`, onclick: () => o.setSel(i) })
+  const marks = seq.map((p, i) => {
+    const r = rows[when[i]] = (rows[when[i]] ?? -1) + 1
+    return el('button', { class: 'me-mk', 'data-k': kindOf(table, p), 'data-row': r ? '1' : '0', 'data-on': o.sel === i ? '1' : '0', style: `left:${Math.min(100, (when[i] / len) * 100)}%`,
+      'aria-label': `${secs(when[i])} s: ${sentence(table, p)}`, onclick: () => o.setSel(i) })
   })
   const tl = el('div', { class: 'me-tl' }, [...marks, o.head !== null ? el('div', { class: 'me-head', style: `left:${Math.min(100, (o.head / len) * 100)}%` }) : null])
-  const list = order.map((i) => el('button', { class: 'me-srow', 'data-on': o.sel === i ? '1' : '0', 'data-k': kindOf(table, seq[i]), onclick: () => o.setSel(i) },
-    [el('span', { class: 'me-at', text: `${secs(seq[i].at)} s` }), el('span', { text: sentence(table, seq[i]) })]))
+  const list = seq.map((p, i) => el('button', { class: 'me-srow', 'data-on': o.sel === i ? '1' : '0', 'data-k': kindOf(table, p), onclick: () => o.setSel(i) },
+    [el('span', { class: 'me-at', text: `${secs(p.at)} s` }), el('span', { text: sentence(table, p) }), late[i] ? el('span', { class: 'me-warn', text: `(runs at ${secs(when[i])} s, after the step before it)` }) : null]))
+  if (late.some(Boolean)) {
+    list.push(el('div', { class: 'me-row' }, [el('span', { class: 'me-warn', icon: 'status.warning', text: ' Steps run in their order here: one listed after a later one waits for it.' }),
+      el('button', { class: 'me-lnk', text: 'put them in time order', onclick: () => { const keep = seq[o.sel]; seq.sort((a, b) => (a.at ?? 0) - (b.at ?? 0)); o.setSel(keep ? seq.indexOf(keep) : null); ctx.changed() } })]))
+  }
   return {
     timeline: [tl, el('div', { class: 'me-tlscale' }, [el('span', { text: '0 s' }), el('span', { text: `${secs(len)} s` })])],
     list,
@@ -288,20 +300,27 @@ export function stepsBlock (o) {
     adder: o.picking
       ? chooser('Add a step', 'what happens, at that moment of the state', groupsOf(table, 'act', null, o.actCtx), (key) => {
         const p = newAct(table, key, o.addAt, o.actCtx)
-        node.sequence = [...seq, p].sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
+        node.sequence = seq
+        insertByTime(seq, p)
         o.setPicking(false)
-        o.setSel(node.sequence.indexOf(p))
+        o.setSel(seq.indexOf(p))
         ctx.changed()
       }, () => o.setPicking(false))
       : null
   }
+}
+/** Puts a step after the last one due no later than it, leaving the others where they are. */
+function insertByTime (seq, p) {
+  let i = seq.length
+  while (i > 0 && Number(seq[i - 1].at ?? 0) > Number(p.at ?? 0)) i--
+  seq.splice(i, 0, p)
 }
 const kindOf = (table, p) => table[actKey(table, p)]?.k ?? 'turn'
 
 function stepEditor (seq, i, table, ctx, o) {
   const p = seq[i]
   const at = el('input', { type: 'text', inputmode: 'decimal', value: String(secs(p.at)), 'aria-label': 'at, in seconds' })
-  at.addEventListener('change', () => { const t = ticksOf(at.value); if (t !== undefined) { p.at = t; const keep = p; seq.sort((a, b) => (a.at ?? 0) - (b.at ?? 0)); o.setSel(seq.indexOf(keep)); ctx.changed() } })
+  at.addEventListener('change', () => { const t = ticksOf(at.value); if (t !== undefined) { p.at = t; seq.splice(seq.indexOf(p), 1); insertByTime(seq, p); o.setSel(seq.indexOf(p)); ctx.changed() } })
   const mis = p.kind ?? p.missile
   return el('div', { class: 'me-step' }, [
     el('div', { class: 'me-rhead' }, [el('span', { class: 'me-muted', text: 'at' }), at, el('span', { class: 'me-muted', text: 's' }),

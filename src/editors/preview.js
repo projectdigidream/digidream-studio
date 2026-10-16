@@ -14,6 +14,7 @@ import { emitBurst, stepParticles, rampColour, parseVfx } from '/src/render/vfx.
 import { vfxLine } from '../props_emit.js'
 import { BrainSim } from '../brainsim.js'
 import { TPS, secs } from '../phrases.js'
+import { ViewPreview } from '../viewform.js'
 
 /** The parsed atlas and picture for a sheet name: the module's, or the served catalogue's. */
 export class Sheets {
@@ -78,6 +79,15 @@ export class Preview {
     this.varsEl = el('span', { class: 'me-vars' })
     this.evEl = el('span', { class: 'me-muted' })
     this.stateEl = el('span', { class: 'me-mono me-muted' })
+    // A weapon is seen as it is held: its first-person view model playing the
+    // state's picture (viewform.js), with shots and sparks drawn over it.
+    this.stage = this.canvas
+    if (this.kind === 'weapon' && host.view?.()) {
+      this.vp = new ViewPreview(S)
+      this.vp.show(host.view())
+      this.canvas.classList.add('me-over')
+      this.stage = el('div', { class: 'me-fp' }, [this.vp.canvas, this.canvas])
+    }
     this.rebuild()
   }
 
@@ -126,7 +136,7 @@ export class Preview {
     s.step()
     // what the steps showed: effects at the monster; a missile that lands bursts at the target with its own
     for (const ev of s.events.slice(nEv)) this.say(ev)
-    if (s.state !== before) this.host.onState?.(s.state)
+    if (s.state !== before) { this.host.onState?.(s.state); if (this.vp) { this.vp.show(this.host.view()); this.vp.play(s.node?.anim ?? 0) } }
     for (const l of s.landed ?? []) {
       const m = this.host.subject().missiles?.[l.missile]
       for (const p of m?.on_hit ?? []) if (p.action === 'vfx') this.burst(p.kind, 'target')
@@ -168,8 +178,10 @@ export class Preview {
     const s = this.sim
     const sub = this.host.subject()
     const floor = h - 16
-    useStroke(ctx, skin.canvas('preview', 'floor'))
-    ctx.beginPath(); ctx.moveTo(0, floor + 0.5); ctx.lineTo(w, floor + 0.5); ctx.stroke()
+    if (!this.vp) {
+      useStroke(ctx, skin.canvas('preview', 'floor'))
+      ctx.beginPath(); ctx.moveTo(0, floor + 0.5); ctx.lineTo(w, floor + 0.5); ctx.stroke()
+    }
     useText(ctx, skin.canvas('common', 'text'))
     ctx.textAlign = 'left'
     ctx.fillText(`${s.state} · ${this.host.animOf(s.state) ?? ''}`, 6, 14)
@@ -205,7 +217,7 @@ export class Preview {
       }
     } else {
       ctx.textAlign = 'center'
-      ctx.fillText(s.fire ? 'fire held' : 'fire up', w * 0.5, h * 0.4)
+      if (!this.vp) ctx.fillText(s.fire ? 'fire held' : 'fire up — this weapon has no first-person picture yet (Looks)', w * 0.5, h * 0.4)
       ctx.beginPath(); ctx.arc(w * 0.5, h * 0.5, 6, 0, Math.PI * 2); useStroke(ctx, skin.canvas('common', 'grid.major')); ctx.stroke()
       for (const sh of s.shots) { ctx.beginPath(); ctx.arc(w * (0.6 - 0.1 * sh.p), h * (0.85 - 0.35 * sh.p), 7 * (1 - sh.p * 0.6), 0, Math.PI * 2); ctx.fill() }
     }

@@ -42,6 +42,11 @@ anything not released yet is under **Unreleased**.
   - It edits what the missile does when it hits, runs out, bounces and on its
     way (splits, bomblets), how it homes, and its looks and size.
   - It says who fires it.
+- **A state's steps are listed in the order the engine runs them**, each
+  with the time it really runs: a step listed after a later one waits for it.
+  A new or moved step goes in by its time, and the others keep their order.
+- **A weapon's preview shows it held**: its first-person picture plays each
+  state's animation, with its shots and sparks drawn over it.
 - **Particle kinds say what they look like** ("11 · fireball", "13 · smoke")
   wherever one is picked, not "11 · particles".
 - **The editors' own words, compiled to the engine's** (brainc.js): rules that

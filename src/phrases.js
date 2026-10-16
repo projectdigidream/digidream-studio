@@ -97,7 +97,8 @@ export const MOB_CONDITIONS = {
   'has_target!': { g: 'The target', p: [['t', 'it has no target']], short: 'no target' },
   target_visible: { g: 'The target', p: [['t', 'it can see the target']], short: 'sees target' },
   target_within: { g: 'The target', p: [['t', 'the target is within'], ['n', 'distance', 'm', 2]], short: (c, sh) => `≤${sh('distance')} m` },
-  'target_within!': { g: 'The target', p: [['t', 'the target is further than'], ['n', 'distance', 'm', 8]], short: (c, sh) => `>${sh('distance')} m` },
+  // with_target: a seen target further than N (brainc.js adds has_target); "not within" alone holds with no target too
+  'target_within!': { g: 'The target', p: [['t', 'the target is further than'], ['n', 'distance', 'm', 8]], fixed: { with_target: true }, short: (c, sh) => `>${sh('distance')} m` },
   target_in_front: { g: 'The target', p: [['t', 'the target is within'], ['n', 'arc', '°', 45], ['t', 'of where it faces']], short: 'in front' },
   target_above: { g: 'The target', p: [['t', 'the target is'], ['n', 'by', 'm', 1], ['t', 'or more above it']], short: 'target above' },
   target_below: { g: 'The target', p: [['t', 'the target is'], ['n', 'by', 'm', 1], ['t', 'or more below it']], short: 'target below' },
@@ -219,7 +220,7 @@ export function actKey (table, a) {
 /** A new condition from a phrase key: { cond, negate?, defaults }. */
 export function newCond (table, key) {
   const ph = table[key]
-  const c = { cond: key.replace(/!$/, '') }
+  const c = { cond: key.replace(/!$/, ''), ...(ph?.fixed ?? {}) }
   if (key.endsWith('!')) c.negate = true
   for (const part of ph?.p ?? []) if (part[0] !== 't') store(part, c, defaultOf(part))
   return c
