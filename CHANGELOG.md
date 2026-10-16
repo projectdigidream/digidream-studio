@@ -22,6 +22,10 @@ anything not released yet is under **Unreleased**.
   module is emitted and checked. "Further than" also needs a target. A rule
   with no condition yet is left out. Proven by running a compiled boss in the
   engine's own mobs.lua.
+- **A preview that runs the brain** (brainsim.js): the monster and weapon
+  editors' preview runs the compiled brain by the engine's own rules (a
+  decision every 8 ticks, pain resuming what it interrupted, a press as an
+  edge). Scripted hits give the same path through the states as mobs.lua.
 
 - **Which animations loop, for a sheet baked from a ThreeSprite project**: its
   card on the Sprites page has a "loops" switch per animation. ThreeSprite
