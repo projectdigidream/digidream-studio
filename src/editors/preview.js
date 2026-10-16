@@ -94,6 +94,7 @@ export class Preview {
   /** A new compiled brain (after an edit): the run carries on where it was. */
   rebuild (startAt = null) {
     const sub = this.host.subject()
+    if (!sub) { this.stop(); return }
     const old = this.sim
     this.sim = new BrainSim(sub.compiled, { kind: this.kind, speed: Number(sub.prop?.speed ?? 4), ammo: sub.ammo === undefined ? 50 : sub.ammo, missiles: sub.missiles })
     if (old && !startAt && this.sim.nodes[old.state]) {
@@ -105,16 +106,18 @@ export class Preview {
   }
 
   /** Back to where it begins: a fresh run. */
-  reset () { this.parts = []; this.rebuild(this.host.subject().initial ?? Object.keys(this.sim.nodes)[0]); this.draw() }
+  reset () { const sub = this.host.subject(); if (!sub) return; this.parts = []; this.rebuild(sub.initial ?? Object.keys(this.sim.nodes)[0]); this.draw() }
 
   start () { this.running = true; this.last = performance.now(); this.loop() }
   pause () { this.running = false }
+  /** For good: the editor closed, or made another. */
+  stop () { this.running = false; this.stopped = true; cancelAnimationFrame(this.raf); this.raf = 0; this.vp && (this.vp.view = null) }
   toggle () { if (this.running) this.pause(); else this.start() }
 
   loop () {
     cancelAnimationFrame(this.raf)
     const frame = (now) => {
-      if (!this.canvas.isConnected) { this.raf = 0; return }
+      if (this.stopped || !this.canvas.isConnected) { this.raf = 0; return }
       const dt = Math.min(0.1, (now - this.last) / 1000)
       this.last = now
       if (this.running) {
@@ -138,7 +141,7 @@ export class Preview {
     for (const ev of s.events.slice(nEv)) this.say(ev)
     if (s.state !== before) { this.host.onState?.(s.state); if (this.vp) { this.vp.show(this.host.view()); this.vp.play(s.node?.anim ?? 0) } }
     for (const l of s.landed ?? []) {
-      const m = this.host.subject().missiles?.[l.missile]
+      const m = this.host.subject()?.missiles?.[l.missile]
       for (const p of m?.on_hit ?? []) if (p.action === 'vfx') this.burst(p.kind, 'target')
     }
     s.landed = []
@@ -159,7 +162,7 @@ export class Preview {
     const s = this.sim
     const st = s.node
     // a press that starts the preview skips the draw: a press during the draw is lost, in the game as here
-    if (!this.running && s.state === this.host.subject().initial && st?.ticks !== undefined && st.next && s.nodes[st.next]) { s.enter(st.next) }
+    if (!this.running && s.state === this.host.subject()?.initial && st?.ticks !== undefined && st.next && s.nodes[st.next]) { s.enter(st.next) }
     s.press(); if (!this.running) this.start()
   }
   release () { this.sim.release() }
@@ -177,6 +180,7 @@ export class Preview {
     const skin = this.S.skin
     const s = this.sim
     const sub = this.host.subject()
+    if (!sub) return
     const floor = h - 16
     if (!this.vp) {
       useStroke(ctx, skin.canvas('preview', 'floor'))

@@ -6,7 +6,7 @@
 // runs out, bounces and on its way; and who fires it.
 //
 import { el, button, confirmDialog } from '../ui.js'
-import { MISSILE_ACTIONS, groupsOf, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
+import { MISSILE_ACTIONS, groupsWithMore, unphrased, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
 import { flight } from '../missileflight.js'
 import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
 import { injectCss, sentenceEl, chooser, numField, selectField } from './common.js'
@@ -182,7 +182,8 @@ export class MissileEditor {
     const m = this.m
     const list = m[key] ?? []
     const ctx = {
-      live: true, mobs: Object.keys(this.S.module.mobs?.mobs ?? {}), missiles: Object.keys(this.all), fx: this.S.vfxChoices?.() ?? [], vars: [], states: [],
+      live: true, mobs: Object.keys(this.S.module.mobs?.mobs ?? {}), missiles: Object.keys(this.all), fx: this.S.vfxChoices?.() ?? [], vars: [], states: [], props: this.S.propNames?.() ?? [],
+      argCtx: { missiles: Object.keys(this.all), mobs: Object.keys(this.S.module.mobs?.mobs ?? {}), vfxChoices: this.S.vfxChoices, soundField: this.S.soundField, suggest: this.S.suggest, props: this.S.propNames?.() ?? [] },
       soundField: this.S.soundField, changed: () => this.changed(), actSpec: (n) => this.S.vocab?.mobActions?.get(n)
     }
     const rows = list.map((p, i) => el('div', { class: 'me-crow' }, [
@@ -192,7 +193,7 @@ export class MissileEditor {
     ]))
     if (!list.length) rows.push(el('span', { class: 'me-muted', text: key === 'on_hit' ? 'Nothing happens when it hits: add damage, or a blast.' : 'Nothing.' }))
     rows.push(this.picking === key
-      ? chooser('Add', '', groupsOf(MISSILE_ACTIONS, 'act', null, { missile: Object.keys(this.all).find((n) => n !== this.name) ?? this.name }), (k) => {
+      ? chooser('Add', '', groupsWithMore(MISSILE_ACTIONS, 'act', unphrased(MISSILE_ACTIONS, (this.S.vocab?.mob?.actions ?? []).map((a) => a.name)), { missile: Object.keys(this.all).find((n) => n !== this.name) ?? this.name }), (k) => {
         const a = newAct(MISSILE_ACTIONS, k, 0, { missile: Object.keys(this.all).find((n) => n !== this.name) ?? this.name })
         if (key !== 'sequence') delete a.at
         m[key] = [...list, a]; this.picking = null; this.changed()

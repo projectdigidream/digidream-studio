@@ -23,6 +23,10 @@
 //   ['enum', arg, [values], default]  one of a few words
 //   ['bool', arg, words, default]     a yes/no, said by `words` when yes
 //   ['text', arg, default]            a free name (a Lua function)
+//   ['prop', arg, default]            a prop of the catalogue; '' is any
+//
+// A key 'vocab:<name>' is an entry the phrasebook has no words for, offered
+// under "More": made bare and edited with the vocabulary's own form.
 //
 // The entry's key is the vocabulary name, with '!' for its negated form
 // ("further than" is target_within negated) and ':' for an action told apart
@@ -113,7 +117,7 @@ export const MOB_CONDITIONS = {
   mob_within: { g: 'Others nearby', p: [['t', 'a monster'], ['mob', 'mob', 'any'], ['t', 'is within'], ['n', 'distance', 'm', 3]], short: (c, sh) => `${c.mob ?? 'a monster'} ≤${sh('distance')} m` },
   count_within: { g: 'Others nearby', p: [['t', 'at least'], ['n', 'at_least', '', 3], ['t', 'monsters'], ['mob', 'mob', 'any'], ['t', 'are within'], ['n', 'distance', 'm', 6]], short: (c) => `${c.at_least} ${c.mob ?? 'monsters'} near` },
   'count_within!': { g: 'Others nearby', p: [['t', 'no more than'], ['n', 'at_least', 'n+1', 2], ['t', 'monsters'], ['mob', 'mob', 'any'], ['t', 'are within'], ['n', 'distance', 'm', 6]], short: (c) => `≤${c.at_least - 1} ${c.mob ?? 'monsters'} near` },
-  prop_within: { g: 'Others nearby', p: [['t', 'the prop'], ['text', 'prop', 'barrel'], ['t', 'is within'], ['n', 'distance', 'm', 3]], short: (c) => `${c.prop} near` },
+  prop_within: { g: 'Others nearby', p: [['t', 'a prop'], ['prop', 'prop', ''], ['t', 'is within'], ['n', 'distance', 'm', 3]], short: (c) => `${c.prop ?? 'a prop'} near` },
   ally_in_front: { g: 'Others nearby', p: [['t', 'another monster is in its line of fire']], short: 'ally in the way' },
   state_elapsed: { g: 'Time and chance', p: [['t', 'this state has run for'], ['n', 'ticks', 's', 1]], short: (c, sh) => `${sh('ticks')} s in` },
   chance: { g: 'Time and chance', p: [['t', 'a'], ['n', 'percent', '%', 50], ['t', 'chance']], short: (c) => `${c.percent}%` },
@@ -220,6 +224,7 @@ export function actKey (table, a) {
 /** A new condition from a phrase key: { cond, negate?, defaults }. */
 export function newCond (table, key) {
   const ph = table[key]
+  if (key.startsWith('vocab:')) return { cond: key.slice(6) }
   const c = { cond: key.replace(/!$/, ''), ...(ph?.fixed ?? {}) }
   if (key.endsWith('!')) c.negate = true
   for (const part of ph?.p ?? []) if (part[0] !== 't') store(part, c, defaultOf(part))
@@ -231,6 +236,7 @@ export function newCond (table, key) {
  * default would name something the module may not have.
  */
 export function newAct (table, key, at = 0, ctx = {}) {
+  if (key.startsWith('vocab:')) return { at, action: key.slice(6) }
   const ph = table[key]
   const a = { at, action: key.split(':')[0], ...(ph?.fixed ?? {}) }
   for (const part of ph?.p ?? []) if (part[0] !== 't') store(part, a, defaultOf(part, ctx))
@@ -258,6 +264,7 @@ export function sentence (table, obj, key = null) {
     const v = shown(part, obj)
     if (kind === 'n') return `${v}${unitJoin(part[2])}`
     if (kind === 'mob') return v === 'any' ? '(any kind)' : `(${v})`
+    if (kind === 'prop') return v ? `(${v})` : '(any)'
     if (kind === 'bool') return v ? `, ${part[2]}` : ''
     if (kind === 'fx') return v === undefined || v === '' ? '?' : `effect ${v}`
     return v === undefined || v === '' ? '?' : String(v)
@@ -292,6 +299,22 @@ export function groupsOf (table, kind, only = null, ctx = {}) {
     grp.opts.push({ key, label: sentence(table, sample, key) })
   }
   return out
+}
+
+/**
+ * The vocabulary's entries the table has no words for -- offered under "More",
+ * so nothing the engine can do is out of the editor's reach.
+ * @param names  the vocabulary's condition or action names
+ */
+export function unphrased (table, names) {
+  const have = new Set(Object.keys(table).filter((k) => !k.includes(':')).map((k) => k.replace(/!$/, '')))
+  return names.filter((n) => !have.has(n))
+}
+/** The chooser's groups with "More" at the end. */
+export function groupsWithMore (table, kind, more, ctx = {}) {
+  const g = groupsOf(table, kind, null, ctx)
+  if (more?.length) g.push({ label: 'More (the engine\'s own words, edited in its own form)', opts: more.map((n) => ({ key: `vocab:${n}`, label: n.replace(/_/g, ' ') })) })
+  return g
 }
 
 /** Which colour a step's mark takes on the timeline ('hit', 'sound', 'clock', 'turn'). */

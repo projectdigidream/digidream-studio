@@ -109,12 +109,13 @@ export function board (o) {
   const box = el('div', { class: 'me-board' }, [world])
   const v = o.view
   const apply = () => { world.style.transform = `translate(${v.x}px,${v.y}px) scale(${v.z})` }
-  const fit = () => {
+  // On opening, as large as fits but not below what can be read; the fit button fits everything.
+  const fit = (least = 0.25) => {
     const r = box.getBoundingClientRect()
     if (!r.width) return
-    v.z = Math.max(0.6, Math.min(1, (r.width - 20) / w, (r.height - 20) / h)); v.x = 10; v.y = 10; apply()
+    v.z = Math.max(least, Math.min(1, (r.width - 20) / w, (r.height - 20) / h)); v.x = 10; v.y = 10; apply()
   }
-  if (v.fit !== false) requestAnimationFrame(fit)
+  if (v.fit !== false) requestAnimationFrame(() => fit(0.6))
   apply()
   gestures(box, world, v, apply)
   box.appendChild(el('div', { class: 'me-zoom' }, [

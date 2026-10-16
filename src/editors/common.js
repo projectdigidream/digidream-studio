@@ -8,7 +8,7 @@
 // edited with argform.js, so no part of the vocabulary is out of reach.
 //
 import { el, button, select, muted, withIcon } from '../ui.js'
-import { shown, store, sentence, groupsOf, condKey, actKey, newCond, newAct, secs, ticksOf, shortOf } from '../phrases.js'
+import { shown, store, sentence, groupsOf, groupsWithMore, condKey, actKey, newCond, newAct, secs, ticksOf, shortOf } from '../phrases.js'
 import { argFields } from '../argform.js'
 
 export const CSS = `
@@ -187,6 +187,7 @@ export function sentenceEl (table, obj, ctx, key = null) {
       out.append(r)
     } else {
       const opts = kind === 'mob' ? [['any', 'any kind'], ...(ctx.mobs ?? []).map((n) => [n, n])]
+        : kind === 'prop' ? [['', 'any prop'], ...(ctx.props ?? []).map((n) => [n, n])]
         : kind === 'state' ? (ctx.states ?? []).map((n) => [n, n])
           : kind === 'missile' ? (ctx.missiles ?? []).map((n) => [n, n])
             : kind === 'fx' ? (ctx.fx ?? []).map(([id, l]) => [String(id), l])
@@ -256,7 +257,7 @@ export function ruleCards (o) {
       w ? el('span', { class: 'me-warn', icon: 'status.warning', text: ` ${w}` }) : null,
       ...conds,
       picking
-        ? chooser('Add a condition', 'every condition must hold', groupsOf(table, 'cond'), (key) => { when.push(newCond(table, key)); o.setPicking(null); ctx.changed() }, () => o.setPicking(null))
+        ? chooser('Add a condition', 'every condition must hold', groupsWithMore(table, 'cond', ctx.moreConds), (key) => { when.push(newCond(table, key)); o.setPicking(null); ctx.changed() }, () => o.setPicking(null))
         : el('button', { class: 'me-lnk', text: '+ add a condition', onclick: () => o.setPicking(ri) })
     ])
   })
@@ -298,7 +299,7 @@ export function stepsBlock (o) {
     list,
     editor: o.sel !== null && seq[o.sel] ? stepEditor(seq, o.sel, table, ctx, o) : null,
     adder: o.picking
-      ? chooser('Add a step', 'what happens, at that moment of the state', groupsOf(table, 'act', null, o.actCtx), (key) => {
+      ? chooser('Add a step', 'what happens, at that moment of the state', groupsWithMore(table, 'act', ctx.moreActs, o.actCtx), (key) => {
         const p = newAct(table, key, o.addAt, o.actCtx)
         node.sequence = seq
         insertByTime(seq, p)

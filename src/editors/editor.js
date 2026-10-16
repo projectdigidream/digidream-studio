@@ -13,7 +13,7 @@
 // Looks, Advanced.
 //
 import { el, button, ask, confirmDialog } from '../ui.js'
-import { MOB_CONDITIONS, MOB_ACTIONS, WEAPON_CONDITIONS, WEAPON_ACTIONS, sentence, shortOf, secs, ticksOf, fxNum, fxOf, condKey } from '../phrases.js'
+import { MOB_CONDITIONS, MOB_ACTIONS, WEAPON_CONDITIONS, WEAPON_ACTIONS, sentence, shortOf, secs, ticksOf, fxNum, fxOf, condKey, unphrased } from '../phrases.js'
 import { compileMob, compileWeapon } from '../brainc.js'
 import { nextPropId } from '../props_emit.js'
 import { guessStates } from '../sheets.js'
@@ -22,6 +22,13 @@ import { injectCss, sentenceEl, ruleCards, stepsBlock, numField, checkField, sel
 import { Preview, Sheets } from './preview.js'
 import { board } from './board.js'
 import { MOB_RECIPES, WEAPON_RECIPES, RECIPE_MISSILE, bindAnims, animName } from './recipes.js'
+// The workshop's forms for what is not behaviour, kept as they were: a brain's
+// own fields, its body states, a swept swing and how it is drawn, a weapon's
+// prediction (brain.js, swing.js, slashform.js, arms.js).
+import { brainRows, bodyRows } from '../brain.js'
+import { swingRows, newSwing, SwingPreview } from '../swing.js'
+import { slashRows } from '../slashform.js'
+import { weaponRows } from '../arms.js'
 
 const toName = (v) => String(v ?? '').toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '')
 const nameProblem = (n) => (!n ? 'Type a name first.' : !/^[a-z]/.test(n) ? 'A name starts with a letter.' : n.length > 24 ? 'A name is at most 24 letters long.' : '')
@@ -44,7 +51,7 @@ const KINDS = {
     home: (S) => (S.module.weapons ??= newArsenal()).weapons,
     nodes: (w) => (w.phases ??= {}),
     compile: (S, w) => compileWeapon(w),
-    tabs: [['overview', 'Overview'], ['behaviour', 'Behaviour'], ['attacks', 'Attacks'], ['look', 'Looks'], ['arsenal', 'Arsenal']]
+    tabs: [['overview', 'Overview'], ['behaviour', 'Behaviour'], ['attacks', 'Attacks'], ['look', 'Looks'], ['arsenal', 'Arsenal'], ['advanced', 'Advanced']]
   }
 }
 
@@ -77,6 +84,7 @@ export class NodeEditor {
     this.scroll = {}
     this.newName = ''
     this.preview = null
+    this.swingPreview = new SwingPreview(() => S.skin)
   }
 
   // ---- the document ----
@@ -96,7 +104,7 @@ export class NodeEditor {
     this.render()
   }
 
-  close () { this.root.hidden = true; this.preview?.pause() }
+  close () { this.root.hidden = true; this.preview?.stop(); this.swingPreview.stop() }
 
   changed () {
     this.S.moduleChanged()
@@ -107,11 +115,12 @@ export class NodeEditor {
   say (msg, level = 'ok') { this.S.status(msg, level) }
 
   makePreview () {
+    this.preview?.stop()
     if (!this.thing) { this.preview = null; return }
     this.preview = new Preview(this.S, {
       kind: this.kind,
       sheets: this.sheets,
-      subject: () => ({
+      subject: () => (!this.thing ? null : {
         compiled: this.K.compile(this.S, this.thing, this.name),
         prop: this.prop, initial: this.initial,
         missiles: this.S.module.mobs?.missiles ?? {},
@@ -154,6 +163,9 @@ export class NodeEditor {
       states: Object.keys(this.nodes),
       missiles: Object.keys(S.module.mobs?.missiles ?? {}),
       fx: S.vfxChoices?.() ?? [],
+      props: S.propNames?.() ?? [],
+      moreConds: unphrased(this.K.conds, ((this.kind === 'mob' ? S.vocab?.mob : S.vocab?.weapon)?.conditions ?? []).map((c) => c.name)),
+      moreActs: unphrased(this.K.acts, ((this.kind === 'mob' ? S.vocab?.mob : S.vocab?.weapon)?.actions ?? []).map((c) => c.name)),
       soundField: S.soundField,
       changed: () => this.changed(),
       condSpec: (n) => (this.kind === 'mob' ? S.vocab?.mobConditions : S.vocab?.weaponConditions)?.get(n),
@@ -161,6 +173,26 @@ export class NodeEditor {
       argCtx: { states: Object.keys(this.nodes), vars: [...vars], missiles: Object.keys(S.module.mobs?.missiles ?? {}), mobs: Object.keys(S.module.mobs?.mobs ?? {}), vfxChoices: S.vfxChoices, soundField: S.soundField, suggest: S.suggest }
     }
   }
+  /** What the workshop's forms are given (argform.js ctx). */
+  formCtx () {
+    const S = this.S
+    const changed = () => this.changed()
+    const names = Object.keys(this.nodes)
+    return {
+      onChange: changed, changed, status: (t, l) => S.status(t, l),
+      states: names, phases: names, vars: Object.keys(this.thing?.vars ?? {}),
+      missiles: Object.keys(S.module.mobs?.missiles ?? {}), mobs: Object.keys(S.module.mobs?.mobs ?? {}),
+      props: S.propNames?.() ?? [], ammo: Object.keys(S.module.weapons?.ammo ?? {}), weapons: Object.keys(S.module.weapons?.weapons ?? {}),
+      vfxChoices: () => S.vfxChoices?.() ?? [], suggest: (n, o) => S.suggest?.(n, o) ?? null, soundField: S.soundField
+    }
+  }
+  /** A swept swing on `owner` (the monster, the weapon, or one weapon state), with its moving picture. */
+  swingSection (owner, whose) {
+    const V = this.kind === 'weapon' ? this.S.vocab.weapon : this.S.vocab.mob
+    if (!owner.swing) return [el('span', { class: 'me-muted', text: `${whose} has no swing: a swept collider that moves through an arc over several ticks, so a target that steps aside is missed.` }), button('+ swing', () => { owner.swing = newSwing(); this.changed() })]
+    return swingRows(V, owner, { ...this.formCtx(), onChange: () => this.changed() }, { radius: this.prop?.radius ?? 0.35, preview: this.swingPreview, onRemove: () => { delete owner.swing; this.changed() } })
+  }
+
   actCtx () {
     const sounds = [...(this.S.soundsByPack?.() ?? new Map()).values()].flat()
     return { missile: Object.keys(this.S.module.mobs?.missiles ?? {})[0], sound: sounds.find((n) => n.startsWith(`${this.name}.`)) ?? sounds[0], state: Object.keys(this.nodes)[0] }
@@ -189,11 +221,13 @@ export class NodeEditor {
 
   thumb () {
     const c = el('canvas', { class: 'me-thumb', width: 56, height: 68 })
-    if (this.kind === 'mob' && this.prop?.art?.sheet) {
+    const sheet = this.kind === 'mob' ? this.prop?.art?.sheet : null
+    if (sheet) {
+      // drawn a frame later, so it holds what it was made with: the monster may be gone by then
+      const anim = this.animOf(0) ?? this.sheetAnims()[0]
       requestAnimationFrame(() => {
         const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled = false
-        const h = this.sheets.height(this.prop.art.sheet)
-        this.sheets.draw(ctx, this.prop.art.sheet, this.animOf(0) ?? this.sheetAnims()[0], 0, 0, 28, 66, 60 / Math.max(1, h))
+        this.sheets.draw(ctx, sheet, anim, 0, 0, 28, 66, 60 / Math.max(1, this.sheets.height(sheet)))
       })
     }
     return c
@@ -578,7 +612,7 @@ export class NodeEditor {
 
   anyPanel () {
     const b = this.thing
-    b.any ??= []
+    const any = b.any ?? []
     const isMob = this.kind === 'mob'
     const has = (n) => !!this.nodes[n]
     const builtin = isMob ? [
@@ -586,11 +620,11 @@ export class NodeEditor {
       { when: 'its health reaches 0', to: 'death' }] : []
     const live = this.live()
     const targets = Object.keys(this.nodes).map((n) => [n, n])
-    const cards = ruleCards({ id: 'any', list: b.any, table: this.K.conds, ctx: this.ctx(), targets, key: 'any', canOnce: true, live: live?.any ?? -1,
+    const cards = ruleCards({ id: 'any', list: any, table: this.K.conds, ctx: this.ctx(), targets, key: 'any', canOnce: true, live: live?.any ?? -1,
       picking: this.picking?.list === 'any' ? this.picking.i : -1, setPicking: (i) => { this.picking = i === null ? null : { list: 'any', i }; this.render() },
       fired: (i) => !!this.preview?.sim.vars[`__once${i + 1}`] })
     const head = el('button', { class: 'me-pvbar', 'aria-expanded': this.anyOpen ? 'true' : 'false', onclick: () => { this.anyOpen = !this.anyOpen; this.render() } },
-      [el('span', { icon: this.anyOpen ? 'action.collapse' : 'action.expand' }), el('b', { text: 'Whatever it is doing' }), el('span', { class: 'me-muted', text: `${builtin.length ? `${builtin.length} built in · ` : ''}${b.any.length ? `${b.any.length} of yours` : 'none of yours yet'}` })])
+      [el('span', { icon: this.anyOpen ? 'action.collapse' : 'action.expand' }), el('b', { text: 'Whatever it is doing' }), el('span', { class: 'me-muted', text: `${builtin.length ? `${builtin.length} built in · ` : ''}${any.length ? `${any.length} of yours` : 'none of yours yet'}` })])
     if (!this.anyOpen) return el('div', { class: 'me-panel' }, [head])
     return el('div', { class: 'me-panel' }, [head,
       el('span', { class: 'me-muted', text: `Checked first, before a ${this.K.node}'s own rules; the first that holds wins. "Only once" makes a rule fire a single time: a boss's phase change.` }),
@@ -598,7 +632,7 @@ export class NodeEditor {
         el('span', { class: 'me-muted', text: has(x.to) ? `the engine's own, for a state named ${x.to}` : `no state is named ${x.to}, so this never happens` }), el('span', { class: 'me-grow' }),
         has(x.to) ? el('button', { class: 'me-lnk', text: `open ${x.to}`, onclick: () => this.select(x.to) }) : null])),
       ...cards,
-      el('div', { class: 'me-row' }, [button(`+ a rule for any ${this.K.node}`, () => { b.any.push({ to: '', when: [] }); this.picking = { list: 'any', i: b.any.length - 1 }; this.changed() }),
+      el('div', { class: 'me-row' }, [button(`+ a rule for any ${this.K.node}`, () => { (b.any ??= []).push({ to: '', when: [] }); this.picking = { list: 'any', i: b.any.length - 1 }; this.changed() }),
         el('span', { class: 'me-muted', text: isMob ? 'for example: flee when its health is below 30%' : 'for example: when it is out of ammo, go to a reload state' })])
     ])
   }
@@ -677,7 +711,7 @@ export class NodeEditor {
     }
     // its own rules
     out.push(el('div', { class: 'me-h', id: 'me-sec-rules', text: 'Goes to' }))
-    st.transitions ??= []
+    const own = st.transitions ?? []
     const live = this.live()
     const phs = this.thing.phases ?? []
     const phName = (id) => phs.find((p) => p.id === id)?.name
@@ -691,19 +725,19 @@ export class NodeEditor {
       const leaps = t?.sequence?.some((p) => p.action === 'impulse' && hit && p.at <= hit.at)
       return hit && w && !leaps && fxNum(w.distance) > fxNum(hit.range) ? `${r.to} hits only ${fxNum(hit.range)} m away: from ${fxNum(w.distance)} m it can swing and miss.` : null
     }
-    out.push(...ruleCards({ id: n, list: st.transitions, table: this.K.conds, ctx, targets, key: 'rules', canOnce: false, live: live?.state === n ? live.rule : -1,
+    out.push(...ruleCards({ id: n, list: own, table: this.K.conds, ctx, targets, key: 'rules', canOnce: false, live: live?.state === n ? live.rule : -1,
       picking: this.picking?.list === 'rules' ? this.picking.i : -1, setPicking: (i) => { this.picking = i === null ? null : { list: 'rules', i }; this.render() }, warn }))
-    if (!st.transitions.length) out.push(el('span', { class: 'me-muted', text: st.ticks !== undefined ? `No rules: it runs for ${secs(st.ticks)} s, then goes on.` : 'No rules: it stays here.' }))
-    out.push(button('+ another rule', () => { st.transitions.push({ to: '', when: [] }); this.picking = { list: 'rules', i: st.transitions.length - 1 }; this.changed() }))
+    if (!own.length) out.push(el('span', { class: 'me-muted', text: st.ticks !== undefined ? `No rules: it runs for ${secs(st.ticks)} s, then goes on.` : 'No rules: it stays here.' }))
+    out.push(button('+ another rule', () => { (st.transitions ??= []).push({ to: '', when: [] }); this.picking = { list: 'rules', i: st.transitions.length - 1 }; this.changed() }))
     // branches as its time is up
     out.push(el('div', { class: 'me-h', id: 'me-sec-ends', text: 'When its time is up (optional branches)' }))
     if (st.ticks === undefined) out.push(el('span', { class: 'me-muted', text: 'It has no length, so it only leaves through a rule. To leave after a while, give it a length above, or a rule "this state has run for".' }))
     else {
-      st.ends ??= []
-      out.push(...ruleCards({ id: `${n}#ends`, list: st.ends, table: this.K.conds, ctx, targets, key: 'ends', canOnce: false, live: -1,
+      const ends = st.ends ?? []
+      out.push(...ruleCards({ id: `${n}#ends`, list: ends, table: this.K.conds, ctx, targets, key: 'ends', canOnce: false, live: -1,
         picking: this.picking?.list === 'ends' ? this.picking.i : -1, setPicking: (i) => { this.picking = i === null ? null : { list: 'ends', i }; this.render() } }))
       out.push(el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: `otherwise → ${st.next === '@previous' ? 'back to what it was doing' : st.next ?? '(it stays)'}` }), el('span', { class: 'me-grow' }),
-        button('+ a branch', () => { st.ends.push({ to: '', when: [] }); this.picking = { list: 'ends', i: st.ends.length - 1 }; this.changed() })]))
+        button('+ a branch', () => { (st.ends ??= []).push({ to: '', when: [] }); this.picking = { list: 'ends', i: st.ends.length - 1 }; this.changed() })]))
     }
     // its steps
     out.push(el('div', { class: 'me-h', id: 'me-sec-steps', text: 'Timeline' }))
@@ -713,6 +747,8 @@ export class NodeEditor {
     out.push(...blk.list)
     if (!this.phone) { if (blk.editor) out.push(blk.editor); if (blk.adder) out.push(blk.adder) }
     if (!this.pickAct) out.push(button(`+ add a step at ${secs(this.addAt(n))} s`, () => { this.pickAct = true; this.step = null; this.render() }))
+    // A WEAPON STATE MAY CARRY ITS OWN SWING, replacing the weapon's while it is in it: what makes a combo escalate.
+    if (!isMob) out.push(el('div', { class: 'me-h', text: 'Its own swing' }), ...this.swingSection(st, `This ${this.K.node}`))
     return out.filter(Boolean)
   }
 
@@ -880,9 +916,16 @@ export class NodeEditor {
     for (const r of this.thing.any ?? []) for (const c of r.when ?? []) if (c.var) note(c.var, 'checked in "whatever it is doing"')
     for (const v of Object.keys(this.thing.vars ?? {})) note(v, `starts at ${this.thing.vars[v]}`)
     const names = Object.keys(vars).filter((v) => !v.startsWith('__'))
+    const changed = () => this.changed()
+    const more = this.kind === 'mob'
+      ? [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its brain: blood, pain, drops and the rest' }), ...brainRows(this.S, this.thing, this.formCtx())]),
+          el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its own swing' }), ...this.swingSection(this.thing, 'This monster'), ...slashRows(this.S, 'monster', this.name, changed)]),
+          this.prop ? el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its body states' }), ...bodyRows(this.S, this.prop, changed)]) : null]
+      : [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'The weapon' }), ...weaponRows(this.S, this.name, this.thing, this.formCtx())]),
+          el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its swing, in every state' }), ...this.swingSection(this.thing, 'This weapon'), ...slashRows(this.S, 'weapon', this.name, changed)])]
     return [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its numbers' }),
       el('span', { class: 'me-muted', text: 'Numbers it remembers, like which phase it is in or a cooldown. One exists as soon as a step sets it or a rule checks it: add a "set the number" step to make one.' }),
-      ...(names.length ? names.map((v) => el('div', { class: 'me-frow inline' }, [el('span', { class: 'me-mono', text: v }), el('span', { class: 'me-muted', text: [...vars[v]].join('; ') })])) : [el('span', { class: 'me-muted', text: 'none yet' })])])]
+      ...(names.length ? names.map((v) => el('div', { class: 'me-frow inline' }, [el('span', { class: 'me-mono', text: v }), el('span', { class: 'me-muted', text: [...vars[v]].join('; ') })])) : [el('span', { class: 'me-muted', text: 'none yet' })])]), ...more.filter(Boolean)]
   }
 }
 

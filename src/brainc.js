@@ -120,6 +120,7 @@ function compileNodes (nodes, { kind, any, phases, baseSpeed }) {
  * @param body  its body prop ({ speed }), for a phase's speed to come back to
  */
 export function compileMob (brain, body = null) {
+  if (!brain) return brain
   const b = clone(brain)
   for (const k of BRAIN_KEYS) delete b[k]
   const { nodes, onceVars } = compileNodes(brain.states, { kind: 'mob', any: brain.any, phases: brain.phases, baseSpeed: body?.speed ?? 4 })
@@ -130,6 +131,7 @@ export function compileMob (brain, body = null) {
 
 /** A weapon as weapons.load{} takes it. */
 export function compileWeapon (weapon) {
+  if (!weapon) return weapon
   const w = clone(weapon)
   // a weapon's `label` is the engine's own (its name in the arsenal); only the editor's rules go
   for (const k of ['any', 'recipe']) delete w[k]

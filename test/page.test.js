@@ -41,7 +41,8 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new'
 const page = await browser.newPage()
 await page.setViewport({ width: 1000, height: 700 })
 const errors = []
-page.on('pageerror', (e) => errors.push(String(e)))
+// with where it was thrown: a bare message names no culprit
+page.on('pageerror', (e) => errors.push(String(e.stack ?? e).split('\n').slice(0, 2).join(' ').replace(/\s+/g, ' ')))
 // Resource failures are recorded from the response hook below, with their
 // URL; the console's version of the same event names nothing.
 page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()) })
@@ -295,9 +296,10 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(spirit?.pictured && spirit.cut && spirit.h > 0.3 && spirit.h <= 1, `the monster is drawn from its imported sheet, one frame cut from it (${JSON.stringify(spirit)})`)
 }
 
-// The monster workshop: its own windows. A new monster gets the imported
-// sheet; the preview draws it, the graph shows its five states and their
-// arrows, and tapping a state opens it in the details window.
+// THE MONSTER EDITOR (src/editors/editor.js). A new monster gets the imported
+// sheet; the preview draws it running its brain; the graph shows its states
+// and their arrows in lanes; tapping a state opens it beside the list, with its
+// rules as sentences and every condition and action of the engine on offer.
 {
   const made = await page.evaluate(async () => {
     const S = window.__studio
@@ -307,91 +309,98 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return name
   })
   check(made === 'ghost', `a new monster is made from the forms (${made})`)
-  // Monsters are a section of the module now, in the rail.
+  // Monsters are a section of the module, in the rail.
   await page.evaluate(() => document.querySelector('.sd-rail [data-section="monsters"]').click())
-  await page.waitForFunction(() => document.querySelector('.wk') && !document.querySelector('.wk').hidden, { timeout: 5000 }).catch(() => {})
-  const wk = await page.evaluate(() => ({
-    open: !!document.querySelector('.wk') && !document.querySelector('.wk').hidden,
-    nodes: document.querySelectorAll('.wk-node').length,
-    edges: document.querySelectorAll('.wk-edge').length,
+  await page.waitForFunction(() => document.querySelector('.me[data-kind="mob"]') && !document.querySelector('.me[data-kind="mob"]').hidden, { timeout: 5000 }).catch(() => {})
+  await page.evaluate(async () => { const S = window.__studio; await S.go('monsters', 'ghost'); const ed = S.monsterEditor; ed.view = 'graph'; ed.render() })
+  const ed = await page.evaluate(() => ({
+    open: !!document.querySelector('.me[data-kind="mob"]') && !document.querySelector('.me[data-kind="mob"]').hidden,
+    nodes: document.querySelectorAll('.me .me-node').length,
+    edges: document.querySelectorAll('.me .me-edge').length,
     sheet: window.__studio.module.props.find((p) => p.name === 'ghost')?.art?.sheet,
     chrome: getComputedStyle(document.querySelector('.st-bar')).display
   }))
-  check(wk.open && wk.nodes === 5 && wk.edges >= 6, `the graph shows the brain: ${wk.nodes} states, ${wk.edges} arrows`)
-  check(wk.sheet === 'SPIR', `the new monster took the imported sheet (${wk.sheet})`)
-  check(wk.chrome === 'none', 'the level chrome is out of the way while the monsters are open')
-  await page.waitForFunction(() => {
-    const c = document.querySelector('.wk-canvas'); if (!c) return false
-    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height - 30).data
+  check(ed.open && ed.nodes === 5 && ed.edges >= 4, `the graph shows the brain: ${ed.nodes} states, ${ed.edges} arrows`)
+  check(ed.sheet === 'SPIR', `the new monster took the imported sheet (${ed.sheet})`)
+  check(ed.chrome === 'none', 'the level chrome is out of the way while the monsters are open')
+  // The preview, opened and run: the monster drawn from its sheet.
+  await page.evaluate(() => { const ed = window.__studio.monsterEditor; ed.pvOpen = true; ed.preview.start(); ed.render() })
+  const lit = () => page.evaluate(() => {
+    const c = document.querySelector('.me .me-side canvas.me-stage'); if (!c) return 0
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
     let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++
-    return n > 500
-  }, { timeout: 15000 }).catch(() => {})
-  const painted = await page.evaluate(() => {
-    const c = document.querySelector('.wk-canvas')
-    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height - 30).data
-    let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++
-    return { n, label: document.querySelector('.wk-preview .st-muted')?.textContent }
+    return n
   })
-  check(painted.n > 500, `the preview paints the monster from its sheet (${painted.n} px, ${painted.label})`)
+  for (let i = 0; i < 60 && (await lit()) < 500; i++) await new Promise((r) => setTimeout(r, 250))
+  check((await lit()) > 500, `the preview paints the monster from its sheet as it runs (${await lit()} px)`)
+  const why = await page.evaluate(() => document.querySelector('.me .me-now')?.textContent ?? '')
+  check(/^Now in \w+/.test(why), `and says what it is doing and why (${why})`)
+  await page.evaluate(() => window.__studio.monsterEditor.preview.pause())
+  // Tapping a state opens it beside, with its own rules.
   const picked = await page.evaluate(() => {
-    const node = [...document.querySelectorAll('.wk-node')].find((n) => n.textContent.includes('chase'))
-    node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }))
-    node.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }))
-    return { state: window.__studio.workshop.state, transitions: document.querySelectorAll('.wk-details [data-transition]').length }
+    const ed = window.__studio.monsterEditor
+    ed.view = 'list'; ed.render()
+    const b = [...document.querySelectorAll('.me .me-cname')].find((x) => x.textContent.trim() === 'chase')
+    b.click()
+    return { sel: ed.sel, rules: document.querySelectorAll('.me .me-side .me-rcard').length }
   })
-  check(picked.state === 'chase' && picked.transitions === 2, `tapping a state opens it with its transitions (${JSON.stringify(picked)})`)
-  // The forms are the vocabulary's: every condition and action the runtime
-  // knows is on offer, and a `prop` argument lists the catalogue.
+  check(picked.sel === 'chase' && picked.rules === 2, `tapping a state opens it with its rules (${JSON.stringify(picked)})`)
+  // EVERY CONDITION AND ACTION THE RUNTIME KNOWS is on offer: in words where
+  // the phrasebook has them, under "More" (the vocabulary's own form) where not.
   const offered = await page.evaluate(() => {
     const S = window.__studio
-    const sel = [...document.querySelectorAll('.wk-details select')]
-    const when = sel.find((s) => [...s.options].some((o) => o.value === 'prop_within'))
-    const step = sel.find((s) => [...s.options].some((o) => o.value === 'alert_nearby'))
+    const ed = S.monsterEditor
+    ed.picking = { list: 'rules', i: 0 }; ed.render()
+    const conds = [...document.querySelectorAll('.me .me-side .me-chooser .me-copt')].length
+    ed.picking = null; ed.pickAct = true; ed.render()
+    const acts = [...document.querySelectorAll('.me .me-side .me-chooser .me-copt')].length
+    ed.pickAct = false
+    const more = [...document.querySelectorAll('.me .me-side .me-chooser .me-cgl')].some((g) => /^More/.test(g.textContent))
+    // a prop is picked from the catalogue
     S.module.mobs.mobs.ghost.states.chase.transitions[0].when.push({ cond: 'prop_within', distance: '4' })
-    S.workshop.render()
-    const propSel = [...document.querySelectorAll('.wk-details .st-row')].find((r) => r.querySelector('label')?.textContent === 'prop?')?.querySelector('select')
-    return { when: when ? when.options.length - 1 : 0, step: step ? step.options.length - 1 : 0, props: propSel ? propSel.options.length - 1 : 0, first: propSel?.options[1]?.value }
+    ed.render()
+    const propSel = [...document.querySelectorAll('.me .me-side select[aria-label="prop"]')][0]
+    const r = { conds, acts, more, vocabConds: S.vocab.mob.conditions.length, vocabActs: S.vocab.mob.actions.length, props: propSel ? propSel.options.length - 1 : 0, first: propSel?.options[1]?.value }
+    S.module.mobs.mobs.ghost.states.chase.transitions[0].when.pop(); ed.render()
+    return r
   })
-  check(offered.when >= 23 && offered.step >= 27, `the whole mob vocabulary is on offer (${offered.when} conditions, ${offered.step} actions)`)
-  check(offered.props > 1 && typeof offered.first === 'string', `a prop argument lists the catalogue (${offered.props} names, first ${offered.first})`)
-  await page.evaluate(() => { window.__studio.module.mobs.mobs.ghost.states.chase.transitions[0].when.pop(); window.__studio.workshop.render() })
-  // Dragging a state moves it the whole way: the arrows are redrawn under
-  // the finger, the node under it is the same element from start to end.
-  const dragged = await page.evaluate(() => {
-    const node = [...document.querySelectorAll('.wk-node')].find((n) => n.textContent.includes('chase'))
-    const r = node.getBoundingClientRect()
-    const ev = (type, dx) => node.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, clientX: r.x + 10 + dx, clientY: r.y + 10 }))
-    ev('pointerdown', 0)
-    for (let i = 1; i <= 8; i++) ev('pointermove', i * 10)
-    ev('pointerup', 80)
-    return { alive: node.isConnected, dx: node.getBoundingClientRect().x - r.x, edges: document.querySelectorAll('.wk-edge').length }
+  check(offered.conds >= offered.vocabConds && offered.acts >= offered.vocabActs - 1 && offered.more, `the whole mob vocabulary is on offer (${offered.conds} conditions for ${offered.vocabConds}, ${offered.acts} actions for ${offered.vocabActs}, "More": ${offered.more})`)
+  check(offered.props > 1 && typeof offered.first === 'string', `a prop is picked from the catalogue (${offered.props} names, first ${offered.first})`)
+  // The graph lays the states out itself: in the order the arrows read, the reactions on a row of their own.
+  const lanes = await page.evaluate(() => {
+    const ed = window.__studio.monsterEditor
+    ed.view = 'graph'; ed.render()
+    const top = (n) => [...document.querySelectorAll('.me .me-node')].find((x) => x.dataset.node === n)?.getBoundingClientRect().top
+    return { look: top('look'), chase: top('chase'), pain: top('pain'), death: top('death') }
   })
-  check(dragged.alive && Math.round(dragged.dx) === 80 && dragged.edges >= 6, `dragging a state moves it the whole way and keeps its arrows (${JSON.stringify(dragged)})`)
-  // A new state is named in the studio's own dialog: window.prompt is not
-  // there in Electron, nor in a phone's WebView.
-  await page.evaluate(() => [...document.querySelectorAll('.wk-bar button')].find((b) => b.textContent === '+ state').click())
-  await page.waitForSelector('dialog[open] input', { timeout: 3000 }).catch(() => {})
-  await page.keyboard.type('flee')
+  check(lanes.look === lanes.chase && lanes.pain === lanes.death && lanes.pain > lanes.look, `the graph lays the flow in a row and the reactions below it (${JSON.stringify(lanes)})`)
+  // A new state is named in the editor itself: no window.prompt (not there in
+  // Electron, nor in a phone's WebView), no dialog.
+  await page.evaluate(() => { const ed = window.__studio.monsterEditor; ed.view = 'list'; ed.sel = null; ed.render(); [...document.querySelectorAll('.me button')].find((b) => b.textContent === '+ state').click() })
+  await page.waitForSelector('.me input[aria-label^="New state"]', { timeout: 3000 }).catch(() => {})
+  await page.focus('.me input[aria-label^="New state"]')
+  await page.keyboard.type('Flee')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__studio.module.mobs.mobs.ghost.states.flee, { timeout: 3000 }).catch(() => {})
-  const added = await page.evaluate(() => ({ state: !!window.__studio.module.mobs.mobs.ghost.states.flee, nodes: document.querySelectorAll('.wk-node').length, dialogs: document.querySelectorAll('dialog').length }))
-  check(added.state && added.nodes === 6 && added.dialogs === 0, `a state is added through the studio's own dialog (${JSON.stringify(added)})`)
-  // The preview plays any animation of the sheet by name, not only a state's.
-  await page.select('.wk-preview select', 'walk')
-  await page.waitForFunction(() => document.querySelector('.wk-preview .st-muted')?.textContent.startsWith('walk'), { timeout: 5000 }).catch(() => {})
-  const anim = await page.evaluate(() => ({ label: document.querySelector('.wk-preview .st-muted')?.textContent, chipsOn: document.querySelectorAll('.wk-preview .st-chip[data-on="1"]').length, options: document.querySelectorAll('.wk-preview select option').length }))
-  check(anim.label?.startsWith('walk') && anim.chipsOn === 0 && anim.options >= 4, `the preview plays a chosen animation (${JSON.stringify(anim)})`)
-  // ...and one that plays once, and keeps drawing after it: the loop must
-  // not die on any animation of the sheet.
-  await page.select('.wk-preview select', 'Attack')
-  await page.waitForFunction(() => document.querySelector('.wk-preview .st-muted')?.textContent.startsWith('Attack'), { timeout: 5000 }).catch(() => {})
-  const once = await page.evaluate(() => {
-    const c = document.querySelector('.wk-canvas')
-    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height - 30).data
+  const added = await page.evaluate(() => ({ state: !!window.__studio.module.mobs.mobs.ghost.states.flee, cards: document.querySelectorAll('.me .me-card').length, dialogs: document.querySelectorAll('dialog').length }))
+  check(added.state && added.cards === 6 && added.dialogs === 0, `a state is added in the editor, its name lower-cased as typed (${JSON.stringify(added)})`)
+  // Looks plays any animation of the sheet by name, and one that plays once keeps drawing.
+  const looks = async (anim) => page.evaluate(async (anim) => {
+    const ed = window.__studio.monsterEditor
+    ed.tab = 'look'; ed.render()
+    const b = [...document.querySelectorAll('.me .me-vbtn')].find((x) => x.textContent === anim)
+    b?.click()
+    for (let i = 0; i < 40; i++) { await new Promise((r) => setTimeout(r, 100)); if (document.querySelector('.me .me-lookside .me-muted')?.textContent.startsWith(anim)) break }
+    await new Promise((r) => setTimeout(r, 1200))
+    const c = document.querySelector('.me .me-lookside canvas')
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
     let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++
-    return { n, label: document.querySelector('.wk-preview .st-muted')?.textContent, loop: window.__studio.workshop.raf > 0 }
-  })
-  check(once.n > 500 && once.label?.startsWith('Attack') && once.loop, `a once-only animation draws and the loop lives on (${JSON.stringify(once)})`)
+    return { found: !!b, n, label: document.querySelector('.me .me-lookside .me-muted')?.textContent }
+  }, anim)
+  const walk = await looks('walk')
+  check(walk.found && walk.n > 500 && walk.label?.startsWith('walk'), `Looks plays a chosen animation (${JSON.stringify(walk)})`)
+  const once = await looks('Attack')
+  check(once.n > 500 && once.label?.startsWith('Attack') && /plays once|loops/.test(once.label), `and one that plays once draws, and keeps drawing (${JSON.stringify(once)})`)
   // A sheet's height scales its sprite: the manifest the game reads, the
   // atlas the studio draws from and the bodies that matched it all follow.
   const scaled = await page.evaluate(async () => {
@@ -402,76 +411,65 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return { before, after: S.sheets.get('SPIR').atlas.worldHeight, file: json.worldHeight, body: S.module.props.find((p) => p.name === 'ghost').height, rec: S.module.sprites.SPIR.worldHeight }
   })
   check(scaled.after === scaled.before * 2 && scaled.file === scaled.after && scaled.body === scaled.after && scaled.rec === scaled.after, `a sheet's height scales its sprite everywhere (${JSON.stringify(scaled)})`)
-  // The monster's own attack editing: the swept collider it claws with, and
-  // what it bleeds -- both drawn from the same places a weapon's are.
+  // The monster's own swept collider, and what it bleeds, on Advanced: the same forms a weapon's are.
   const claw = await page.evaluate(() => {
     const S = window.__studio
-    S.workshop.tab = 'swing'; S.workshop.render()
-    ;[...document.querySelectorAll('.wk-details button')].find((b) => b.textContent === '+ swing').click()
-    S.workshop.render()
-    return { swing: S.module.mobs.mobs.ghost.swing, canvas: !!document.querySelector('.wk-details .st-swing-canvas') }
+    const ed = S.monsterEditor
+    ed.tab = 'advanced'; ed.render()
+    ;[...document.querySelectorAll('.me button')].find((b) => b.textContent === '+ swing').click()
+    return { swing: S.module.mobs.mobs.ghost.swing, canvas: !!document.querySelector('.me .st-swing-canvas') }
   })
   check(claw.swing?.damage > 0 && claw.canvas, 'a monster gets the same swept collider, with the same preview')
-  // The preview runs the engine's own sweep, so the collider moves.
   const swept = await page.evaluate(async () => {
-    const c = document.querySelector('.wk-details .st-swing-canvas')
-    const lit = () => {
-      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
-      let n = 0
-      for (let i = 0; i < d.length; i += 4) if (d[i] > 90 && d[i + 1] > 70) n++
-      return n
-    }
+    const c = document.querySelector('.me .st-swing-canvas')
+    const lit = () => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 90 && d[i + 1] > 70) n++; return n }
     const seen = new Set()
     for (let i = 0; i < 40; i++) { seen.add(lit()); await new Promise((r) => requestAnimationFrame(r)) }
     return { frames: seen.size, any: Math.max(...seen) }
   })
   check(swept.any > 50 && swept.frames > 3, `and the collider sweeps rather than sitting still (${swept.frames} distinct frames)`)
   const blood = await page.evaluate(() => {
-    const S = window.__studio
-    S.workshop.tab = 'brain'; S.workshop.render()
-    const row = [...document.querySelectorAll('.wk-details .st-row')].find((r) => r.querySelector('label')?.textContent?.startsWith('blood'))
+    const row = [...document.querySelectorAll('.me .st-row')].find((r) => r.querySelector('label')?.textContent?.startsWith('blood'))
     const sel = row?.querySelector('select')
     return { isPicker: !!sel, options: sel ? sel.options.length - 1 : 0 }
   })
   check(blood.isPicker && blood.options > 0, `what it bleeds is picked from the particle kinds, not typed as a number (${blood.options} offered)`)
-  // THE MONSTER BOARD ZOOMS: a bar of −, the zoom, + and fit; a pinch too.
+  // THE BOARD ZOOMS: −, +, fit; a pinch too.
   const zoomed = await page.evaluate(async () => {
-    const S = window.__studio
-    const w = S.workshop
-    w.tab = 'brain'; w.render()
-    const board = document.querySelector('.wk .wk-board')
-    const bar = board?.querySelector('.wk-zoom')
-    const z0 = w.view.z
-    bar.querySelector('[data-zoom="in"]').click()
-    const zIn = w.view.z
-    bar.querySelector('[data-zoom="fit"]').click()
+    const ed = window.__studio.monsterEditor
+    ed.tab = 'behaviour'; ed.view = 'graph'; ed.render()
+    await new Promise((r) => setTimeout(r, 100))
+    const board = document.querySelector('.me .me-board')
+    const z0 = ed.boardView.z
+    ;[...board.querySelectorAll('.me-zoom button')].find((b) => b.getAttribute('aria-label') === 'zoom in').click()
+    const zIn = ed.boardView.z
+    ;[...board.querySelectorAll('.me-zoom button')].find((b) => b.textContent === 'fit').click()
     await new Promise((r) => setTimeout(r, 50))
     const br = board.getBoundingClientRect()
-    const inside = [...board.querySelectorAll('.wk-world > .wk-node')].every((n) => { const r = n.getBoundingClientRect(); return r.left >= br.left - 1 && r.right <= br.right + 1 && r.top >= br.top - 1 && r.bottom <= br.bottom + 1 })
-    // A pinch: two fingers spreading apart on empty board.
-    const zBefore = w.view.z
+    const inside = [...board.querySelectorAll('.me-node')].every((n) => { const r = n.getBoundingClientRect(); return r.left >= br.left - 1 && r.right <= br.right + 1 && r.top >= br.top - 1 && r.bottom <= br.bottom + 1 })
+    const zBefore = ed.boardView.z
     const at = (id, x, y, type) => board.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, pointerType: 'touch' }))
     const cx = br.left + br.width / 2; const cy = br.top + br.height - 30
     at(1, cx - 20, cy, 'pointerdown'); at(2, cx + 20, cy, 'pointerdown')
     at(1, cx - 25, cy, 'pointermove'); at(2, cx + 25, cy, 'pointermove')
     at(1, cx - 60, cy, 'pointermove'); at(2, cx + 60, cy, 'pointermove')
     at(1, cx - 60, cy, 'pointerup'); at(2, cx + 60, cy, 'pointerup')
-    return { bar: !!bar, z0, zIn, inside, pinched: w.view.z > zBefore * 1.5, label: bar.querySelector('.wk-zoom-pct').textContent }
+    return { z0, zIn, inside, pinched: ed.boardView.z > zBefore * 1.5 }
   })
-  check(zoomed.bar && zoomed.zIn > zoomed.z0 && zoomed.inside && zoomed.pinched && /%$/.test(zoomed.label),
-        `the monster board zooms: + in, ⤢ every state in view, a pinch too (${JSON.stringify(zoomed)})`)
+  check(zoomed.zIn > zoomed.z0 && zoomed.inside && zoomed.pinched, `the monster board zooms: + in, fit puts every state in view, a pinch too (${JSON.stringify(zoomed)})`)
   // THE FLINCH: switched on, a bigger hit holds the monster in pain longer,
   // said in ticks for a few hits by the runtime's own sum.
   const flinch = await page.evaluate(async () => {
     const S = window.__studio
+    const ed = S.monsterEditor
     const g = S.module.mobs.mobs.ghost
     const hadPain = !!g.states.pain
     g.states.pain ??= { anim: 0, move: 'stop', face: 'hold', ticks: 12, next: g.initial }
-    S.workshop.render()
-    const row = [...document.querySelectorAll('.wk-details .st-row')].find((r) => r.querySelector('label')?.textContent === 'a bigger hit, a longer flinch')
+    ed.tab = 'advanced'; ed.render()
+    const row = [...document.querySelectorAll('.me .st-row')].find((r) => r.querySelector('label')?.textContent === 'a bigger hit, a longer flinch')
     row?.querySelector('button').click()
     await new Promise((r) => setTimeout(r, 100))
-    const said = [...document.querySelectorAll('.wk-details .st-muted')].map((m) => m.textContent).find((t) => /a 10-point hit/.test(t)) ?? ''
+    const said = [...document.querySelectorAll('.me .st-muted')].map((m) => m.textContent).find((t) => /a 10-point hit/.test(t)) ?? ''
     const r = { pt: g.pain_time ? { ...g.pain_time } : null, said, problems: S.vocab.validateMobs(S.module.mobs).filter((p) => /pain/.test(p)) }
     delete g.pain_time; if (!hadPain) delete g.states.pain; S.moduleChanged()
     return r
@@ -864,93 +862,88 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   })
 }
 
-// The weapons window: an arsenal, a weapon that is a phase graph, and a
-// swing with a picture of it. The same machine the monster window is.
+// THE WEAPON EDITOR: the monster editor's machine with the weapon vocabulary.
+// An arsenal, a weapon that is a graph of states, rules for the fire button,
+// a swing with a picture of it, and the files the game reads.
 {
   const opened = await page.evaluate(async () => {
     const S = window.__studio
     await S.go('weapons')
-    const wk = S.workshop
-    return { kind: wk.kind, open: !document.querySelector('.wk').hidden, vocab: !!S.vocab.weapon, sibling: [...document.querySelectorAll('.wk-top button')].map((b) => b.textContent).join('|') }
+    const root = document.querySelector('.me[data-kind="weapon"]')
+    return { open: !!root && !root.hidden, vocab: !!S.vocab.weapon, top: [...document.querySelectorAll('.me[data-kind="weapon"] .me-top button')].map((b) => b.textContent).join('|') }
   })
-  check(opened.open && opened.kind === 'weapon', `the arsenal opens as its own window (${JSON.stringify(opened)})`)
+  check(opened.open, `the weapons open as their own section (${JSON.stringify(opened)})`)
   check(opened.vocab, 'the weapon vocabulary is served to the studio')
-  check(!/monsters/.test(opened.sibling), `and it has no button across to the monsters, as asked (${opened.sibling})`)
+  check(!/monsters/i.test(opened.top), `and it has no button across to the monsters, as asked (${opened.top})`)
   const made = await page.evaluate(async () => {
     const S = window.__studio
     const { newWeapon } = await import('/studio/src/weapons_emit.js')
     const name = newWeapon(S.module, 'pistol')
-    S.workshop.mob = name
-    S.workshop.render()
-    return { name, phases: Object.keys(S.module.weapons.weapons[name].phases), nodes: document.querySelectorAll('.wk-node').length, edges: document.querySelectorAll('.wk-edge').length }
+    S.moduleChanged()
+    S.weaponEditor.switchTo(name)
+    S.weaponEditor.view = 'graph'; S.weaponEditor.render()
+    return { name, phases: Object.keys(S.module.weapons.weapons[name].phases), nodes: document.querySelectorAll('.me .me-node').length, edges: document.querySelectorAll('.me .me-edge').length }
   })
-  check(made.name === 'pistol' && made.phases.length === 2, `a new weapon is a working phase machine (${made.phases.join(', ')})`)
-  check(made.nodes === 2 && made.edges >= 2, `its graph is drawn like a brain's (${made.nodes} phases, ${made.edges} arrows)`)
-  // The phase form is the weapon vocabulary's, not the mob's.
+  check(made.name === 'pistol' && made.phases.length === 2, `a new weapon is a working machine of states (${made.phases.join(', ')})`)
+  check(made.nodes === 2 && made.edges >= 2, `its graph is drawn like a brain's (${made.nodes} states, ${made.edges} arrows)`)
+  // Its rules are the weapon vocabulary's, not the monster's.
   const offered = await page.evaluate(() => {
     const S = window.__studio
-    S.workshop.state = 'ready'; S.workshop.tab = 'node'; S.workshop.render()
-    const sel = [...document.querySelectorAll('.wk-details select')]
-    const when = sel.find((x) => [...x.options].some((o) => o.value === 'button_held'))
-    const step = sel.find((x) => [...x.options].some((o) => o.value === 'switch_if_empty'))
-    return { when: when ? when.options.length - 1 : 0, step: step ? step.options.length - 1 : 0, mobOnly: sel.some((x) => [...x.options].some((o) => o.value === 'target_nearest')) }
+    const ed = S.weaponEditor
+    ed.view = 'list'; ed.sel = 'ready'; ed.picking = { list: 'rules', i: 0 }; ed.render()
+    const conds = [...document.querySelectorAll('.me .me-side .me-chooser .me-copt')].map((b) => b.textContent)
+    ed.picking = null; ed.pickAct = true; ed.render()
+    const acts = [...document.querySelectorAll('.me .me-side .me-chooser .me-copt')].map((b) => b.textContent)
+    ed.pickAct = false; ed.render()
+    return { conds: conds.length, acts: acts.length, vocabConds: S.vocab.weapon.conditions.length, vocabActs: S.vocab.weapon.actions.length, held: conds.some((t) => /fire is held/.test(t)), notHeld: conds.some((t) => /fire is not held/.test(t)), mobOnly: conds.some((t) => /hunting|can see the target/.test(t)) }
   })
-  check(offered.when >= 15 && offered.step >= 13, `the phase offers the weapon vocabulary (${offered.when} conditions, ${offered.step} actions)`)
+  check(offered.conds >= offered.vocabConds && offered.acts >= offered.vocabActs, `the state offers the weapon vocabulary (${offered.conds} conditions for ${offered.vocabConds}, ${offered.acts} actions for ${offered.vocabActs})`)
+  check(offered.held && offered.notHeld, 'with a negated form, which the weapon runtime takes since 0.2.0 ("fire is not held")')
   check(!offered.mobOnly, "CONTROL: and not the monster's, which a weapon cannot run")
-  // → link on a weapon: the arrow goes into its phases (it used to write to
-  // `states`, which only a monster has, and threw), and starts on `always`,
-  // since the weapon runtime refuses an empty list. No "not" switch either.
-  const linked = await page.evaluate(() => {
+  // A new rule: to a state, on a condition; the file the runtime reads takes it.
+  const ruled = await page.evaluate(async () => {
     const S = window.__studio
-    const errors = []
-    const onErr = (e) => errors.push(String(e.message ?? e.reason))
-    window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onErr)
+    const ed = S.weaponEditor
     const w = S.module.weapons.weapons.pistol
-    const [from, to] = Object.keys(w.phases)
-    const before = (w.phases[from].transitions ?? []).length
-    S.workshop.state = from; S.workshop.tab = 'node'; S.workshop.render()
-    ;[...document.querySelectorAll('.wk-details button')].find((b) => /tap a target state/.test(b.textContent)).click()
-    const node = [...document.querySelectorAll('.wk-world > .wk-node')].find((n) => n.querySelector('.wk-node-name').textContent === to)
-    const r = node.getBoundingClientRect()
-    const at = { bubbles: true, clientX: r.x + 10, clientY: r.y + 10, pointerId: 1 }
-    node.dispatchEvent(new PointerEvent('pointerdown', at)); node.dispatchEvent(new PointerEvent('pointerup', at))
-    window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr)
-    const trs = w.phases[from].transitions ?? []
-    const added = trs[trs.length - 1]
-    S.workshop.render()
-    const nots = [...document.querySelectorAll('.wk-details .st-muted')].filter((m) => m.textContent === 'not').length
-    const problems = S.vocab.validateWeapons(S.module).filter((p) => /pistol/.test(p))
-    trs.pop(); S.workshop.render()
-    return { errors, grew: trs.length + 1 - before, added, nots, problems }
+    const before = w.phases.fire.transitions?.length ?? 0
+    ed.sel = 'fire'; ed.render()
+    ;[...document.querySelectorAll('.me .me-side button')].find((b) => b.textContent === '+ another rule').click()
+    const to = [...document.querySelectorAll('.me .me-side .me-rcard select[aria-label="goes to"]')].at(-1)
+    to.value = 'ready'; to.dispatchEvent(new Event('change'))
+    ;[...document.querySelectorAll('.me .me-side .me-chooser .me-copt')].find((b) => b.textContent === 'fire is not held').click()
+    const added = w.phases.fire.transitions.at(-1)
+    // checked as the studio checks it: the editor's own words compiled first (brainc.js)
+    const { compileArsenal } = await import('/studio/src/brainc.js')
+    return { grew: w.phases.fire.transitions.length - before, added, problems: S.vocab.validateWeapons({ ...S.module, weapons: compileArsenal(S.module.weapons) }).filter((p) => /pistol/.test(p)) }
   })
-  check(!linked.errors.length && linked.grew === 1 && linked.added?.to, `→ link on a weapon adds an arrow to the tapped phase (${JSON.stringify(linked)})`)
-  check(JSON.stringify(linked.added?.when) === '[{"cond":"always"}]' && !linked.problems.length, `and it starts on \`always\`, which the runtime takes (${linked.problems.join(' | ')})`)
-  check(linked.nots === 0, `a weapon's conditions offer no "not" switch, which its runtime refuses (${linked.nots})`)
+  check(ruled.grew === 1 && ruled.added?.to === 'ready' && ruled.added.when?.[0]?.cond === 'button_held' && ruled.added.when[0].negate === true && !ruled.problems.length,
+        `a rule is added with a target and a negated condition, and the arsenal still validates (${JSON.stringify(ruled)})`)
   // A swing, its picture, and the arsenal's pools.
   const swung = await page.evaluate(() => {
     const S = window.__studio
-    S.workshop.tab = 'swing'; S.workshop.render()
-    ;[...document.querySelectorAll('.wk-details button')].find((b) => b.textContent === '+ swing').click()
-    S.workshop.render()
-    return { swing: S.module.weapons.weapons.pistol.swing, canvas: !!document.querySelector('.wk-details .st-swing-canvas') }
+    const ed = S.weaponEditor
+    ed.tab = 'advanced'; ed.render()
+    ;[...document.querySelectorAll('.me button')].find((b) => b.textContent === '+ swing').click()
+    return { swing: S.module.weapons.weapons.pistol.swing, canvas: !!document.querySelector('.me .st-swing-canvas') }
   })
   check(swung.swing?.damage > 0 && swung.canvas, 'a swing is added, with a preview that plays it')
   const arsenal = await page.evaluate(() => {
     const S = window.__studio
-    S.workshop.tab = 'arsenal'; S.workshop.render()
+    const ed = S.weaponEditor
     const before = Object.keys(S.module.weapons.ammo).length
     S.module.weapons.ammo.shells = { label: 'Shells', max: 50, initial: 8, order: 1 }
-    S.workshop.render()
-    return { before, pools: Object.keys(S.module.weapons.ammo), labels: [...document.querySelectorAll('.wk-details .st-section-head')].map((h) => h.textContent).join('|'), health: S.module.weapons.health }
+    ed.tab = 'arsenal'; ed.render()
+    return { before, pools: Object.keys(S.module.weapons.ammo), labels: [...document.querySelectorAll('.me .st-section-head')].map((h) => h.textContent).join('|'), health: S.module.weapons.health }
   })
   check(/ammunition/.test(arsenal.labels) && /health/.test(arsenal.labels) && /pickups/.test(arsenal.labels),
         `the arsenal tab holds the pools, the ceilings and the pickups (${arsenal.labels})`)
   check(arsenal.before === 0 && arsenal.pools.join() === 'shells' && arsenal.health?.max > 0,
         `a fresh module carries no pools until one is made, and the ceilings default (${JSON.stringify(arsenal.health)})`)
-  // The player's art is chosen from the module's own props.
-  const avatar = await page.evaluate(() => {
+  // The player's art is chosen from the module's own props (the Player page).
+  const avatar = await page.evaluate(async () => {
     const S = window.__studio
-    S.workshop.tab = 'body'; S.workshop.render()
+    await S.go('player')
+    S.workshop.tab = 'skin'; S.workshop.render()
     const chip = [...document.querySelectorAll('.wk-details .st-chip')].find((c) => c.textContent === 'spirit')
     if (chip) chip.click()
     S.workshop.render()
@@ -993,6 +986,83 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     S.module.player = null
     S.moduleChanged()
   })
+}
+
+// THE EDITORS' OWN WORDS, end to end: a boss from its recipe, run in the
+// preview through its phases; the file the engine reads has them as plain
+// vocabulary; a missile's flight; and the phone on its side.
+{
+  const boss = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('monsters')
+    const ed = S.monsterEditor
+    ed.screen = 'gallery'; ed.render()
+    const input = document.querySelector('.me input[aria-label^="The new monster"]')
+    input.value = 'Big Boss'; input.dispatchEvent(new Event('input'))
+    ;[...document.querySelectorAll('.me button')].find((b) => b.textContent === 'Boss (3 phases)').click()
+    await new Promise((r) => setTimeout(r, 300))
+    const b = S.module.mobs.mobs.big_boss
+    // the preview runs where it is seen: on Behaviour
+    ed.tab = 'behaviour'; ed.pvOpen = true; ed.render()
+    // twenty-six hits of 25 on 900: through 66% and 33%, each phase change once
+    const p = ed.preview
+    p.start()
+    const seen = []
+    for (let i = 0; i < 26; i++) { p.hit(false); await new Promise((r) => setTimeout(r, 120)); seen.push(p.sim.state) }
+    p.pause()
+    const { emitMobsLua } = await import('/studio/src/mobs_emit.js')
+    const { compileMobs } = await import('/studio/src/brainc.js')
+    const lua = emitMobsLua(S.module)
+    const problems = S.vocab.validateMobs(compileMobs(S.module.mobs, S.module.props), { props: S.propNames() })
+    return { name: ed.name, phases: (b?.phases ?? []).length, any: (b?.any ?? []).length, roar: seen.filter((s, i) => s === 'roar' && seen[i - 1] !== 'roar').length, frenzy: seen.includes('frenzy') || seen.includes('enrage') || seen.includes('leap') || seen.includes('call_adds'), phase: p.sim.vars.phase, lua: { once: /__once1/.test(lua), back: /@previous/.test(lua), speed: /move_speed/.test(lua), editorWords: /\bany =|\bphases =|\bends =/.test(lua) }, problems }
+  })
+  check(boss.name === 'big_boss' && boss.phases === 3 && boss.any === 2, `a boss from its recipe, named as typed in lower case (${JSON.stringify({ name: boss.name, phases: boss.phases, any: boss.any })})`)
+  check(boss.roar === 1 && boss.frenzy && boss.phase >= 2, `hit in the preview it goes through its phases, roaring once (${JSON.stringify({ roar: boss.roar, frenzy: boss.frenzy, phase: boss.phase })})`)
+  check(boss.lua.once && boss.lua.back && boss.lua.speed && !boss.lua.editorWords && !boss.problems.length, `and the engine's file has it in plain vocabulary, with no problem (${JSON.stringify(boss.lua)} ${boss.problems.join(' | ')})`)
+  // A missile: its flight is the engine's arc; a fireball bursts where it lands.
+  const mis = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('missiles')
+    const ed = S.missileEditor
+    const name = Object.keys(S.module.mobs.missiles)[0]
+    ed.open(name)
+    const m = S.module.mobs.missiles[name]
+    m.speed = '6'; m.gravity = '9'; m.z_offset = '0.6667'; delete m.throw
+    ed.dist = 10; ed.render()
+    const info = document.querySelector('.me .mi-main .me-muted')?.textContent ?? ''
+    return { name, info, path: !!document.querySelector('.me .mi-path'), peak: ed.F.peak, end: ed.F.end }
+  })
+  check(mis.path && mis.end === 'hit' && mis.peak > 3 && mis.peak < 3.5 && /peaks/.test(mis.info), `a falling missile is thrown on the engine's arc: lands 10 m on, peaking about 3.3 up (${JSON.stringify(mis)})`)
+  await page.evaluate(() => window.__studio.go('map'))
+  // THE PHONE ON ITS SIDE: the rail stays, the preview waits behind a strip, a state opens beside the list.
+  const phone = await browser.newPage()
+  await phone.setViewport({ width: 844, height: 390, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+  const perrs = []
+  phone.on('pageerror', (e) => perrs.push(String(e.stack ?? e).split('\n').slice(0, 2).join(' ')))
+  await phone.goto(URL_, { waitUntil: 'networkidle0' })
+  await phone.waitForFunction(() => window.__studio?.router, { timeout: 30000 })
+  const ph = await phone.evaluate(async () => {
+    const S = window.__studio
+    const { newMonster } = await import('/studio/src/brain.js')
+    newMonster(S, 'phoney'); S.moduleChanged()
+    await S.go('monsters', 'phoney'); await new Promise((r) => setTimeout(r, 500))
+    const ed = S.monsterEditor
+    const side = () => document.querySelector('.me .me-side')
+    const rail = document.querySelector('.sd-rail')
+    const r = { rail: !!rail && rail.getBoundingClientRect().width > 30, mini: side()?.dataset.mini, width: Math.round(side()?.getBoundingClientRect().width ?? 0) }
+    ;[...document.querySelectorAll('.me .me-cname')].find((b) => b.textContent.trim() === 'chase').click()
+    r.wide = side()?.dataset.wide; r.ins = !!document.querySelector('.me .me-side .me-ins input[aria-label^="Name of this state"]')
+    ed.pickAct = true; ed.render()
+    r.sheet = !!document.querySelector('.me .me-side .me-sheet .me-chooser')
+    r.page = document.documentElement.scrollWidth - innerWidth
+    return r
+  })
+  check(ph.rail && ph.mini === '1' && ph.width < 80, `on a phone on its side the rail stays and the preview waits behind a strip (${JSON.stringify(ph)})`)
+  check(ph.wide === '1' && ph.ins && ph.sheet && ph.page <= 0, `a state opens beside the list, a step's chooser in a sheet over it, and nothing runs off the screen (${JSON.stringify(ph)})`)
+  check(!perrs.length, `and no page errors on the phone (${perrs.slice(0, 2).join(' | ')})`)
+  await phone.evaluate(async () => { const S = window.__studio; delete S.module.mobs.mobs.phoney; S.module.props = S.module.props.filter((p) => p.name !== 'phoney'); S.moduleChanged() })
+  await phone.close()
+  await page.evaluate(async () => { const S = window.__studio; const { deleteMonster } = await import('/studio/src/brain.js'); deleteMonster(S, 'big_boss'); S.moduleChanged() })
 }
 
 // Particles: a kind of the module's own, played by the client's own code.
@@ -1465,8 +1535,8 @@ await page.keyboard.press('Escape')
     m.states[st].sequence = [{ at: 0, action: 'sound', name: '' }]
     S.moduleChanged()
     await S.go('monsters', name)
-    S.workshop.state = st; S.workshop.tab = 'node'; S.workshop.render()
-    const sel = document.querySelector('.wk-details select.st-sound')
+    const ed = S.monsterEditor; ed.tab = 'behaviour'; ed.sel = st; ed.step = 0; ed.render()
+    const sel = document.querySelector('.me .me-side select.st-sound')
     const groups = sel ? [...sel.querySelectorAll('optgroup')].map((g) => g.label) : []
     if (sel) { sel.value = want; sel.dispatchEvent(new Event('change')) }
     await new Promise((r) => setTimeout(r, 100))
@@ -2768,15 +2838,17 @@ await page.keyboard.press('Escape')
     mob.states.leap = { anim: 5, move: 'stop', face: 'target', ticks: 10, next: Object.keys(mob.states)[0] }
     S.moduleChanged()
     await S.go('monsters', name); await new Promise((r) => setTimeout(r, 300))
-    S.workshop.tab = 'body'; S.workshop.render()
-    const row = [...document.querySelectorAll('.wk-details .st-row')].find((x) => x.textContent.includes('state 5 · state leap'))
+    const ed = S.monsterEditor; ed.tab = 'advanced'; ed.render()
+    const row = [...document.querySelectorAll('.me .st-row')].find((x) => x.textContent.includes('state 5 · state leap'))
     const ctl = row?.querySelector('select, input')
     const prop = S.module.props.find((p) => p.name === name)
     const anims = S.module.sprites?.[prop.art?.sheet]?.animations ?? []
     const want = anims[anims.length - 1] ?? 'leap'
     if (ctl) { ctl.value = want; ctl.dispatchEvent(new Event('change')) }
     await new Promise((r) => setTimeout(r, 100))
-    const r = { row: !!row, set: prop.art?.states?.[5], want, chips: [...document.querySelectorAll('.wk-preview .st-chip')].map((c) => c.textContent).filter((t) => /^5\b/.test(t)) }
+    ed.tab = 'look'; ed.render()
+    const plays = [...document.querySelectorAll('.me .me-frow')].filter((f) => f.querySelector('label')?.textContent === 'leap' && f.querySelector('select')?.value === want).map(() => 'leap')
+    const r = { row: !!row, set: prop.art?.states?.[5], want, chips: plays }
     const { emitProps } = await import('/studio/src/props_emit.js')
     r.written = new RegExp(`atlas ${prop.id} state 5 sheet \\S+ anim ${want}`).test(emitProps(S.module))
     const { deleteMonster } = await import('/studio/src/brain.js')
@@ -2785,7 +2857,7 @@ await page.keyboard.press('Escape')
     return r
   })
   check(own.row && own.set === own.want && own.written, `a monster's own state 5 is in its Body tab, given an animation, and written for the game (${JSON.stringify({ row: own.row, set: own.set, written: own.written })})`)
-  check(own.chips.length === 1, `the preview can play state 5 (${own.chips.join(', ')})`)
+  check(own.chips.length === 1, `Looks says the leap state plays it (${own.chips.join(', ')})`)
 }
 
 // THE PLAYER'S STATES, WITHOUT A MONSTER: the Player page makes a body of its
@@ -3418,9 +3490,9 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
     const mob = Object.keys(S.module.mobs?.mobs ?? {})[0]
     await S.go('monsters', mob); await new Promise((r) => setTimeout(r, 400))
     const tab = (t) => [...document.querySelectorAll('.wk-details .wk-tabs button')].find((b) => b.textContent.trim().endsWith(t))
-    tab('slash')?.click(); await new Promise((r) => setTimeout(r, 300))
-    const rows = [...document.querySelectorAll('.wk-details .st-row label')].map((l) => l.textContent)
-    const blend = [...document.querySelectorAll('.wk-details .st-row')].find((r) => /^blend/.test(r.querySelector('label')?.textContent ?? ''))?.querySelector('select')
+    S.monsterEditor.tab = 'advanced'; S.monsterEditor.render(); await new Promise((r) => setTimeout(r, 300))
+    const rows = [...document.querySelectorAll('.me .st-row label')].map((l) => l.textContent)
+    const blend = [...document.querySelectorAll('.me .st-row')].find((r) => /^blend/.test(r.querySelector('label')?.textContent ?? ''))?.querySelector('select')
     if (blend) { blend.value = 'normal'; blend.dispatchEvent(new Event('change')) }
     await new Promise((r) => setTimeout(r, 300))
     const own = S.module.swings?.monsters?.[mob]

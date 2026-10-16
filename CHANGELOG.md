@@ -45,6 +45,13 @@ anything not released yet is under **Unreleased**.
 - **A state's steps are listed in the order the engine runs them**, each
   with the time it really runs: a step listed after a later one waits for it.
   A new or moved step goes in by its time, and the others keep their order.
+- **Everything the engine can do is on offer**: a condition or action the
+  editor has no words for is under "More", edited in the vocabulary's own
+  form. A prop is picked from the catalogue.
+- **The workshop's other forms are on Advanced**: a monster's brain fields
+  (blood, pain lengths, drops), its own swing and slash look, its body
+  states; a weapon's prediction, swing and slash look. A weapon state keeps
+  its own swing in its editor.
 - **A weapon's preview shows it held**: its first-person picture plays each
   state's animation, with its shots and sparks drawn over it.
 - **Particle kinds say what they look like** ("11 · fireball", "13 · smoke")
