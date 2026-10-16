@@ -59,6 +59,9 @@ export function vfxDef (S, id) {
   return S.servedVfx?.get(Number(id)) ?? null
 }
 
+/** Set an element's text if it is not that already; true when it changed. */
+const put = (e, text) => { if (!e || e.textContent === text) return false; e.textContent = text; return true }
+
 export class Preview {
   /**
    * @param S     the studio
@@ -114,11 +117,24 @@ export class Preview {
   /** Shown again (its panel reopened): a run that was going on goes on. */
   wake () { if (!this.stopped && !this.raf) { this.last = performance.now(); this.loop() } }
   /** For good: the editor closed, or made another. */
-  stop () { this.running = false; this.stopped = true; cancelAnimationFrame(this.raf); this.raf = 0; this.vp && (this.vp.view = null) }
+  stop () {
+    this.running = false; this.stopped = true; cancelAnimationFrame(this.raf); this.raf = 0; this.vp && (this.vp.view = null)
+    if (this.onScroll) { document.removeEventListener('scroll', this.onScroll, true); document.removeEventListener('touchmove', this.onScroll, true); this.onScroll = null }
+  }
   toggle () { if (this.running) this.pause(); else this.start() }
 
   loop () {
     cancelAnimationFrame(this.raf)
+    // A phone's frames go to its scrolling first: the run is simulated at the
+    // game's rate always, but drawn at most 30 times a second on a touch
+    // screen, and not at all while anything on the page is being scrolled.
+    const every = matchMedia?.('(pointer: coarse)')?.matches ? 1000 / 30 : 0
+    if (!this.onScroll) {
+      this.onScroll = () => { this.quietUntil = performance.now() + 250 }
+      document.addEventListener('scroll', this.onScroll, { capture: true, passive: true })
+      document.addEventListener('touchmove', this.onScroll, { capture: true, passive: true })
+    }
+    let drawn = 0
     const frame = (now) => {
       if (this.stopped || !this.canvas.isConnected) { this.raf = 0; return }
       const dt = Math.min(0.1, (now - this.last) / 1000)
@@ -129,7 +145,9 @@ export class Preview {
       }
       for (const b of this.parts) stepParticles(b.list, dt, b.def)
       this.parts = this.parts.filter((b) => b.list.length)
-      this.draw()
+      // paused with nothing moving, a few frames a second show the buttons' effect
+      const gap = this.running || this.parts.length ? every : 200
+      if (now >= (this.quietUntil ?? 0) && now - drawn >= gap) { drawn = now; this.draw() }
       this.raf = requestAnimationFrame(frame)
     }
     this.raf = requestAnimationFrame(frame)
@@ -247,9 +265,11 @@ export class Preview {
       }
     }
     ctx.globalAlpha = 1
-    this.nowEl.textContent = this.why()
-    this.stateEl.textContent = s.state ?? ''
-    if (this.hpEl && document.activeElement !== this.hpEl) this.hpEl.value = String(Math.max(0, Math.round(s.hp * 100 / Math.max(1, s.maxHp))))
+    // written only when they change: every write is a layout of the page
+    put(this.nowEl, this.why())
+    put(this.stateEl, s.state ?? '')
+    const hp = String(Math.max(0, Math.round(s.hp * 100 / Math.max(1, s.maxHp))))
+    if (this.hpEl && document.activeElement !== this.hpEl && this.hpEl.value !== hp) this.hpEl.value = hp
     // a cooldown is said as one, not also as a number
     // the brain's cooldowns: the vars a set_cooldown or a cooldown_ready names
     const coolNames = new Set(Object.keys(s.cools))
@@ -260,8 +280,8 @@ export class Preview {
     const vars = Object.entries(s.vars).filter(([k]) => !k.startsWith('__') && !coolNames.has(k)).map(([k, v]) => `${k} = ${v}`)
     const cools = [...coolNames].map((k) => ((s.cools[k] ?? 0) > 0 ? `cooldown ${k}: ${secs(s.cools[k])} s left` : `cooldown ${k}: over`))
     const ammo = this.kind === 'weapon' ? [s.ammo === null ? 'ammo: never runs out' : `ammo: ${s.ammo} (Reset refills 50)`] : []
-    this.varsEl.textContent = [...ammo, ...vars, ...cools].join(' · ') || 'numbers: none set, no cooldown running'
-    this.varsEl.title = this.varsEl.textContent
+    const said = [...ammo, ...vars, ...cools].join(' · ') || 'numbers: none set, no cooldown running'
+    if (put(this.varsEl, said)) this.varsEl.title = said
     if (this.evAt && performance.now() - this.evAt > 2200) { this.evEl.textContent = ''; this.evAt = 0 }
   }
 

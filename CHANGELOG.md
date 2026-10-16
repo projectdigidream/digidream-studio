@@ -7,6 +7,46 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **From a first-person tester on a phone (a Godot developer):**
+  - **A recipe's shooter never fired in the game**, while its preview showed
+    it firing. Its missile had no prop to be drawn as, and the server fires
+    no missile whose prop is missing. A recipe's missile, and a new one on the
+    Missiles page, now gets a prop of its own name, walk-through, drawn as a
+    glowing dot the studio paints; a copy is drawn as its source is. Problems
+    names any missile with nothing to be drawn as, before Play.
+  - **The Play log said "nothing looks like a failure"** over a server log
+    full of that error. A Lua error is a failure whatever its words, and a
+    line that comes again is listed once, counted.
+  - **A shot left no trace**, so nobody could tell it landed. The Pistol
+    recipe draws its ray and bursts sparks where it lands, and the shot step
+    offers both ("its ray", "where it lands"; either may be "none").
+  - **A recipe's weapon had no picture**: nothing was held on the screen. It
+    gets a placeholder gun, at rest and firing, until it has pictures.
+  - **A new module was the starter under another name**, with its words, the
+    debug numbers over the game and platformer controls. It asks what kind of
+    game it is; it starts with no description and a clean screen, and a first
+    person one with a gun in hand.
+  - **The ▶ on a map in the Maps list was not Play** (it marked the map being
+    edited). That is a pencil now, and each map has a Play of its own; and a
+    module reopens on the map last edited, so the rail's Play plays it.
+  - **Scrolling stopped while the preview ran** on a phone. The preview draws
+    less often there, not at all while the page scrolls, and rewrites its
+    words only when they change.
+  - **The first tap after typing was lost**: the field handed in its value as
+    the tap began, and the page was redrawn under the finger. Such a change
+    is held until the tap has landed.
+  - **A flinch that plays the standing animation** is said on the pain card:
+    in the game it would not be seen.
+  - **The graph's labels were too small to tap on a phone**; they are bigger
+    there, with a wider tap area.
+  - **"+ phase" made a list of every state twice.** With several phases, only
+    the one being edited is unfolded; the others name their states.
+  - **The Props page sent monsters to "the Mobs tool"**, and Home counted a
+    monster's body as a prop.
+  - On Android, **Back** goes back a page (or closes a dialog) and, on Home,
+    leaves the studio in the background instead of quitting; the field being
+    typed in is brought into view above the keyboard (with the engine's shell).
+
 - **Sprites made with ThreeSprite's defaults replaced each other.** Every new
   ThreeSprite sprite is called SPRT until its id is changed, and an import
   named the sheet after that id, so a second SPRT project imported silently

@@ -259,6 +259,11 @@ export class Vocab {
       const where = `missile "${name}"`
       const ctx = { hasMissile: (n) => n in missiles, hasMob: (n) => n in mobs, hasVar: () => true, hasState: () => true, hasProp }
       checkArgs(this.mob.missile_fields, m, where, problems, ctx)
+      // What it is drawn as: its `prop`, else a prop of its own name. With
+      // neither in the catalogue the server refuses every shot, while the
+      // editor's preview (which needs no prop) shows it flying.
+      const prop = m.prop ?? name
+      if (hasProp && !hasProp(prop)) problems.push(`${where}: is drawn as the prop "${prop}", which the module does not have, so the game cannot fire it. Make that prop, or pick one under "Drawn as" on the Missiles page.`)
       for (const list of ['on_hit', 'on_expire']) {
         for (const [i, act] of (m[list] ?? []).entries()) this.#checkMobAction(act, `${where}, ${list} ${i + 1}`, problems, ctx)
       }

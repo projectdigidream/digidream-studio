@@ -145,6 +145,9 @@ export const CSS = `
 .me-edge[data-live="1"]{stroke:var(--dnp-color-warn);stroke-width:2.6}
 .me-lab{position:absolute;transform:translate(-50%,-50%);font-size:11px;min-height:0 !important;height:auto;line-height:1.35;background:var(--cv-graph-board);border:1px solid var(--dnp-color-line-main);border-radius:6px;padding:1px 6px;white-space:nowrap;cursor:pointer;color:inherit;font-family:inherit}
 .me-lab[data-live="1"]{border-color:var(--dnp-color-warn)}
+/* a phone: labels a finger can read and hit, the hit wider than the label */
+.me-board[data-phone="1"] .me-lab{font-size:14px;padding:2px 8px}
+.me-board[data-phone="1"] .me-lab::after{content:'';position:absolute;inset:-8px -4px}
 .me-band{position:absolute;border-radius:14px;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-main);opacity:.55;pointer-events:none}
 .me-lane{position:absolute;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dnp-color-text-secondary);white-space:nowrap}
 .me-zoom{position:absolute;right:8px;bottom:8px;z-index:3;display:flex;gap:4px}
@@ -279,13 +282,14 @@ export function sentenceEl (table, obj, ctx, key = null) {
         : kind === 'state' ? (ctx.states ?? []).map((n) => [n, n])
           : kind === 'missile' ? (ctx.missiles ?? []).map((n) => [n, n])
             : kind === 'fx' ? (ctx.fx ?? []).map(([id, l]) => [String(id), l])
+            : kind === 'fx?' ? [['', part[3]], ...(ctx.fx ?? []).map(([id, l]) => [String(id), l])]
               : kind === 'enum' ? part[2].map((x) => [x, x])
                 : kind === 'bool' ? [['', `—`], ['1', part[2]]] : []
       const cur = kind === 'bool' ? (v ? '1' : '') : String(v ?? '')
       if (cur && !opts.some(([x]) => x === cur)) opts.unshift([cur, `${cur} (missing)`])
       const s = el('select', { 'aria-label': arg }, opts.map(([x, l]) => el('option', { value: x, text: l })))
       s.value = cur
-      s.addEventListener('change', () => set(kind === 'fx' ? Number(s.value) : kind === 'bool' ? s.value === '1' : s.value))
+      s.addEventListener('change', () => set(kind === 'fx' || (kind === 'fx?' && s.value !== '') ? Number(s.value) : kind === 'bool' ? s.value === '1' : s.value))
       out.append(s)
     }
   }

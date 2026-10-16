@@ -651,6 +651,48 @@ function dialog (body, okLabel) {
   })
 }
 
+/**
+ * A TAP THAT ENDS A TYPED EDIT. A text field hands in its value (`change`)
+ * when it loses the focus, which a tap elsewhere causes at the start of that
+ * tap; the page redraws on it, so the switch under the finger was replaced
+ * before the tap landed, and the tap was lost (a phone's keyboard closed, then
+ * a toggle tapped twice). A field's change that comes during a tap is held
+ * until the tap has landed (its click), then handed in -- and if that redraw
+ * replaces the field the tap gave the focus to, the focus goes to its
+ * replacement. Installed once, on the document.
+ */
+const TEXTISH = new Set(['text', 'number', 'search', 'email', 'url', 'tel', 'password'])
+export function installTapGuard (root = document) {
+  let tap = false
+  let timer = 0
+  const held = []
+  const sameField = (a) => {
+    const label = a.getAttribute('aria-label')
+    if (label) return [...root.querySelectorAll(`[aria-label="${CSS.escape(label)}"]`)].find((x) => x.tagName === a.tagName) ?? null
+    const rowLabel = a.closest('.st-row')?.querySelector('label')?.textContent
+    if (!rowLabel) return null
+    return [...root.querySelectorAll('.st-row')].find((r) => r.querySelector('label')?.textContent === rowLabel)?.querySelector('input, textarea, select') ?? null
+  }
+  const flush = () => {
+    clearTimeout(timer)
+    tap = false
+    if (!held.length) return
+    const focused = document.activeElement
+    while (held.length) held.shift().dispatchEvent(new Event('change', { bubbles: true }))
+    if (focused && focused !== document.body && !focused.isConnected) sameField(focused)?.focus()
+  }
+  root.addEventListener('pointerdown', () => { clearTimeout(timer); tap = true }, true)
+  // a tap that never clicks (a drag, a scroll): what was held is handed in soon after
+  root.addEventListener('pointerup', () => { clearTimeout(timer); timer = setTimeout(flush, 500) }, true)
+  root.addEventListener('click', () => { if (tap) setTimeout(flush, 0) }, true)
+  root.addEventListener('change', (e) => {
+    const t = e.target
+    if (!tap || !(t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && TEXTISH.has(t.type)))) return
+    e.stopImmediatePropagation()
+    if (!held.includes(t)) held.push(t)
+  }, true)
+}
+
 /** A question with one typed answer: the string, or null when dismissed. */
 export async function ask (label, value = '') {
   const input = el('input', { type: 'text', value, autofocus: '' })

@@ -63,7 +63,7 @@ import { STUDIO_VERSION } from './version.js'
 import { parseAnimations } from '/src/render/animtex.js'
 import { animationsTxt } from './texsheet.js'
 import { shell, hasShell } from './bridge.js'
-import { Ui, el, button, row, text, muted, card, select, number, ask, confirmDialog, useIcons, refreshIcons, icon, withIcon } from './ui.js'
+import { Ui, el, button, row, text, muted, card, select, number, ask, confirmDialog, useIcons, refreshIcons, icon, withIcon, installTapGuard } from './ui.js'
 import { moduleProps } from './props.js'
 import { hasWeapons } from './weapons_emit.js'
 import { inspector, titleFor, texturePicker, placePalette } from './inspector.js'
@@ -290,6 +290,8 @@ S.preview.onResult = (r) => {
   if (JSON.stringify(S.problems) !== before) { redraw(); if (S.selection && S.ui.sheetOpen && ['sector', 'edge'].includes(S.selection.kind)) showInspector() }
   S.viewport.dirty = true
 }
+// A tap that ends a typed edit lands where it was aimed (ui.js).
+installTapGuard()
 S.ui = new Ui({
   tool: (id) => chooseTool(id),
   undo: () => restore(S.history.undo()),
@@ -752,7 +754,9 @@ async function openModule (id, { show = true } = {}) {
   S.shell?.setHistory(false, false)
   if (S.shell) { S.shell.moduleName = S.module.name || S.module.id; S.shell.drawRail() }
   await rebuildAssetCaches(rec)
-  await openDoc(Object.keys(S.docs)[0])
+  // Back on the map last edited here (this device's), so Play on the rail plays it.
+  const last = lastMap(rec.id)
+  await openDoc(last && S.docs[last] ? last : Object.keys(S.docs)[0])
   if (S.shell) { S.shell.moduleStatus = badges.get(rec.id) ?? null; S.shell.drawRail() }
   emitPluginEvent('module-opened', { id: rec.id, rev: rec.rev ?? 0 })
   if (show && S.router?.current) {
@@ -761,11 +765,18 @@ async function openModule (id, { show = true } = {}) {
   }
 }
 
+// The map last edited, per module, on this device: a convenience, so it may be
+// lost. Declared as functions: the boot opens a module before a const this far
+// down exists.
+function lastMap (id) { try { return localStorage.getItem(`dnp.studio.lastMap.${id}`) } catch { return null } }
+function rememberMap (id, name) { try { if (id) localStorage.setItem(`dnp.studio.lastMap.${id}`, name) } catch {} }
+
 // `keepView`: the camera stays where it is (the module was replaced under the
 // author, by a sync: the same map, seen from the same place).
 async function openDoc (name, { keepView = false } = {}) {
   S.docName = name
   S.doc = S.docs[name]
+  rememberMap(S.module?.id, name)
   normalize(S.doc)
   S.history = new History(S.doc)
   S.selection = null
@@ -1716,6 +1727,22 @@ async function finishBoot () {
   }
   if (!S.router.current) await S.router.follow()
   addEventListener('hashchange', () => S.router.follow())
+  // THE PHONE'S BACK (the Android shell asks, MainActivity.onBackPressed): a
+  // dialog closes, else the page before this one, else Home. Only on Home is
+  // it not taken, and the app goes to the background -- never quits.
+  window.dnpBack = () => {
+    const dlg = [...document.querySelectorAll('dialog[open]')].pop()
+    if (dlg) { if (dlg.dispatchEvent(new Event('cancel', { cancelable: true }))) dlg.close(); return true }
+    if (S.router.current?.id === 'home') return false
+    if (history.length > 1) history.back(); else S.go('home')
+    return true
+  }
+  // THE KEYBOARD MADE ROOM (the shell shortens the page): the field being
+  // typed in is brought where it can be seen, not left under the keyboard.
+  addEventListener('resize', () => {
+    const f = document.activeElement
+    if (f && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA') && f.isConnected) requestAnimationFrame(() => f.scrollIntoView({ block: 'center', inline: 'nearest' }))
+  })
   stage('ready', 1)
   boot.hidden = true
   // The plugins' background pages (a sync), now that a module is open.

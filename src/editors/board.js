@@ -116,7 +116,7 @@ export function board (o) {
     ]))
   }
 
-  const box = el('div', { class: 'me-board' }, [world])
+  const box = el('div', { class: 'me-board', 'data-phone': o.phone ? '1' : '0' }, [world])
   spreadLabels(world, 0)
   const v = o.view
   const apply = () => { world.style.transform = `translate(${v.x}px,${v.y}px) scale(${v.z})` }

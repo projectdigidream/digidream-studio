@@ -22,6 +22,7 @@ import { injectCss, sentenceEl, ruleCards, stepsBlock, numField, checkField, sel
 import { Preview, Sheets } from './preview.js'
 import { board } from './board.js'
 import { MOB_RECIPES, WEAPON_RECIPES, RECIPE_MISSILE, bindAnims, animName } from './recipes.js'
+import { giveMissileLook, giveWeaponLook } from '../placeholders.js'
 // The workshop's forms for what is not behaviour, kept as they were: a brain's
 // own fields, its body states, a swept swing and how it is drawn, a weapon's
 // prediction (brain.js, swing.js, slashform.js, arms.js).
@@ -273,8 +274,10 @@ export class NodeEditor {
     const missile = () => {
       S.module.mobs ??= { missiles: {}, mobs: {} }
       const have = Object.keys(S.module.mobs.missiles)
-      if (have.length) return have[0]
+      if (have.length) { giveMissileLook(S, have[0]); return have[0] }
       S.module.mobs.missiles.bolt = RECIPE_MISSILE()
+      // drawn as a glowing dot of its own: the server fires no missile whose prop is missing
+      giveMissileLook(S, 'bolt')
       return 'bolt'
     }
     if (this.kind === 'mob') {
@@ -312,6 +315,8 @@ export class NodeEditor {
         const r = WEAPON_RECIPES[how]
         const pool = Object.keys(W.ammo ?? {})[0]
         this.home[name] = { label, order, initial: 'draw', phases: r.phases(r.missile ? missile() : null), ...(r.per && pool ? { ammo: pool, per: r.per } : {}) }
+        // a gun on the screen, at rest and firing, until it has pictures of its own
+        giveWeaponLook(S, name)
       }
     }
     this.newName = ''
@@ -428,15 +433,37 @@ export class NodeEditor {
       groups.push({ title: 'Flow', note: 'Where it begins (the star) and what it does.', ids: names.filter((n) => !this.react(n)) })
       groups.push({ title: 'Reactions', note: 'Entered from any state when something happens to it.', ids: names.filter((n) => this.react(n)) })
     } else groups.push({ title: 'States', note: 'What the weapon does while it is out. The star is where it begins: being drawn.', ids: names })
+    // Several phases fold, so the list is not every state twice: open is the
+    // one with the state being edited, else the one running, else the first.
+    // A folded one keeps its header and names its states.
+    const phaseIds = groups.filter((g) => g.phase)
+    const holds = (n) => n && phaseIds.some((g) => g.ids.includes(n))
+    const run = this.preview?.running ? this.preview.sim.state : null
+    const isOpen = (g) => {
+      if (phaseIds.length < 2) return true
+      const mine = this.phaseOpen?.get(g.phase.id)
+      if (mine !== undefined) return mine
+      if (holds(this.sel)) return g.ids.includes(this.sel)
+      if (holds(run)) return g.ids.includes(run)
+      return g === phaseIds[0]
+    }
     for (const g of groups) {
-      if (g.phase) out.push(this.phaseHead(g.phase, g.ids.length))
-      else if (g.ids.length) out.push(el('div', { class: 'me-h', text: g.title }), g.note ? el('span', { class: 'me-muted', text: g.note }) : null)
+      if (g.phase) {
+        const open = isOpen(g)
+        out.push(this.phaseHead(g.phase, g.ids.length, phaseIds.length < 2 ? null : open))
+        if (!open) {
+          out.push(el('div', { class: 'me-row me-folded' }, g.ids.map((n) => el('button', { class: 'me-chip', icon: n === this.initial ? 'status.initial' : null, text: n,
+            onclick: () => { this.phaseOpen?.delete(g.phase.id); this.select(n) } }))))
+          continue
+        }
+      } else if (g.ids.length) out.push(el('div', { class: 'me-h', text: g.title }), g.note ? el('span', { class: 'me-muted', text: g.note }) : null)
       for (const n of g.ids) out.push(this.card(n))
     }
     return out.filter(Boolean)
   }
 
-  phaseHead (p, n) {
+  /** `open`: true or false where phases fold, null where they do not (one phase). */
+  phaseHead (p, n, open = null) {
     const name = el('input', { class: 'me-phname', value: p.name, 'aria-label': 'Name of this phase' })
     name.addEventListener('change', () => { p.name = name.value.trim() || p.name; this.changed() })
     const sp = el('input', { type: 'text', inputmode: 'decimal', value: p.speed ?? '', placeholder: String(this.prop?.speed ?? 4), 'aria-label': 'How fast it runs in this phase', style: 'width:56px' })
@@ -444,7 +471,9 @@ export class NodeEditor {
     // when it starts: the rule for any state that goes into one of its states
     const door = (this.thing.any ?? []).find((r) => r.to && this.nodes[r.to]?.phase === p.id)
     const starts = door ? `starts when ${(door.when ?? []).map((c) => sentence(this.K.conds, c)).join(' and ') || '(no condition yet)'}${door.once ? ', once' : ''}` : (Object.entries(this.nodes).some(([k, st]) => st.phase === p.id && k === this.initial) ? 'where it begins' : 'nothing starts it yet: a rule under "Whatever it is doing"')
-    return el('div', { class: 'me-row me-phh' }, [name, el('span', { class: 'me-muted', text: `${n} state${n === 1 ? '' : 's'} · ${starts}` }),
+    const fold = open === null ? null : el('button', { class: 'me-x', 'aria-label': open ? 'Fold this phase' : 'Unfold this phase', 'aria-expanded': open ? 'true' : 'false', icon: open ? 'action.collapse' : 'action.expand',
+      onclick: () => { (this.phaseOpen ??= new Map()).set(p.id, !open); this.render() } })
+    return el('div', { class: 'me-row me-phh' }, [fold, name, el('span', { class: 'me-muted', text: `${n} state${n === 1 ? '' : 's'} · ${starts}` }),
       el('label', { class: 'me-muted' }, ['runs at ', sp, ' m/s', p.speed === undefined ? ' (its own speed)' : '']), el('span', { class: 'me-grow' }),
       el('button', { class: 'me-lnk', text: 'duplicate', onclick: () => this.duplicatePhase(p.id) }),
       el('button', { class: 'me-lnk danger', text: 'remove', onclick: () => { this.thing.phases = this.thing.phases.filter((q) => q !== p); for (const st of Object.values(this.nodes)) if (st.phase === p.id) delete st.phase; this.changed(); this.say('Removed the phase; its states stay, outside any phase.') } })])
@@ -467,6 +496,8 @@ export class NodeEditor {
       else if (st.next) b.push(el('span', { text: 'then goes on to' }), T(st.next, 'to', () => this.select(n, 'what')))
     } else b.push(el('span', { text: (st.transitions ?? []).length ? 'until a rule below sends it on' : 'and stays here' }))
     if (isMob && !this.react(n) && st.interruptible === false) b.push(el('span', { class: 'me-muted', text: '(never flinches here)' }))
+    // A flinch drawn as standing still is a flinch nobody sees.
+    const stand = isMob && n === 'pain' && this.nodes[this.initial] && this.animOf(st.anim) === this.animOf(this.nodes[this.initial].anim)
     const live = this.live()
     const rules = (st.transitions ?? []).map((t, i) => {
       const todo = !t.to || !(t.when ?? []).length
@@ -484,6 +515,7 @@ export class NodeEditor {
         el('span', { class: 'me-muted', text: unreached ? 'nothing goes here yet' : n === 'pain' && isMob ? `when hurt, ${Math.round((Number(this.thing.pain_chance ?? 0) / 256) * 100)}% of hits` : n === 'death' && isMob ? 'when its health reaches 0' : '' }),
         el('span', { class: 'me-grow' }), el('button', { class: 'me-lnk', text: 'edit', onclick: () => this.select(n) })]),
       el('div', { class: 'me-line' }, [...line, el('span', { text: ',' }), ...b]),
+      stand ? el('span', { class: 'me-warn', text: `It plays ${this.animOf(st.anim)}, as it does standing in ${this.initial}: in the game a flinch will not be seen. Pick another animation, or give its sprite one for pain.` }) : null,
       ...rules,
       steps.length ? el('div', { class: 'me-row' }, steps.map(({ p, i }) => el('button', { class: 'me-chip', 'data-k': this.K.acts[p.action]?.k ?? 'turn', text: `${secs(p.at)} s · ${sentence(this.K.acts, p)}`, onclick: () => { this.select(n, 'steps'); this.step = i; this.render() } }))) : null
     ])
@@ -519,6 +551,7 @@ export class NodeEditor {
 
   select (n, jump = null) {
     this.sel = n; this.step = null; this.picking = null; this.pickAct = false
+    if (this.nodes[n]?.phase) this.phaseOpen?.delete(this.nodes[n].phase)   // its phase unfolds, even if folded by hand
     if (this.phone) this.pvOpen = false
     this.render()
     requestAnimationFrame(() => this.root.querySelector(`.me-card[data-card="${n}"]`)?.scrollIntoView({ block: 'nearest' }))

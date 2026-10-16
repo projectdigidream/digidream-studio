@@ -11,6 +11,7 @@ import { flight } from '../missileflight.js'
 import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
 import { injectCss, sentenceEl, chooser, numField, selectField, toast, trackFocus, restoreFocus } from './common.js'
 import { vfxDef } from './preview.js'
+import { giveMissileLook } from '../placeholders.js'
 
 const SVG = 'http://www.w3.org/2000/svg'
 const toName = (v) => String(v ?? '').toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '')
@@ -77,7 +78,11 @@ export class MissileEditor {
     const name = toName(this.newName)
     if (!/^[a-z][a-z0-9_]{0,23}$/.test(name)) { this.say(!name ? 'Type a name first.' : 'A name starts with a letter.', 'warn'); return }
     if (this.all[name]) { this.say(`There is already a missile called ${name}.`, 'warn'); return }
-    this.all[name] = copy && this.m ? JSON.parse(JSON.stringify(this.m)) : { speed: '15', life: 180, z_offset: '1.4', on_hit: [{ action: 'damage', amount: 10 }] }
+    // A copy is drawn as its source is (a missile with no `prop` is drawn as
+    // a prop of its own name, which the copy's new name would not find); a
+    // new one is a glowing dot of its own.
+    this.all[name] = copy && this.m ? { ...JSON.parse(JSON.stringify(this.m)), prop: this.m.prop ?? this.name } : { speed: '15', life: 180, z_offset: '1.4', on_hit: [{ action: 'damage', amount: 10 }] }
+    if (!copy) giveMissileLook(this.S, name)
     this.newName = ''
     this.name = name
     this.changed()

@@ -22,10 +22,12 @@ function showMaps () {
     const r = el('div', { class: 'st-trow', 'data-on': on ? '1' : '0', 'data-map': n }, [
       thumbCanvas(d, { imageFor: S.imageFor, skin: S.skin }, 'sd-thumb sd-thumb-row'),
       el('div', { class: 'st-trow-text' }, [
-        el('div', { class: 'st-trow-name', icon: on ? 'transport.play' : null, text: on ? ` ${n}` : n }),
+        el('div', { class: 'st-trow-name', icon: on ? 'action.edit' : null, text: on ? ` ${n}` : n }),
         el('div', { class: 'st-muted', text: `${d.order.length} sectors · ${d.entities.length} things · ${d.triggers.length} triggers${overrides(d).length ? ` · own player ${overrides(d).join(', ')}` : ''}${on ? ' · editing' : ''}` })
       ]),
-      button(withIcon('action.close'), async (e) => {
+      // Play from this map (the row itself opens it in the editor)
+      el('button', { 'aria-label': `Play from ${n}`, title: `play from ${n}`, 'data-play-map': n, icon: 'transport.play', onclick: (e) => { e.stopPropagation(); S.play({ start: n }) } }),
+      el('button', { class: 'st-danger', 'aria-label': `Delete map ${n}`, 'data-delete-map': n, icon: 'action.close', onclick: async (e) => {
         e.stopPropagation()
         if (Object.keys(S.docs).length < 2) { S.status('a module keeps at least one map', 'warn'); return }
         if (!await confirmDialog(`delete map ${n}? Undo on this page brings it back, and a snapshot keeps it.`)) return
@@ -38,7 +40,7 @@ function showMaps () {
         if (n === S.docName) await S.openDoc(Object.keys(S.docs)[0])
         S.status(`deleted map ${n}`, 'ok')
         showMaps()
-      }, 'st-danger')
+      } })
     ])
     r.addEventListener('click', () => S.go('map', n))
     return r

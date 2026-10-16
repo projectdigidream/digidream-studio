@@ -120,7 +120,7 @@ function showProps () {
       S.moduleChanged()
       showProp(name)
     }),
-    muted('Tap one to edit it. Monsters are in the workshop (Mobs tool).')
+    muted('Tap one to edit it. A monster\'s body is edited with the monster, on Monsters.')
   ])
 }
 

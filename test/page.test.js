@@ -500,7 +500,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   await page.evaluate(async () => { await window.__studio.showMaps(); document.querySelector('.sd-page [data-map="first"]').click() })
   await page.waitForFunction(() => window.__studio.docName === 'first', { timeout: 5000 }).catch(() => {})
   check(await page.evaluate(() => window.__studio.docName === 'first' && window.__studio.doc.order.length > 1), 'tapping a map in the sheet opens it')
-  await page.evaluate(async () => { await window.__studio.showMaps(); document.querySelector('.sd-page [data-map="arena"] button').click() })
+  await page.evaluate(async () => { await window.__studio.showMaps(); document.querySelector('.sd-page [data-delete-map="arena"]').click() })
   await page.waitForSelector('dialog[open]', { timeout: 3000 }).catch(() => {})
   await page.evaluate(() => document.querySelector('dialog[open] button[type=submit]').click())
   await page.waitForFunction(() => !window.__studio.docs.arena, { timeout: 5000 }).catch(() => {})
@@ -508,7 +508,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(gone.docs.length === 1 && gone.name === 'first' && gone.rows === 1, `a map is deleted after the studio's own confirmation, and the list follows (${JSON.stringify(gone)})`)
   // The status is read in the same turn as the tap: a bake finishing a moment
   // later rewrites the strip, and under load that raced a fixed wait.
-  const said = await page.evaluate(() => { document.querySelector('.sd-page [data-map="first"] button').click(); return window.__studio.ui.status.textContent })
+  const said = await page.evaluate(() => { document.querySelector('.sd-page [data-delete-map="first"]').click(); return window.__studio.ui.status.textContent })
   await new Promise((r) => setTimeout(r, 300))
   const kept = await page.evaluate((status) => ({ docs: Object.keys(window.__studio.docs).length, dialog: !!document.querySelector('dialog[open]'), status }), said)
   check(kept.docs === 1 && !kept.dialog && /at least one map/.test(kept.status), `the last map cannot be deleted (${JSON.stringify(kept)})`)

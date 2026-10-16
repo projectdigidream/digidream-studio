@@ -5,6 +5,7 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { newModule } from '../module_emit.js'
+import { moduleProps } from '../props.js'
 import { el, button, row, text, muted, chips, ask, icon, withIcon } from '../ui.js'
 import { moduleProblems } from '../app/problems.js'
 import { lastPlay } from '../playlog.js'
@@ -14,6 +15,10 @@ import { STUDIO_VERSION } from '../version.js'
 import { startMapOf } from '../startmap.js'
 import { checkForUpdate, skipped, skipVersion } from '../updates.js'
 import { shell } from '../bridge.js'
+import { choose } from '../plugins/frame.js'
+import { giveWeaponLook } from '../placeholders.js'
+import { newArsenal } from '../weapons_emit.js'
+import { WEAPON_RECIPES } from '../editors/recipes.js'
 
 let S = null
 
@@ -27,13 +32,41 @@ async function newModuleFlow () {
   const clean = id.toLowerCase().replace(/[^a-z0-9_-]/g, '')
   if (!clean) return
   if (await S.store.load(clean)) { S.status(`a module called ${clean} already exists`, 'warn'); return }
+  const kind = await choose('What kind of game is it?', [
+    { label: 'first person: a shooter', value: 'fps' }, { label: 'a platformer, seen from outside', value: 'platformer' }, { label: 'cancel', value: null }])
+  if (!kind) return
   const made = await S.newFromTemplate(clean, id)
   if (!made) {
     const rec = { id: clean, module: newModule(clean, id), docs: { first: S.starterDoc('first', { fresh: true }) }, assets: {} }
     await S.store.save(rec)
   }
   await S.openModule(clean)
+  setUpNewModule(kind)
   S.status(made ? `${clean}: made from the starter template (prop ids from ${made.module.propIdBase})` : `${clean}: the starter template could not be read, so a blank room`, made ? 'ok' : 'warn')
+}
+
+/**
+ * A new module made the author's own: none of the starter's words, the game
+ * kind asked for, and a clean screen in the game (no debug numbers). First
+ * person also starts with a gun in hand, drawn with the studio's placeholder
+ * until it has pictures.
+ */
+function setUpNewModule (kind) {
+  const m = S.module
+  m.about = ''
+  m.controls = kind
+  m.debug = false
+  if (kind === 'fps') {
+    m.weapons ??= newArsenal()
+    if (!Object.keys(m.weapons.weapons ?? {}).length) {
+      const r = WEAPON_RECIPES.pistol
+      const pool = Object.keys(m.weapons.ammo ?? {})[0]
+      m.weapons.weapons.gun = { label: 'Gun', order: 1, initial: 'draw', phases: r.phases(null), ...(pool ? { ammo: pool, per: r.per } : {}) }
+      giveWeaponLook(S, 'gun')
+    }
+  }
+  S.save()
+  S.redraw?.()
 }
 
 /**
@@ -82,7 +115,8 @@ async function showHome () {
       tile('monsters', 'Monsters', `${count(m.mobs?.mobs)}`),
       tile('player', 'Player', m.player?.prop ?? 'default'),
       tile('weapons', 'Weapons', `${count(m.weapons?.weapons)}`),
-      tile('props', 'Props', `${(m.props ?? []).length}`),
+      // the props page's own count: bodies no monster uses (a monster's body is the monster's)
+      tile('props', 'Props', `${moduleProps(m).length}`),
       tile('particles', 'Particles', `${(m.vfx ?? []).length}`),
       tile('textures', 'Textures', `${Object.keys(m.textures ?? {}).length} own`),
       tile('music', 'Music', `${S.trackNames().length} tracks`),

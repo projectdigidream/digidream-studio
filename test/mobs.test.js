@@ -215,5 +215,18 @@ const ks = parseProps(emitProps(scaled)).kinds.get(1000)
 check(ks?.scale === 2.5 && /^prop 1000 spirit .* scale 2\.5( |$)/m.test(emitProps(scaled)), `a body's scale reaches the client's catalogue (${ks?.scale})`)
 check(!/scale/.test(emitProps(module)), 'CONTROL: a body at scale 1 writes no scale')
 
+// A MISSILE IS DRAWN AS A PROP -- its `prop`, else one of its own name -- and
+// the server fires none whose prop the catalogue lacks (a tester's recipe
+// gunner that never shot, 2026-10-17). Said before Play, not found in its log.
+{
+  const shooter = { missiles: { bolt: { speed: '16', life: 120, on_hit: [{ action: 'damage', amount: 5 }] } }, mobs: {} }
+  const said = vocab.validateMobs(shooter, { props: ['spirit'] })
+  check(said.some((m) => /missile "bolt": is drawn as the prop "bolt", which the module does not have/.test(m)), `a missile with no prop to be drawn as is named (${said.join(' | ')})`)
+  check(!vocab.validateMobs(shooter, { props: ['spirit', 'bolt'] }).some((m) => /drawn as the prop/.test(m)), 'and not once a prop of its name is there')
+  const drawn = { missiles: { bolt: { ...shooter.missiles.bolt, prop: 'spirit' } }, mobs: {} }
+  check(!vocab.validateMobs(drawn, { props: ['spirit'] }).some((m) => /drawn as the prop/.test(m)), 'nor when it is drawn as a prop the module has')
+  check(!vocab.validateMobs(shooter).some((m) => /drawn as the prop/.test(m)), 'CONTROL: with no catalogue to hand, nothing is guessed')
+}
+
 console.log(`\nmobs: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

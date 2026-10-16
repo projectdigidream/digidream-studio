@@ -25,6 +25,14 @@ const check = (ok, label) => {
   if (!ok) { fails++; console.log(`  FAIL ${label}`) }
 }
 
+// What a tester met (2026-10-17): a recipe's missile with no prop, failing at every shot, under "nothing looks like a failure".
+{
+  const bolt = '[mobs] action fire[2]: [string "/data/user/0/com.digidream.app/files/game/mod..."]:2951: no prop named \'bolt\' in the prop catalogue'
+  check(isBad(bolt), 'a Lua error at run time is a failure, whatever its words')
+  const f = failures({ server: [bolt, bolt, '[mobs] 3 monsters', bolt] })
+  check(f.length === 1 && f[0].times === 3, `and the same line again is one failure, counted (${JSON.stringify(f.map((x) => x.times))})`)
+  check(!isBad('[mobs] gunner: fire -> chase at 120') && !isBad('loaded maps/arena.dnpm: 2 rooms'), 'CONTROL: ordinary lines are not')
+}
 check(isBad('[lua:maps/graphs.lua] [graphs] first.main.graph.json: 1 problems -- the graph is not loaded') && isBad('Uncaught TypeError: x is not a function (src/main.js:12)') &&
       isBad('[shell] the server exited (1)') && isBad('[graphs] lost.intro.graph.json: node \'fly\': the map has no camera path tagged 9'),
       'refusals, uncaught errors, a dead server and a missing path are failures')

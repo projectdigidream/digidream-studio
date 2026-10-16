@@ -93,7 +93,7 @@ export const WEAPON_RECIPES = {
   pistol: { label: 'Pistol', note: 'one instant shot each press', per: 1, phases: () => ({
     draw: { anim: 0, ticks: S(0.3), next: 'ready' },
     ready: { anim: 0, transitions: [{ to: 'fire', when: [{ cond: 'button_pressed' }, { cond: 'has_ammo', n: 1 }] }] },
-    fire: { anim: 2, ticks: S(0.3), next: 'ready', sequence: [P(0, 'hitscan', { damage: 12, range: '32', spread: 1 }), P(0, 'consume', { n: 1 }), P(0, 'vfx', { effect: 12 })] } }) },
+    fire: { anim: 2, ticks: S(0.3), next: 'ready', sequence: [P(0, 'hitscan', { damage: 12, range: '32', spread: 1, tracer: 1, hit_vfx: 12 }), P(0, 'consume', { n: 1 }), P(0, 'vfx', { effect: 12 })] } }) },
   launcher: { label: 'Launcher', note: 'one heavy shot and a kick', per: 1, missile: true, phases: (m) => ({
     draw: { anim: 0, ticks: S(0.3), next: 'ready' },
     ready: { anim: 0, transitions: [{ to: 'fire', when: [{ cond: 'button_pressed' }, { cond: 'has_ammo', n: 1 }] }] },

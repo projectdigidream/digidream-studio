@@ -25,7 +25,7 @@ function showSettings () {
     // (docs/MODULES.md, docs/SAVING.md), written on the next Play or Export.
     select('controls', S.module.controls ?? 'platformer', [['platformer', 'platformer — third person'], ['fps', 'first person (fps)']],
            (v) => { S.module.controls = v; S.save() }),
-    muted('First person puts the camera at the eyes and aims where the player looks; a touch drag looks around. The module decides, not the player.'),
+    muted('First person puts the camera at the eyes and aims where the player looks; a touch drag looks around; a shot goes to the middle of the screen, where a crosshair can be put on Screens. The module decides, not the player.'),
     // The engine's debug overlay: the module's (what ships), and this device's Play.
     toggle('show the debug overlay in the game', S.module.debug !== false, (v) => { if (v) delete S.module.debug; else S.module.debug = false; S.moduleChanged(); showSettings() }),
     select('when I press Play', S.playDebug(), [['module', `as the module says (${S.module.debug === false ? 'hidden' : 'shown'})`], ['on', 'always show it'], ['off', 'never show it']],

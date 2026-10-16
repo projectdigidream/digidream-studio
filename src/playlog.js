@@ -43,8 +43,12 @@ const GRAPH_WARN = /\[graphs\].*(-- skipped|was stopped|-- stopped|acted on no p
 export const tidy = (line) => line.replace(/(^|[\s[:(])\/[^[\]()]*?\/game\//g, '$1')
 
 /** Does this line look like a failure? */
+// A Lua error, at run time: `[string "…/mobs.lua"]:2951: no prop named 'bolt'`.
+// Whatever its words, a script stopped there (a monster that never fires).
+const LUA_ERROR = /\]:\d+: \S/
+
 export const isBad = (line) => {
-  if (GRAPH_WARN.test(line)) return true
+  if (GRAPH_WARN.test(line) || LUA_ERROR.test(line)) return true
   if (FINE.test(line)) return false
   // The game page's warnings (a missing sprite) are in its log, not in the
   // list of failures -- unless they say something failed outright.
@@ -109,10 +113,23 @@ export async function readLogs () {
   return out
 }
 
-/** The failures, across the three: [{ log, line }]. */
+/**
+ * The failures, across the three: [{ log, line, times }]. A line that comes
+ * again (a monster failing the same way at every shot) is one, counted.
+ */
 export function failures (logs) {
   const out = []
-  for (const [key] of FILES) for (const line of logs[key] ?? []) if (isBad(line)) out.push({ log: key, line })
+  const seen = new Map()
+  for (const [key] of FILES) {
+    for (const line of logs[key] ?? []) {
+      if (!isBad(line)) continue
+      const k = `${key}\n${line}`
+      if (seen.has(k)) { seen.get(k).times++; continue }
+      const f = { log: key, line, times: 1 }
+      seen.set(k, f)
+      out.push(f)
+    }
+  }
   return out
 }
 
@@ -140,7 +157,7 @@ export async function showPlayLog (S) {
     ? `The last play-test: ${last.module}/${String(last.map).replace(/\.dnpm$/, '')}, ${new Date(last.at).toLocaleString()}.`
     : 'No play-test has run on this device yet.'))
   rows.push(el('div', { class: 'st-section-head', icon: bad.length ? 'status.error' : 'status.ok', text: bad.length ? ` what looks wrong (${bad.length})` : ' nothing in the logs looks like a failure' }))
-  for (const b of bad.slice(0, 40)) rows.push(el('div', { class: 'sd-log-line sd-log-bad', 'data-log-bad': b.log, text: `${b.log}: ${tidy(b.line)}` }))
+  for (const b of bad.slice(0, 40)) rows.push(el('div', { class: 'sd-log-line sd-log-bad', 'data-log-bad': b.log, text: `${b.log}: ${tidy(b.line)}${b.times > 1 ? `  (×${b.times})` : ''}` }))
   if (bad.length > 40) rows.push(muted(`and ${bad.length - 40} more, in the logs below`))
   for (const [key, file, about] of FILES) {
     const lines = logs[key] ?? []

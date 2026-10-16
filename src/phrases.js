@@ -20,6 +20,7 @@
 //   ['missile', arg, default]         a missile of the module
 //   ['sound', arg, default]           a sound of the module's packs
 //   ['fx', arg, default]              a particle kind (props.txt `vfx`)
+//   ['fx?', arg, default, none]       one that may be left out: `none` says so
 //   ['enum', arg, [values], default]  one of a few words
 //   ['bool', arg, words, default]     a yes/no, said by `words` when yes
 //   ['text', arg, default]            a free name (a Lua function)
@@ -71,6 +72,7 @@ export function shown (part, obj) {
   }
   if (k === 'mob') return v ?? 'any'
   if (k === 'bool') return v === undefined ? part[3] ?? false : !!v
+  if (k === 'fx?') return v                 // left out is left out: no default shown
   return v ?? part[2] ?? part[3]
 }
 
@@ -182,7 +184,10 @@ export const MOB_ACTIONS = {
 }
 
 export const WEAPON_ACTIONS = {
-  hitscan: { g: 'Attack', k: 'hit', p: [['t', 'fire an instant shot for'], ['n', 'damage', '', 10], ['t', 'damage, range'], ['n', 'range', 'm', 32], ['t', ', spread'], ['n', 'spread', '°', 2]] },
+  // Its ray drawn and a burst where it lands: a shot that leaves no trace is
+  // one the player cannot tell landed. (The monster it hurts sprays its own blood.)
+  hitscan: { g: 'Attack', k: 'hit', p: [['t', 'fire an instant shot for'], ['n', 'damage', '', 10], ['t', 'damage, range'], ['n', 'range', 'm', 32], ['t', ', spread'], ['n', 'spread', '°', 2],
+    ['t', ', its ray'], ['fx?', 'tracer', 1, 'not drawn'], ['t', ', where it lands'], ['fx?', 'hit_vfx', 12, 'nothing']] },
   launch: { g: 'Attack', k: 'hit', p: [['t', 'launch the missile'], ['missile', 'missile', '']] },
   damage_area: { g: 'Attack', k: 'hit', p: [['t', 'a blast of'], ['n', 'damage', '', 30], ['t', 'damage within'], ['n', 'radius', 'm', 2]] },
   telegraph: { g: 'Attack', k: 'hit', p: [['t', 'warn with'], ['fx', 'effect', 12], ['t', 'for'], ['n', 'ticks', 's', 0.2]] },
@@ -268,6 +273,7 @@ export function sentence (table, obj, key = null) {
     if (kind === 'prop') return v ? `(${v})` : '(any)'
     if (kind === 'bool') return v ? `, ${part[2]}` : ''
     if (kind === 'fx') return v === undefined || v === '' ? '?' : `effect ${v}`
+    if (kind === 'fx?') return v === undefined || v === '' ? part[3] : `effect ${v}`
     return v === undefined || v === '' ? '?' : String(v)
   }).filter((s) => s !== '').join(' ').replace(/ ,/g, ',')
 }
