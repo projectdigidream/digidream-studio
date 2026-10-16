@@ -149,15 +149,21 @@ function ammoAmountRows (S, table, ctx) {
   }))
 }
 
+// The arsenal's fields in plain words (the vocabulary's names are the file's).
+const AMMO_WORDS = { label: 'Name on the panel', max: 'Most a player holds', initial: 'Starts with', order: 'Place on the panel' }
+const HEALTH_WORDS = { max: 'Most health', bonus_max: 'Most with bonuses' }
+const PICKUP_WORDS = { weapon: 'Gives the weapon', heal: 'Heals', ceiling: 'Heals up to', armour: 'Sets armour to', sound: 'Sound when taken', not_yet: 'Not working yet (says)' }
+
 /** The pools, the health ceilings and the pickups: everything the arsenal has that is not a weapon. */
 export function arsenalRows (S, ctx) {
   const V = S.vocab.weapon
   const a = S.module.weapons
   if (!V || !a) return [muted('No weapon vocabulary staged with this studio.')]
   const rows = [el('div', { class: 'st-section-head' }, withIcon('workshop.ammo', 'ammunition'))]
+  const say = (words) => ({ ...ctx, words })
   for (const [name, pool] of Object.entries(a.ammo ?? {})) {
     rows.push(card(name, [
-      ...argFields(V.ammo_fields, pool, ctx),
+      ...argFields(V.ammo_fields, pool, say(AMMO_WORDS)),
       button('delete pool', async () => {
         if (!await confirmDialog(`delete the ${name} pool? Weapons that eat it will name a pool that is gone.`)) return
         delete a.ammo[name]; ctx.changed()
@@ -172,16 +178,16 @@ export function arsenalRows (S, ctx) {
     a.ammo[n] = { label: n.charAt(0).toUpperCase() + n.slice(1), max: 200, initial: 0, order: orders.length ? Math.max(...orders) + 1 : 1 }
     ctx.changed()
   }))
-  rows.push(muted('The panel\'s read-out list is generated from `order`, so a pool with none can be carried, counted and capped and never appear on screen.'))
+  rows.push(muted('The panel lists the pools by their place on it: a pool with no place can be carried, counted and capped, but is never shown.'))
 
   rows.push(el('div', { class: 'st-section-head' }, withIcon('workshop.health', 'health')))
   a.health ??= { max: 100, bonus_max: 200 }
-  rows.push(...argFields(V.health_fields, a.health, ctx))
+  rows.push(...argFields(V.health_fields, a.health, say(HEALTH_WORDS)))
 
   rows.push(el('div', { class: 'st-section-head' }, withIcon('section.props', 'pickups')))
   for (const [name, p] of Object.entries(a.pickups ?? {})) {
     rows.push(card(name, [
-      ...argFields(V.pickup_fields, p, ctx, ['ammo'], 'pickup'),
+      ...argFields(V.pickup_fields, p, say(PICKUP_WORDS), ['ammo'], 'pickup'),
       el('div', { class: 'st-muted', text: 'ammunition it grants' }),
       ...ammoAmountRows(S, p.ammo ?? (p.ammo = {}), ctx),
       button('delete pickup', () => { delete a.pickups[name]; ctx.changed() }, 'st-danger')
@@ -194,6 +200,6 @@ export function arsenalRows (S, ctx) {
     a.pickups[n] = { heal: 25, ceiling: 'max' }
     ctx.changed()
   }))
-  rows.push(muted('A pickup is named by a prop in the level: walking over the prop grants this. `not_yet` declares one that does nothing yet and says so by name.'))
+  rows.push(muted('A pickup is a prop in the level with the same name: walking over it gives this. "Not working yet" keeps one that does nothing so far, and says so when it is walked over.'))
   return rows
 }

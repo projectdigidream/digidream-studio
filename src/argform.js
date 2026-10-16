@@ -97,7 +97,8 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         ctx.onChange()
       }))))
     }
-    const label = a.optional ? `${a.name}?` : a.name
+    // A caller's own words for a field (the arsenal's), else the vocabulary's name.
+    const label = ctx.words?.[a.name] ?? (a.optional ? `${a.name}?` : a.name)
     const set = (v) => { if (v === undefined || v === '' || v === null) delete obj[a.name]; else obj[a.name] = v; ctx.onChange() }
     const cur = obj[a.name]
     let control

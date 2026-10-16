@@ -29,6 +29,20 @@ anything not released yet is under **Unreleased**.
   monster is within", "at least" and "no more than", and a summon's `limit`
   is kept, as the engine keeps them (held to the engine's own run in the
   test).
+- **The graph's labels lay over each other** where two edges share a stretch
+  (two rules between the same states, a long jump over a lane). A label that
+  would cover another moves along its own edge, so it stays by its arrow,
+  and the labels are their own height again, not a button's.
+- **The graph's phases ran into each other.** Each phase is on a band of its
+  own, further apart, with its title at the top.
+- **The arsenal and Advanced spoke the file's language**: "label?",
+  "initial?", "order?", "pain_chance?", "hover_z?", and `order` and
+  `not_yet` in backticks. They are in plain words now ("Starts with", "Place
+  on the panel", "Flinch chance (of 256)").
+- **Missiles and Particles had the same icon** in the rail. Missiles has its
+  own.
+- **The "New state, named" label did not focus its field.** It does, and the
+  field has the focus when the form opens.
 - **Choosing a condition or a step on a phone took four or five swipes**: every
   group was listed at once. One group shows at a time, picked from a row of
   chips; the chooser opens on the group last used; and on a desktop a find box

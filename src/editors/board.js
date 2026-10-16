@@ -17,13 +17,15 @@ export function board (o) {
   const NW = o.phone ? 128 : 150
   const NH = o.phone ? 64 : 72
   const GX = o.phone ? 210 : 240
-  const GY = o.phone ? 150 : 180
+  const phs = o.phases ?? []
+  // Phases apart: each lane on a band of its own, its title at the top.
+  const GY = phs.length ? (o.phone ? 200 : 250) : (o.phone ? 150 : 180)
+  const TOP = o.phone ? 84 : 96          // a band starts this far over its states
   const X0 = 24
-  const Y0 = 60
+  const Y0 = phs.length ? TOP + 10 : 60
   const names = Object.keys(o.nodes)
   const react = (n) => n === 'death' || o.nodes[n].next === '@previous' || n === 'pain'
   const lanes = []
-  const phs = o.phases ?? []
   if (phs.length) {
     const rest = names.filter((n) => !react(n) && !phs.some((p) => p.id === o.nodes[n].phase))
     if (rest.length) lanes.push({ label: 'not in a phase', ids: rest })
@@ -42,14 +44,21 @@ export function board (o) {
   svg.setAttribute('class', 'me-edges'); svg.setAttribute('width', w); svg.setAttribute('height', h)
   svg.innerHTML = '<defs><marker id="me-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--cv-graph-edge-transition)"/></marker></defs>'
   world.appendChild(svg)
-  for (const L of lanes) if (L.label) world.appendChild(el('span', { class: 'me-lane', style: `left:${X0}px;top:${(pos[L.ids[0]]?.y ?? Y0) - 30}px`, text: L.label }))
+  for (const L of lanes) {
+    if (!L.label) continue
+    const y = pos[L.ids[0]]?.y ?? Y0
+    world.insertBefore(el('div', { class: 'me-band', style: `left:8px;top:${y - TOP}px;width:${w - 16}px;height:${GY - 12}px` }), svg)
+    world.appendChild(el('span', { class: 'me-lane', style: `left:${X0}px;top:${y - TOP + 8}px`, text: L.label }))
+  }
 
   const pairs = new Set()
   for (const n of names) { for (const t of o.nodes[n].transitions ?? []) pairs.add(`${n}>${t.to}`); if (o.nodes[n].next) pairs.add(`${n}>${o.nodes[n].next}`) }
   let up = 0
   let down = 0
   const P = (p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`
-  const cub = (p0, p1, p2, p3) => ({ d: `M ${P(p0)} C ${P(p1)}, ${P(p2)}, ${P(p3)}`, mx: 0.125 * p0[0] + 0.375 * p1[0] + 0.375 * p2[0] + 0.125 * p3[0], my: 0.125 * p0[1] + 0.375 * p1[1] + 0.375 * p2[1] + 0.125 * p3[1] })
+  const cub = (p0, p1, p2, p3) => ({ d: `M ${P(p0)} C ${P(p1)}, ${P(p2)}, ${P(p3)}`, mx: 0.125 * p0[0] + 0.375 * p1[0] + 0.375 * p2[0] + 0.125 * p3[0], my: 0.125 * p0[1] + 0.375 * p1[1] + 0.375 * p2[1] + 0.125 * p3[1], pts: [p0, p1, p2, p3] })
+  // A point a way along a curve: where its label may go when the middle is taken.
+  const at = ([p0, p1, p2, p3], t) => { const u = 1 - t; const k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t]; return [0, 1].map((j) => k[0] * p0[j] + k[1] * p1[j] + k[2] * p2[j] + k[3] * p3[j]) }
   const route = (from, to) => {
     const a = pos[from]; const b = pos[to]
     if (from === to) return cub([a.x + NW * 0.3, a.y], [a.x + NW * 0.12, a.y - 52], [a.x + NW * 0.88, a.y - 52], [a.x + NW * 0.7, a.y])
@@ -76,7 +85,8 @@ export function board (o) {
     const path = document.createElementNS(SVG, 'path')
     path.setAttribute('d', r.d); path.setAttribute('class', 'me-edge'); path.dataset.k = kind; path.dataset.live = live ? '1' : '0'; path.setAttribute('marker-end', 'url(#me-arrow)')
     svg.appendChild(path)
-    world.appendChild(el('button', { class: 'me-lab', 'data-live': live ? '1' : '0', style: `left:${r.mx.toFixed(0)}px;top:${(r.my + (r.oy ?? 0)).toFixed(0)}px`, text: label, onclick: pick }))
+    const along = [0.36, 0.64, 0.24, 0.76].map((t) => at(r.pts, t).map((v, j) => Math.round(v + (j ? r.oy ?? 0 : 0))))
+    world.appendChild(el('button', { class: 'me-lab', 'data-live': live ? '1' : '0', 'data-along': JSON.stringify(along), style: `left:${r.mx.toFixed(0)}px;top:${(r.my + (r.oy ?? 0)).toFixed(0)}px`, text: label, onclick: pick }))
   }
   for (const n of names) {
     const st = o.nodes[n]
@@ -107,6 +117,7 @@ export function board (o) {
   }
 
   const box = el('div', { class: 'me-board' }, [world])
+  spreadLabels(world, 0)
   const v = o.view
   const apply = () => { world.style.transform = `translate(${v.x}px,${v.y}px) scale(${v.z})` }
   // On opening, as large as fits but not below what can be read; the fit button fits everything.
@@ -174,3 +185,37 @@ function gestures (box, world, v, apply) {
 }
 
 export { button, withIcon }
+
+/**
+ * The edges' labels, moved so none covers another or a lane's title: two
+ * rules between the same states share a path, and a label at its middle
+ * would sit on the other's. A label moves along its own edge first, so it
+ * stays by its arrow. Measured once the board is drawn.
+ */
+function spreadLabels (world, tries) {
+  if (!world.isConnected || !world.offsetWidth) { if (tries < 30) requestAnimationFrame(() => spreadLabels(world, tries + 1)); return }
+  const box = (e, centred) => {
+    const x = parseFloat(e.style.left) || 0, y = parseFloat(e.style.top) || 0, w = e.offsetWidth, h = e.offsetHeight
+    return centred ? { x, y, w, h } : { x: x + w / 2, y: y + h / 2, w, h }
+  }
+  const lanes = [...world.querySelectorAll('.me-lane')].map((e) => box(e, false))
+  const nodes = [...world.querySelectorAll('.me-node')].map((e) => box(e, false))
+  const placed = []
+  const over = (L, y, list) => list.some((p) => Math.abs(p.x - L.x) * 2 < p.w + L.w + 4 && Math.abs(p.y - y) * 2 < p.h + L.h + 2)
+  const labs = [...world.querySelectorAll('.me-lab')].map((b) => ({ b, ...box(b, true) })).sort((p, q) => p.y - q.y || p.x - q.x)
+  for (const L of labs) {
+    // Where it is, if that is free (a label between two states may straddle
+    // them); else further along its own edge; else a step above or below.
+    // A moved label goes on no state.
+    if (over(L, L.y, [...placed, ...lanes])) {
+      const all = [...placed, ...lanes, ...nodes]
+      const step = L.h + 3
+      const spots = [...JSON.parse(L.b.dataset.along ?? '[]'), ...[1, -1, 2, -2].map((k) => [L.x, L.y + k * step])]
+      const free = spots.find(([x, y]) => !over({ ...L, x }, y, all))
+      if (free) [L.x, L.y] = free
+    }
+    placed.push(L)
+    L.b.style.left = `${Math.round(L.x)}px`
+    L.b.style.top = `${Math.round(L.y)}px`
+  }
+}

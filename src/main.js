@@ -391,7 +391,7 @@ pageSection('controls', 'Controls', 'section.controls', /^Controls$/, () => S.sh
 S.showScreensTouch = async () => { await S.go('screens'); if (S.window) { S.window.tab = 'touch'; S.window.picked = null; S.window.render() } }
 windowSection('weapons', 'Weapons', 'section.weapons', (name) => openWeapons(S, name))
 // The module's missiles, shared by its monsters and weapons (no icon of their own in the catalog yet).
-windowSection('missiles', 'Missiles', 'section.particles', (name) => openMissiles(S, name))
+windowSection('missiles', 'Missiles', 'workshop.missiles', (name) => openMissiles(S, name))
 pageSection('props', 'Props', 'section.props', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
 installSprites(S)
 pageSection('sprites', 'Sprites', 'section.sprites', /^Sprites$/, (n) => S.showSprites(n))

@@ -429,7 +429,8 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   })
   check(swept.any > 50 && swept.frames > 3, `and the collider sweeps rather than sitting still (${swept.frames} distinct frames)`)
   const blood = await page.evaluate(() => {
-    const row = [...document.querySelectorAll('.me .st-row')].find((r) => r.querySelector('label')?.textContent?.startsWith('blood'))
+    // by the field it edits: its label is in plain words ("Blood (particle kind)")
+    const row = document.querySelector('.me .st-row[data-arg="blood"]')
     const sel = row?.querySelector('select')
     return { isPicker: !!sel, options: sel ? sel.options.length - 1 : 0 }
   })

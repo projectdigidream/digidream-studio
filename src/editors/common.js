@@ -143,8 +143,9 @@ export const CSS = `
 .me-edge[data-k="then"]{stroke:var(--cv-graph-edge-next);stroke-dasharray:6 5}
 .me-edge[data-k="any"]{stroke-dasharray:2 4}
 .me-edge[data-live="1"]{stroke:var(--dnp-color-warn);stroke-width:2.6}
-.me-lab{position:absolute;transform:translate(-50%,-50%);font-size:11px;background:var(--cv-graph-board);border:1px solid var(--dnp-color-line-main);border-radius:6px;padding:1px 6px;white-space:nowrap;cursor:pointer;color:inherit;font-family:inherit}
+.me-lab{position:absolute;transform:translate(-50%,-50%);font-size:11px;min-height:0 !important;height:auto;line-height:1.35;background:var(--cv-graph-board);border:1px solid var(--dnp-color-line-main);border-radius:6px;padding:1px 6px;white-space:nowrap;cursor:pointer;color:inherit;font-family:inherit}
 .me-lab[data-live="1"]{border-color:var(--dnp-color-warn)}
+.me-band{position:absolute;border-radius:14px;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-main);opacity:.55;pointer-events:none}
 .me-lane{position:absolute;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dnp-color-text-secondary);white-space:nowrap}
 .me-zoom{position:absolute;right:8px;bottom:8px;z-index:3;display:flex;gap:4px}
 .me-menu{position:absolute;right:8px;top:48px;z-index:30;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-strong);border-radius:12px;padding:6px;width:210px;display:flex;flex-direction:column}

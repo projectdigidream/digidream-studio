@@ -60,6 +60,10 @@ function propOf (S, name, brain) {
   return (S.module.props ?? []).find((p) => p.name === want) ?? null
 }
 
+// Advanced's fields in plain words (the vocabulary's names are the file's).
+const MOB_WORDS = { hp: 'Health', sight: 'Notices a target within (m)', pain_chance: 'Flinch chance (of 256)', pain_time: 'Flinch length', turn_speed: 'Turns a second', jump_height: 'Hops up (m)', flying: 'Flies', hover_z: 'Hovers above the target (m)', infighting: 'Fights back at monsters', blood: 'Blood (particle kind)', corpse: 'Leaves a corpse', mass: 'Weight' }
+const WEAPON_WORDS = { label: 'Name', order: 'Selection order', ammo: 'Uses ammunition', per: 'A shot costs (ammo)', initial: 'Starts in', icon: 'Icon on the panel', aim_snap: 'Aim directions (0 = free)' }
+
 export class NodeEditor {
   constructor (S, kind) {
     this.S = S
@@ -385,10 +389,11 @@ export class NodeEditor {
       button(`+ ${this.K.node}`, () => { this.newState = this.newState === null ? '' : null; this.render() }),
       this.kind === 'mob' ? button('+ phase', () => this.addPhase()) : null]))
     if (this.newState !== null) {
-      const i = el('input', { type: 'text', placeholder: 'e.g. spit', value: this.newState, 'aria-label': `New ${this.K.node}, named` })
+      const i = el('input', { id: 'me-newstate', type: 'text', placeholder: 'e.g. spit', value: this.newState, 'aria-label': `New ${this.K.node}, named` })
+      if (!this.newState) requestAnimationFrame(() => { if (i.isConnected && document.activeElement?.tagName !== 'INPUT') i.focus() })
       i.addEventListener('input', () => { const n = toName(i.value); if (n !== i.value) i.value = n; this.newState = n })
       i.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.createState(i.value); if (e.key === 'Escape') { this.newState = null; this.render() } })
-      out.push(el('div', { class: 'me-panel' }, [el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: `New ${this.K.node}, named` }), i,
+      out.push(el('div', { class: 'me-panel' }, [el('div', { class: 'me-row' }, [el('label', { class: 'me-muted', for: 'me-newstate', text: `New ${this.K.node}, named` }), i,
         el('span', { class: 'me-muted', text: this.sel ? `placed after ${this.sel}` : 'placed at the end' }),
         (this.thing.phases ?? []).length ? (() => {
           const s = el('select', { 'aria-label': 'In phase' }, [el('option', { value: '', text: '(no phase)' }), ...this.thing.phases.map((p) => el('option', { value: p.id, text: p.name }))])
@@ -962,10 +967,10 @@ export class NodeEditor {
     const names = Object.keys(vars).filter((v) => !v.startsWith('__'))
     const changed = () => this.changed()
     const more = this.kind === 'mob'
-      ? [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its brain: blood, pain, drops and the rest' }), ...brainRows(this.S, this.thing, this.formCtx())]),
+      ? [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its brain: blood, pain, drops and the rest' }), ...brainRows(this.S, this.thing, { ...this.formCtx(), words: MOB_WORDS })]),
           el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its own swing' }), ...this.swingSection(this.thing, 'This monster'), ...slashRows(this.S, 'monster', this.name, changed)]),
           this.prop ? el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its body states' }), ...bodyRows(this.S, this.prop, changed)]) : null]
-      : [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'The weapon' }), ...weaponRows(this.S, this.name, this.thing, this.formCtx())]),
+      : [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'The weapon' }), ...weaponRows(this.S, this.name, this.thing, { ...this.formCtx(), words: WEAPON_WORDS })]),
           el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its swing, in every state' }), ...this.swingSection(this.thing, 'This weapon'), ...slashRows(this.S, 'weapon', this.name, changed)])]
     return [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its numbers' }),
       el('span', { class: 'me-muted', text: 'Numbers it remembers, like which phase it is in or a cooldown. One exists as soon as a step sets it or a rule checks it: add a "set the number" step to make one.' }),
