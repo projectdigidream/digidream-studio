@@ -166,8 +166,9 @@ export class Vocab {
           for (const [j, c] of (tr.when ?? []).entries()) {
             const spec = this.weaponConditions.get(c.cond)
             if (!spec) { problems.push(`${tw}, condition ${j + 1}: unknown condition "${c.cond}"`); continue }
-            // A weapon's condition has no `negate` (a monster's does): the runtime refuses it as an unknown field.
-            checkArgs(spec.args ?? [], c, `${tw}, condition ${j + 1}`, problems, ctx, ['cond'])
+            // A weapon's condition takes `negate` as a monster's does (engine 0.2.0, docs/WEAPONS.md).
+            if (c.negate !== undefined && typeof c.negate !== 'boolean') problems.push(`${tw}, condition ${j + 1}: \`negate\` must be true or false`)
+            checkArgs(spec.args ?? [], c, `${tw}, condition ${j + 1}`, problems, ctx, ['cond', 'negate'])
           }
         }
         for (const [i, step] of (p.sequence ?? []).entries()) {

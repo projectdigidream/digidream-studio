@@ -14,6 +14,7 @@
 //
 import { tidySwings } from './swings_emit.js'
 import { toLua, block } from './lua.js'
+import { compileArsenal } from './brainc.js'
 
 /**
  * Whether the module arms anybody.
@@ -39,7 +40,7 @@ export function emitWeaponsLua (module) {
   const table = {}
   if (Object.keys(w.ammo ?? {}).length) table.ammo = w.ammo
   if (w.health) table.health = w.health
-  if (Object.keys(w.weapons ?? {}).length) table.weapons = w.weapons
+  if (Object.keys(w.weapons ?? {}).length) table.weapons = compileArsenal(w).weapons
   if (Object.keys(w.pickups ?? {}).length) table.pickups = w.pickups
   const body = [
     '--',

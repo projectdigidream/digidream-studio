@@ -3,18 +3,19 @@
 // declares. One file per module, because mobs.load runs once per level and
 // refuses a second call (maps/scripts/mobs.lua).
 //
-// The table is written exactly as the module document keeps it -- the studio's
-// brain editor edits the same JSON the vocabulary describes -- so there is no
-// translation to get wrong, only the number rule lua.js enforces.
+// The table is the module document's, in the vocabulary's own shape, with the
+// editor's few words of its own (rules for any state, "only once", end
+// branches, phases) compiled to plain vocabulary by brainc.js.
 //
 import { toLua, block } from './lua.js'
+import { compileMobs } from './brainc.js'
 
 /**
  * @param module  the module document: { id, mobs: { missiles: {}, mobs: {} } }
  * @returns the file's text, or null when the module defines nothing
  */
 export function emitMobsLua (module) {
-  const table = { missiles: module.mobs?.missiles ?? {}, mobs: module.mobs?.mobs ?? {} }
+  const table = compileMobs(module.mobs, module.props ?? [])
   if (Object.keys(table.missiles).length === 0 && Object.keys(table.mobs).length === 0) return null
   const body = [
     '--',

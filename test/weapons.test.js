@@ -113,7 +113,10 @@ badInitial.weapons.weapons.fists.initial = 'elsewhere'
 check(vocab.validateWeapons(badInitial).some((p) => /`initial` names no phase/.test(p)), 'CONTROL: resting in a phase that does not exist is named')
 const negated = structuredClone(module)
 negated.weapons.weapons.shotgun.phases.ready.transitions[0].when[0].negate = true
-check(vocab.validateWeapons(negated).some((p) => /unknown field `negate`/.test(p)), 'CONTROL: `negate` on a weapon condition is named (only a monster\'s takes it)')
+check(vocab.validateWeapons(negated).length === 0, `\`negate\` on a weapon condition validates, as the engine takes it since 0.2.0 (${vocab.validateWeapons(negated).join(' | ')})`)
+const badNegate = structuredClone(module)
+badNegate.weapons.weapons.shotgun.phases.ready.transitions[0].when[0].negate = 'yes'
+check(vocab.validateWeapons(badNegate).some((p) => /`negate` must be true or false/.test(p)), 'CONTROL: a `negate` that is not true or false is named')
 const emptyWhen = structuredClone(module)
 emptyWhen.weapons.weapons.shotgun.phases.ready.transitions[0].when = []
 check(vocab.validateWeapons(emptyWhen).some((p) => /`when` is an empty list/.test(p)), 'CONTROL: a transition with no conditions is named')
@@ -145,8 +148,10 @@ if (!existsSync(LUAJIT)) {
   check(bad.errors > 0, `CONTROL: the runtime also refuses the transition to nowhere (${bad.errors} complaint(s))`)
   const bad2 = run(emitWeaponsLua(badAmmo), 'bad2.lua')
   check(bad2.errors > 0, `CONTROL: and the undeclared ammunition pool (${bad2.errors})`)
-  check(run(emitWeaponsLua(negated), 'bad3.lua').errors > 0, 'CONTROL: and `negate` on a weapon condition')
-  check(run(emitWeaponsLua(emptyWhen), 'bad4.lua').errors > 0, 'CONTROL: and a transition with no conditions')
+  check(run(emitWeaponsLua(negated), 'neg.lua').errors === 0, 'the runtime takes `negate` on a weapon condition')
+  check(run(emitWeaponsLua(badNegate), 'bad3.lua').errors > 0, 'CONTROL: and refuses a `negate` that is not true or false')
+  // A transition with an empty `when` is the editor's unfinished rule: never written (brainc.js), so the file still loads.
+  check(run(emitWeaponsLua(emptyWhen), 'bad4.lua').errors === 0 && !/when = \{\}/.test(emitWeaponsLua(emptyWhen)), 'an unfinished transition (no conditions yet) is left out of the file')
   const heal = run(emitWeaponsLua(healed), 'heal.lua')
   check(heal.errors === 0, `the runtime takes a new pickup's defaults:\n${heal.out}`)
 }

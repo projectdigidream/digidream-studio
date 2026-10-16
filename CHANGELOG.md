@@ -11,8 +11,17 @@ anything not released yet is under **Unreleased**.
   desktop builds took the studio's pages from the engine kit they were built
   on (the packager's build_studio.mjs). They now come from the studio, and a
   release refuses a build whose studio/VERSION is not the one released.
+- **A weapon condition may be negated**: the studio refused `negate` on a
+  weapon's condition, which the engine takes since 0.2.0.
 
 ### Added
+
+- **The editors' own words, compiled to the engine's** (brainc.js): rules that
+  apply in any state, "only once", branches taken as a state's time runs out,
+  and a boss's phases with their speed are written as plain vocabulary when the
+  module is emitted and checked. "Further than" also needs a target. A rule
+  with no condition yet is left out. Proven by running a compiled boss in the
+  engine's own mobs.lua.
 
 - **Which animations loop, for a sheet baked from a ThreeSprite project**: its
   card on the Sprites page has a "loops" switch per animation. ThreeSprite

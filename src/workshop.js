@@ -24,6 +24,7 @@ import { rotationFor, frameAt } from '/src/render/props.js'
 import { edgesOf, autoLayout, problemsByState, NODE_W, NODE_H, MOB_SHAPE, WEAPON_SHAPE } from './graph.js'
 import { newMonster, deleteMonster, bodyRows, brainRows, varsRows, stateRows, missilesSection, STATE_NAMES, animUses, bodyStates } from './brain.js'
 import { newWeapon, deleteWeapon, newArsenal } from './weapons_emit.js'
+import { compileMobs, compileArsenal } from './brainc.js'
 import { swingRows, newSwing, SwingPreview } from './swing.js'
 import { slashRows } from './slashform.js'
 import { viewRows } from './viewform.js'
@@ -67,7 +68,7 @@ const SPECS = {
     vocab: (S) => S.vocab.mob,
     conditionSpec: (S, n) => S.vocab.mobConditions.get(n),
     actionSpec: (S, n) => S.vocab.mobActions.get(n),
-    problems: (S) => S.vocab.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }),
+    problems: (S) => S.vocab.validateMobs(compileMobs(S.module.mobs, S.module.props ?? []), { props: S.propNames?.() ?? null }),
     make: (S, raw) => newMonster(S, raw),
     remove: (S, name) => deleteMonster(S, name),
     // The body that draws it: its own prop record.
@@ -86,7 +87,7 @@ const SPECS = {
     vocab: (S) => S.vocab.weapon,
     conditionSpec: (S, n) => S.vocab.weaponConditions.get(n),
     actionSpec: (S, n) => S.vocab.weaponActions.get(n),
-    problems: (S) => S.vocab.validateWeapons(S.module),
+    problems: (S) => S.vocab.validateWeapons({ ...S.module, weapons: compileArsenal(S.module.weapons) }),
     make: (S, raw) => newWeapon(S.module, raw),
     remove: (S, name) => deleteWeapon(S.module, name),
     // A weapon is held by the PLAYER, so the preview shows the player's art.

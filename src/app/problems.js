@@ -15,6 +15,7 @@ import { skyProblems } from '../sky_emit.js'
 import { playerProblems } from '../player.js'
 import { climbProblems } from '../climb.js'
 import { sheetProblems } from '../texsheet.js'
+import { compileMobs, compileArsenal } from '../brainc.js'
 
 /** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg], textures: [msg], controls: [msg] } */
 export function moduleProblems (S) {
@@ -44,8 +45,8 @@ export function moduleProblems (S) {
   for (const [n, t] of Object.entries(S.module.textures ?? {})) out.textures.push(...sheetProblems(n, t.sheet, t.w, t.h))
   // The player's lines: a value of the wrong kind (docs/PLAYER.md).
   out.player.push(...playerProblems(S.module, Object.values(S.docs)))
-  if (S.module.mobs) out.monsters.push(...V.validateMobs(S.module.mobs, { props: S.propNames?.() ?? null }))
-  if (S.module.weapons && V.weapon && Object.keys(S.module.weapons.weapons ?? {}).length) out.weapons.push(...V.validateWeapons(S.module))
+  if (S.module.mobs) out.monsters.push(...V.validateMobs(compileMobs(S.module.mobs, S.module.props ?? []), { props: S.propNames?.() ?? null }))
+  if (S.module.weapons && V.weapon && Object.keys(S.module.weapons.weapons ?? {}).length) out.weapons.push(...V.validateWeapons({ ...S.module, weapons: compileArsenal(S.module.weapons) }))
   out.metamap.push(...metamapProblems(S.module.metamap, Object.keys(S.docs)))
   const known = new Set(S.soundNames?.() ?? [])
   for (const [n, where] of S.soundsUsed?.() ?? []) if (!known.has(n)) out.sounds.push(`${n} (${[...where].join(', ')}) is in no pack`)
