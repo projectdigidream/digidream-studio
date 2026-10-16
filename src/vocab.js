@@ -268,7 +268,8 @@ export class Vocab {
       const states = m.states ?? {}
       const ctx = {
         hasMissile: (n) => n in missiles, hasMob: (n) => n in mobs,
-        hasVar: (n) => n in (m.vars ?? {}), hasState: (n) => n in states, hasProp
+        // `next = "@previous"` goes back to the state a reaction interrupted (engine 0.2.0, docs/MOBS.md)
+        hasVar: (n) => n in (m.vars ?? {}), hasState: (n) => n in states || n === '@previous', hasProp
       }
       checkArgs(this.mob.mob_fields, m, where, problems, ctx)
       // The swept collider, if it declares one. The same fields a weapon's

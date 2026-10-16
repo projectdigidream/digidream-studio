@@ -61,7 +61,7 @@ export function shown (part, obj) {
     const def = part[3]
     if (v === undefined || v === null) return def
     if (unit === 's') return secs(v)
-    if (unit === 'm' || unit === 'mps') return fxNum(v)
+    if (unit === 'm' || unit === 'mps') { const n = fxNum(v); return n === null ? null : Math.round(n * 100) / 100 }
     if (unit === 'n+1') return Number(v) - 1
     return Number(v)
   }
@@ -258,6 +258,7 @@ export function sentence (table, obj, key = null) {
     if (kind === 'n') return `${v}${unitJoin(part[2])}`
     if (kind === 'mob') return v === 'any' ? '(any kind)' : `(${v})`
     if (kind === 'bool') return v ? `, ${part[2]}` : ''
+    if (kind === 'fx') return v === undefined || v === '' ? '?' : `effect ${v}`
     return v === undefined || v === '' ? '?' : String(v)
   }).filter((s) => s !== '').join(' ').replace(/ ,/g, ',')
 }

@@ -69,6 +69,9 @@ import { hasWeapons } from './weapons_emit.js'
 import { inspector, titleFor, texturePicker, placePalette } from './inspector.js'
 import { triggersSheet } from './cards.js'
 import { openWorkshop, openArsenal, openPlayer } from './workshop.js'
+import { openMonsters, openWeapons } from './editors/editor.js'
+import { arsenalRows } from './arms.js'
+import { viewRows } from './viewform.js'
 import { parseVfx } from '/src/render/vfx.js'
 import { vfxChoices } from './vfxlib.js'
 import * as tools from './tools.js'
@@ -380,12 +383,12 @@ S.router.register({
   },
   unmount: () => { S.ui.hideSheet(); if (S.tool === 'room') tools.cancelRoom(S) }
 })
-windowSection('monsters', 'Monsters', 'section.monsters', (name) => openWorkshop(S, name))
+windowSection('monsters', 'Monsters', 'section.monsters', (name) => openMonsters(S, name))
 windowSection('player', 'Player', 'section.player', () => openPlayer(S))
 pageSection('controls', 'Controls', 'section.controls', /^Controls$/, () => S.showControls())
 // Screens on its touch tab: where the module's keys' buttons are placed.
 S.showScreensTouch = async () => { await S.go('screens'); if (S.window) { S.window.tab = 'touch'; S.window.picked = null; S.window.render() } }
-windowSection('weapons', 'Weapons', 'section.weapons', (name) => openArsenal(S, name))
+windowSection('weapons', 'Weapons', 'section.weapons', (name) => openWeapons(S, name))
 pageSection('props', 'Props', 'section.props', /^Props$|^Prop /, (name) => (name ? S.showProp(name) : S.showProps()))
 installSprites(S)
 pageSection('sprites', 'Sprites', 'section.sprites', /^Sprites$/, (n) => S.showSprites(n))
@@ -1445,6 +1448,13 @@ S.soundField = (label, value, onChange) => {
   return row(label, sel, play)
 }
 
+
+/** The arsenal's pools, health and pickups, and a weapon's view model: forms the weapon editor reuses (arms.js, viewform.js). */
+S.arsenalRows = (changed) => arsenalRows(S, {
+  onChange: changed, changed, status: (t, l) => S.status(t, l), ammo: Object.keys(S.module.weapons?.ammo ?? {}), weapons: Object.keys(S.module.weapons?.weapons ?? {}),
+  props: S.propNames?.() ?? [], vfxChoices: () => S.vfxChoices?.() ?? [], suggest: (n, o) => S.suggest?.(n, o) ?? null, soundField: S.soundField
+})
+S.viewRows = (name, changed) => viewRows(S, name, changed)
 
 /** Every prop name a brain or a trigger may name: the module's bodies and props, then the served catalogue. */
 S.propNames = () => [...new Set([...(S.module?.props ?? []).map((p) => p.name), ...S.catalogue])].sort()

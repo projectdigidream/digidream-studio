@@ -113,11 +113,11 @@ export class BrainSim {
     if (this.dead || this.kind !== 'mob') return ''
     this.hp -= amount
     this.hurtAt = this.tick
-    if (this.hp <= 0) { this.dead = true; this.enter('death'); this.why = '→ death: no health left'; return this.why }
+    if (this.hp <= 0) { this.dead = true; this.enter('death'); this.why = 'goes to death: no health left'; return this.why }
     const chance = Number(this.brain.pain_chance ?? 0)
     const st = this.node
     const may = st && st.interruptible !== false && this.nodes.pain
-    if (may && (force || Math.random() * 256 < chance)) { this.enter('pain'); this.why = `${force ? 'flinch' : 'hit'} → pain`; return this.why }
+    if (may && (force || Math.random() * 256 < chance)) { this.enter('pain'); this.why = `${force ? 'flinch' : 'hit'}: goes to pain`; return this.why }
     this.why = `hit for ${amount} · no flinch (${Math.round((chance / 256) * 100)}% chance${st?.interruptible === false ? ', and this state cannot be cut short' : ''})`
     return this.why
   }
@@ -136,10 +136,10 @@ export class BrainSim {
     if (this.runDue()) return
     const st = this.node
     for (const [i, t] of (st.transitions ?? []).entries()) {
-      if (this.holdsAll(t.when)) { this.why = `→ ${t.to}: rule ${i + 1} of ${this.state}`; this.enter(t.to); return }
+      if (this.holdsAll(t.when)) { this.why = `goes to ${t.to}: rule ${i + 1} of ${this.state}`; this.enter(t.to); return }
     }
     if (this.stateTicks !== null && this.elapsed >= this.stateTicks) {
-      if (st.next === PREVIOUS) { if (!this.resume()) this.enter(this.brain.initial) } else if (st.next) { this.why = `→ ${st.next}: time up`; this.enter(st.next) }
+      if (st.next === PREVIOUS) { if (!this.resume()) this.enter(this.brain.initial) } else if (st.next) { this.why = `goes to ${st.next}: time up`; this.enter(st.next) }
     }
   }
 
@@ -193,11 +193,11 @@ export class BrainSim {
       case 'teleport': { const d = num(a.distance, 3); this.dist = a.to === 'near' ? Math.max(num(a.min, 1), d * 0.75) : d; said(`teleports ${a.to ?? 'behind'} the target`); break }
       case 'impulse': if (this.kind === 'mob' && (a.towards ?? 'target') === 'target') this.dist = Math.max(1.2, this.dist - num(a.speed) * 0.25); break
       case 'melee': if (this.kind === 'mob' && this.dist <= num(a.range) + 0.05) { said(`hits for ${a.damage}`); if (a.knockback) this.dist = Math.min(30, this.dist + num(a.knockback) * 0.25) } else said(`swings and misses (${Math.round(this.dist * 10) / 10} m)`); break
-      case 'goto': { const to = a.state ?? a.phase; if (this.nodes[to]) { this.why = `→ ${to}: a "leave now" step`; this.enter(to) } break }
+      case 'goto': { const to = a.state ?? a.phase; if (this.nodes[to]) { this.why = `goes to ${to}: a "leave now" step`; this.enter(to) } break }
       case 'despawn': this.dead = true; said('vanishes'); break
       default: break
     }
-    this.lastAct = a
+    this.onAct?.(a)
   }
 
   // ---- conditions ----

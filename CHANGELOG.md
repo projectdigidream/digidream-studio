@@ -11,11 +11,30 @@ anything not released yet is under **Unreleased**.
   desktop builds took the studio's pages from the engine kit they were built
   on (the packager's build_studio.mjs). They now come from the studio, and a
   release refuses a build whose studio/VERSION is not the one released.
+- **A state that goes back to what it was doing** (`next = "@previous"`, the
+  engine's since 0.2.0) was named a problem.
 - **A weapon condition may be negated**: the studio refused `negate` on a
   weapon's condition, which the engine takes since 0.2.0.
 
 ### Added
 
+- **New monster and weapon editors** (src/editors/): Monsters and Weapons open
+  an editor with tabs (Overview, Behaviour, Attacks, Looks, Advanced or
+  Arsenal). Behaviour lists the states as sentences, or as a graph in lanes,
+  one per phase. Beside it are an editor of the state picked and a preview
+  that runs the rules. A "Whatever it is doing" panel holds the built-in pain
+  and death and the rules for any state.
+  - Rules read as sentences, with a grouped chooser of every condition, and
+    the timeline of steps has a chooser of every action.
+  - "+ phase" copies the last phase, makes it faster, and starts it once its
+    health drops.
+  - Recipes: blank, melee grunt, shooter, flyer, charger, a 3-phase boss;
+    blank, pistol, launcher and charge-shot weapons.
+  - Names are lower-cased as they are typed; Rename keeps a display name with
+    capitals.
+  - A phone on its side keeps the rail. Its preview stays closed until asked,
+    and a step opens in a sheet over the side panel.
+  - The player keeps the old window.
 - **The editors' own words, compiled to the engine's** (brainc.js): rules that
   apply in any state, "only once", branches taken as a state's time runs out,
   and a boss's phases with their speed are written as plain vocabulary when the
