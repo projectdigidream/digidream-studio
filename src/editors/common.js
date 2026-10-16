@@ -14,6 +14,14 @@ import { argFields } from '../argform.js'
 export const CSS = `
 .me{display:flex;flex-direction:column;min-height:0;height:100%;background:var(--dnp-color-bg-app);color:var(--dnp-color-text-primary);font-family:var(--dnp-font-ui);font-size:14px;line-height:1.4}
 .me[hidden]{display:none}
+.me{position:relative}
+.me-toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);max-width:min(640px,90%);z-index:60;background:var(--dnp-color-bg-panel);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 10px 30px var(--dnp-color-scrim)}
+.me-toast[data-level="warn"]{border-color:var(--dnp-color-warn)}
+.me-pvctl{display:flex;flex-direction:column;gap:5px}
+.me-copt{white-space:normal;max-width:100%}
+.me-chooser{max-width:100%;box-sizing:border-box;overflow:hidden}
+.me-tl{margin:0 8px}
+.me-ev{min-height:1.4em}
 .me-top{display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid var(--dnp-color-line-main);min-height:48px;flex:0 0 auto;flex-wrap:wrap}
 .me-name{display:flex;align-items:center;gap:8px;font-weight:600;font-size:16px;cursor:pointer;padding:4px 8px;border-radius:var(--dnp-radius-control);background:transparent;border:0;color:inherit}
 .me-name .me-thumb{width:28px;height:34px}
@@ -132,6 +140,8 @@ export const CSS = `
 .me-vbtn{border:1px solid var(--dnp-color-line-main);border-radius:8px;background:var(--dnp-color-bg-sunken);color:inherit;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
 .me-vbtn[data-on="1"]{border-color:var(--dnp-color-select);font-weight:600}
 @media (max-height:560px) and (orientation:landscape){
+  .me-copt{padding:4px 8px;font-size:12px}
+  .me-copts{gap:4px}
   .me-side{flex-basis:300px}
   .me-side[data-wide="1"]{flex-basis:350px}
   .me-lookside{flex-basis:250px}
@@ -139,6 +149,56 @@ export const CSS = `
   .me-tabs button{padding:0 8px;font-size:13px}
 }
 `
+
+/**
+ * A message on the editor's own page: the studio's status strip is hidden while
+ * a section page is open, so a message sent only there is never seen.
+ */
+export function toast (root, msg, level = 'ok') {
+  if (!root?.isConnected || !msg) return
+  root.querySelector(':scope > .me-toast')?.remove()
+  const t = el('div', { class: 'me-toast', role: 'status', 'data-level': level, text: msg })
+  root.appendChild(t)
+  setTimeout(() => t.remove(), Math.min(9000, 2500 + msg.length * 45))
+}
+
+/**
+ * Keeps the focus where the person was taking it across a re-render.
+ *
+ * A field's change event fires as the finger (or Tab) leaves it, BEFORE the
+ * next field takes the focus; the editor re-renders right then, and the field
+ * that was about to be focused is gone -- what was typed into it went nowhere.
+ * So where the focus is going is noted first (a press on a field, which comes
+ * before the old one's change; or Tab, the next field in order), and after a
+ * render the new copy of that field is focused.
+ */
+const FIELDS = 'input,select,textarea'
+const keyOf = (root, e) => {
+  if (!e) return null
+  const label = e.getAttribute('aria-label') ?? e.id ?? ''
+  const same = [...root.querySelectorAll(FIELDS)].filter((x) => (x.getAttribute('aria-label') ?? x.id ?? '') === label)
+  return { label, i: same.indexOf(e), tag: e.tagName }
+}
+export function trackFocus (root) {
+  root.addEventListener('pointerdown', (ev) => { root._next = keyOf(root, ev.target.closest?.(FIELDS)) }, true)
+  root.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Tab') return
+    const all = [...root.querySelectorAll(FIELDS)].filter((x) => x.offsetParent !== null)
+    const i = all.indexOf(document.activeElement)
+    root._next = i >= 0 ? keyOf(root, all[i + (ev.shiftKey ? -1 : 1)]) : null
+  }, true)
+}
+export function restoreFocus (root) {
+  const key = root._next
+  root._next = null
+  if (!key || key.i < 0) return
+  requestAnimationFrame(() => {
+    if (root.contains(document.activeElement) && document.activeElement.matches(FIELDS)) return
+    const same = [...root.querySelectorAll(FIELDS)].filter((x) => (x.getAttribute('aria-label') ?? x.id ?? '') === key.label)
+    const b = same[key.i]
+    if (b && b.tagName === key.tag) { b.focus(); try { b.select?.() } catch { /* not a text field */ } }
+  })
+}
 
 let injected = false
 export function injectCss () {
@@ -181,6 +241,11 @@ export function sentenceEl (table, obj, ctx, key = null) {
       if (kind === 'var' && ctx.vars?.length) { const id = `me-vars-${Math.random().toString(36).slice(2)}`; i.setAttribute('list', id); out.append(el('datalist', { id }, ctx.vars.map((n) => el('option', { value: n })))) }
       i.addEventListener('change', () => set(i.value.trim().replace(/[^A-Za-z0-9_]/g, '_')))
       out.append(i)
+    } else if (kind === 'bool') {
+      const c = el('input', { type: 'checkbox', 'aria-label': part[2] })
+      c.checked = !!v
+      c.addEventListener('change', () => set(c.checked))
+      out.append(el('label', { class: 'me-muted' }, [c, ` ${part[2]}`]))
     } else if (kind === 'sound') {
       const r = ctx.soundField('', v ?? '', (nv) => set(nv))
       r.classList.add('me-inline')
@@ -246,6 +311,8 @@ export function ruleCards (o) {
     const whenWord = !when.length ? `${o.key === 'ends' ? 'if' : 'when'}: nothing yet. Until it has a condition this ${o.key === 'ends' ? 'branch' : 'rule'} is never taken.`
       : o.key === 'ends' ? (when.length > 1 ? 'as it ends, if all of these hold:' : 'as it ends, if:') : when.length > 1 ? 'when all of these hold:' : 'when:'
     const w = o.warn?.(r)
+    // the preview has no other monsters (they are a level's business): say so where a rule leans on them
+    const crowd = (r.when ?? []).some((c) => ['mob_within', 'count_within', 'prop_within', 'ally_in_front', 'hurt_by_mob'].includes(c.cond))
     const conds = when.map((c, i) => el('div', { class: 'me-crow' }, [
       sentenceEl(table, c, { ...ctx, live: true, spec: ctx.condSpec?.(c.cond) }),
       el('button', { class: 'me-x', 'aria-label': 'Remove this condition', icon: 'action.close', onclick: () => { when.splice(i, 1); ctx.changed() } })
@@ -255,6 +322,7 @@ export function ruleCards (o) {
       head,
       el('span', { class: 'me-muted', text: whenWord }),
       w ? el('span', { class: 'me-warn', icon: 'status.warning', text: ` ${w}` }) : null,
+      crowd ? el('span', { class: 'me-muted', text: 'The preview has no other monsters or props: it reads this as nobody being near. Check it in a level.' }) : null,
       ...conds,
       picking
         ? chooser('Add a condition', 'every condition must hold', groupsWithMore(table, 'cond', ctx.moreConds), (key) => { when.push(newCond(table, key)); o.setPicking(null); ctx.changed() }, () => o.setPicking(null))

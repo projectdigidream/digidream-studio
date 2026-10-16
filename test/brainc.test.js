@@ -83,6 +83,12 @@ const boss = () => ({
   check(!w.phases.ready.transitions.some((t) => t.to === 'ready'), 'and not into the phase the rule goes to')
 }
 
+{
+  // A cooldown named on the spot (a Blank monster's "start cooldown summon") is declared, starting at 0; one the module declares keeps its value.
+  const c = compileMob({ hp: 5, initial: 'a', vars: { ready: 3 }, states: { a: { anim: 0, transitions: [{ to: 'a', when: [{ cond: 'cooldown_ready', var: 'summon' }] }], sequence: [{ at: 0, action: 'set_cooldown', var: 'ready', ticks: 9 }, { at: 0, action: 'add_var', var: 'count', by: 1 }] } } })
+  check(c.vars.summon === 0 && c.vars.count === 0 && c.vars.ready === 3, `every number a brain names is declared, a declared one keeping its value (${JSON.stringify(c.vars)})`)
+}
+
 // ---- what the engine does with it -------------------------------------------------------
 if (!existsSync(LUAJIT)) {
   console.log('brainc: no luajit (engine/scripts/setup_luajit.sh) -- runtime checks skipped')

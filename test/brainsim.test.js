@@ -4,6 +4,7 @@
 // same compiled brain and the same script -- a target held 1.5 m off (walking
 // is not what is compared: the fake world's steering is its own), hits at fixed
 // ticks -- are run in both, and the path through the states must be the same.
+// (`chance` is a roll in the preview, as in the engine; these brains use none.)
 // Controls: a brain that differs (no "only once", pain not resuming) gives a
 // different path in both, so a match is not two runs agreeing on nothing.
 //

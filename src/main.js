@@ -63,7 +63,7 @@ import { STUDIO_VERSION } from './version.js'
 import { parseAnimations } from '/src/render/animtex.js'
 import { animationsTxt } from './texsheet.js'
 import { shell, hasShell } from './bridge.js'
-import { Ui, el, button, row, text, muted, card, select, number, ask, useIcons, refreshIcons, icon, withIcon } from './ui.js'
+import { Ui, el, button, row, text, muted, card, select, number, ask, confirmDialog, useIcons, refreshIcons, icon, withIcon } from './ui.js'
 import { moduleProps } from './props.js'
 import { hasWeapons } from './weapons_emit.js'
 import { inspector, titleFor, texturePicker, placePalette } from './inspector.js'
@@ -1528,7 +1528,13 @@ const PLAY_STEPS = [
 // `start`: the map to start on (Home's Play: the module's starting map,
 // startmap.js); the map being edited when not said.
 async function play ({ start = null } = {}) {
-  if (!hasShell()) { S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn'); return }
+  if (!hasShell()) {
+    // SAID IN A DIALOG: the status strip is hidden under a page (Home's own Play buttons were silent)
+    // and clipped on a phone beside the map's sheet.
+    S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn')
+    if (await confirmDialog('Playing needs the Digidream app (desktop or Android): a browser cannot run the game. Export this module as a pack now, to open it in the app?')) exportPack()
+    return
+  }
   S.status('baking…', 'ok')
   const startName = start && S.docs[start] ? start : S.docName
   const map = `${startName}.dnpm`

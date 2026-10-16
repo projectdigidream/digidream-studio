@@ -18,7 +18,7 @@ import { compileMob, compileWeapon } from '../brainc.js'
 import { nextPropId } from '../props_emit.js'
 import { guessStates } from '../sheets.js'
 import { newArsenal } from '../weapons_emit.js'
-import { injectCss, sentenceEl, ruleCards, stepsBlock, numField, checkField, selectField, chooser } from './common.js'
+import { injectCss, sentenceEl, ruleCards, stepsBlock, numField, checkField, selectField, chooser, toast, trackFocus, restoreFocus } from './common.js'
 import { Preview, Sheets } from './preview.js'
 import { board } from './board.js'
 import { MOB_RECIPES, WEAPON_RECIPES, RECIPE_MISSILE, bindAnims, animName } from './recipes.js'
@@ -67,6 +67,7 @@ export class NodeEditor {
     this.K = KINDS[kind]
     injectCss()
     this.root = el('div', { class: 'me', 'data-kind': kind })
+    trackFocus(this.root)
     this.sheets = new Sheets(S)
     this.name = null
     this.tab = 'behaviour'
@@ -112,7 +113,7 @@ export class NodeEditor {
     this.render()
   }
 
-  say (msg, level = 'ok') { this.S.status(msg, level) }
+  say (msg, level = 'ok') { this.S.status(msg, level); toast(this.root, msg, level) }
 
   makePreview () {
     this.preview?.stop()
@@ -195,7 +196,8 @@ export class NodeEditor {
 
   actCtx () {
     const sounds = [...(this.S.soundsByPack?.() ?? new Map()).values()].flat()
-    return { missile: Object.keys(this.S.module.mobs?.missiles ?? {})[0], sound: sounds.find((n) => n.startsWith(`${this.name}.`)) ?? sounds[0], state: Object.keys(this.nodes)[0] }
+    const mobs = Object.keys(this.S.module.mobs?.mobs ?? {})
+    return { missile: Object.keys(this.S.module.mobs?.missiles ?? {})[0], sound: sounds.find((n) => n.startsWith(`${this.name}.`)) ?? sounds[0], state: Object.keys(this.nodes)[0], mob: mobs.find((n) => n !== this.name) ?? mobs[0] }
   }
 
   // ---- render ----
@@ -208,7 +210,10 @@ export class NodeEditor {
     this.tabWas = this.tab
     this.selWas = this.sel
     const body = this.screen === 'gallery' || !this.thing ? this.gallery() : this.detail()
+    const note = this.root.querySelector(':scope > .me-toast')
     this.root.replaceChildren(...body.filter(Boolean))
+    if (note) this.root.appendChild(note)
+    restoreFocus(this.root)
     const c2 = this.root.querySelector('.me-center')
     const i2 = this.root.querySelector('.me-ins')
     if (c2) c2.scrollTop = this.scroll[`c:${this.tab}`] ?? 0
@@ -385,6 +390,12 @@ export class NodeEditor {
       i.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.createState(i.value); if (e.key === 'Escape') { this.newState = null; this.render() } })
       out.push(el('div', { class: 'me-panel' }, [el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: `New ${this.K.node}, named` }), i,
         el('span', { class: 'me-muted', text: this.sel ? `placed after ${this.sel}` : 'placed at the end' }),
+        (this.thing.phases ?? []).length ? (() => {
+          const s = el('select', { 'aria-label': 'In phase' }, [el('option', { value: '', text: '(no phase)' }), ...this.thing.phases.map((p) => el('option', { value: p.id, text: p.name }))])
+          s.value = this.newPhase ?? this.defaultPhase()
+          s.addEventListener('change', () => { this.newPhase = s.value })
+          return el('label', { class: 'me-muted' }, ['in ', s])
+        })() : null,
         button('Create', () => this.createState(i.value)), el('button', { class: 'me-lnk', text: 'cancel', onclick: () => { this.newState = null; this.render() } })]),
         el('span', { class: 'me-muted', text: `Then give some other ${this.K.node} a rule that goes to it.` })]))
       requestAnimationFrame(() => i.focus())
@@ -425,7 +436,10 @@ export class NodeEditor {
     name.addEventListener('change', () => { p.name = name.value.trim() || p.name; this.changed() })
     const sp = el('input', { type: 'text', inputmode: 'decimal', value: p.speed ?? '', placeholder: String(this.prop?.speed ?? 4), 'aria-label': 'How fast it runs in this phase', style: 'width:56px' })
     sp.addEventListener('change', () => { const v = sp.value.trim() === '' ? undefined : Number(sp.value); if (v === undefined || Number.isFinite(v)) { if (v === undefined) delete p.speed; else p.speed = v; this.changed() } })
-    return el('div', { class: 'me-row me-phh' }, [name, el('span', { class: 'me-muted', text: `${n} state${n === 1 ? '' : 's'}` }),
+    // when it starts: the rule for any state that goes into one of its states
+    const door = (this.thing.any ?? []).find((r) => r.to && this.nodes[r.to]?.phase === p.id)
+    const starts = door ? `starts when ${(door.when ?? []).map((c) => sentence(this.K.conds, c)).join(' and ') || '(no condition yet)'}${door.once ? ', once' : ''}` : (Object.entries(this.nodes).some(([k, st]) => st.phase === p.id && k === this.initial) ? 'where it begins' : 'nothing starts it yet: a rule under "Whatever it is doing"')
+    return el('div', { class: 'me-row me-phh' }, [name, el('span', { class: 'me-muted', text: `${n} state${n === 1 ? '' : 's'} · ${starts}` }),
       el('label', { class: 'me-muted' }, ['runs at ', sp, ' m/s', p.speed === undefined ? ' (its own speed)' : '']), el('span', { class: 'me-grow' }),
       el('button', { class: 'me-lnk', text: 'duplicate', onclick: () => this.duplicatePhase(p.id) }),
       el('button', { class: 'me-lnk danger', text: 'remove', onclick: () => { this.thing.phases = this.thing.phases.filter((q) => q !== p); for (const st of Object.values(this.nodes)) if (st.phase === p.id) delete st.phase; this.changed(); this.say('Removed the phase; its states stay, outside any phase.') } })])
@@ -444,7 +458,7 @@ export class NodeEditor {
       for (const r of st.ends ?? []) b.push(el('span', { text: 'then' }), T(r.to ? r.to : 'choose a state', r.to ? 'to' : 'bad', () => this.select(n, 'ends'), 'action.right'), el('span', { text: `if ${(r.when ?? []).map((c) => sentence(this.K.conds, c)).join(' and ') || '(incomplete)'};` }))
       if ((st.ends ?? []).length) b.push(el('span', { text: 'otherwise' }))
       if (st.next === '@previous') b.push(el('span', { text: 'then goes back to what it was doing' }))
-      else if (st.next === n) b.push(el('span', { text: 'then starts it again' }))
+      else if (st.next === n) b.push(el('span', { text: n === 'death' ? 'and stays dead' : 'then starts it again' }))
       else if (st.next) b.push(el('span', { text: 'then goes on to' }), T(st.next, 'to', () => this.select(n, 'what')))
     } else b.push(el('span', { text: (st.transitions ?? []).length ? 'until a rule below sends it on' : 'and stays here' }))
     if (isMob && !this.react(n) && st.interruptible === false) b.push(el('span', { class: 'me-muted', text: '(never flinches here)' }))
@@ -454,7 +468,8 @@ export class NodeEditor {
       const segs = [T(t.to ? t.to : 'choose a state', t.to ? 'to' : 'bad', () => this.select(n, 'rules'), 'action.right')]
       if (todo) segs.push(el('span', { class: 'me-warn', text: `incomplete: ${!t.to ? 'choose where it goes' : 'add a condition'} (it never fires until then)` }))
       if ((t.when ?? []).length) segs.push(el('span', { text: `when ${t.when.map((c) => sentence(this.K.conds, c)).join(' and ')}` }))
-      return el('div', { class: 'me-rule', 'data-live': live?.state === n && live.rule === i ? '1' : '0', 'data-todo': todo ? '1' : '0' }, segs)
+      // the whole row opens that rule beside the list
+      return el('div', { class: 'me-rule', 'data-live': live?.state === n && live.rule === i ? '1' : '0', 'data-todo': todo ? '1' : '0', role: 'button', tabindex: '0', onclick: (e) => { if (e.target.closest('button')) return; this.select(n, 'rules') } }, segs)
     })
     const unreached = n !== this.initial && !this.react(n) && !this.refsTo(n)
     const steps = (st.sequence ?? []).map((p, i) => ({ p, i })) // in the runtime's order, as the timeline lists them
@@ -501,6 +516,7 @@ export class NodeEditor {
     this.sel = n; this.step = null; this.picking = null; this.pickAct = false
     if (this.phone) this.pvOpen = false
     this.render()
+    requestAnimationFrame(() => this.root.querySelector(`.me-card[data-card="${n}"]`)?.scrollIntoView({ block: 'nearest' }))
     if (jump) requestAnimationFrame(() => this.root.querySelector(`#me-sec-${jump}`)?.scrollIntoView({ block: 'start' }))
   }
 
@@ -508,10 +524,12 @@ export class NodeEditor {
     const name = toName(raw)
     if (!/^[a-z][a-z0-9_]{0,23}$/.test(name)) { this.say(nameProblem(name), 'warn'); return }
     if (this.nodes[name]) { this.say(`There is already a ${this.K.node} called ${name}.`, 'warn'); return }
-    const after = this.sel ? this.nodes[this.sel] : null
-    const fresh = this.kind === 'mob' ? { anim: 0, move: 'stop', face: 'target', interruptible: true } : { anim: 0, ticks: 18, next: this.initial }
-    if (after?.phase && !this.react(this.sel)) fresh.phase = after.phase
-    else if ((this.thing.phases ?? []).length) fresh.phase = this.thing.phases.at(-1).id
+    // a weapon's new state goes back to resting, not to being drawn again
+    const rest = this.kind === 'weapon' ? (this.nodes.ready ? 'ready' : Object.keys(this.nodes).find((k) => k !== this.initial) ?? this.initial) : null
+    const fresh = this.kind === 'mob' ? { anim: 0, move: 'stop', face: 'target', interruptible: true } : { anim: 0, ticks: 18, next: rest }
+    const ph = this.newPhase ?? this.defaultPhase()
+    if (ph) fresh.phase = ph
+    this.newPhase = undefined
     // placed after the one picked: a fresh object in key order
     const entries = Object.entries(this.nodes)
     const at = this.sel ? entries.findIndex(([k]) => k === this.sel) + 1 : entries.length
@@ -523,6 +541,14 @@ export class NodeEditor {
     this.sel = name
     this.changed()
     this.say(`Added ${name}. Nothing goes to it yet: give another ${this.K.node} a rule that goes to ${name}.`)
+  }
+
+  /** The phase a new state goes in, unless said: the picked state's, else the first. */
+  defaultPhase () {
+    const phs = this.thing.phases ?? []
+    if (!phs.length) return ''
+    const after = this.sel ? this.nodes[this.sel] : null
+    return after?.phase && !this.react(this.sel) ? after.phase : phs[0].id
   }
 
   renameState (from, raw) {
@@ -602,8 +628,7 @@ export class NodeEditor {
     // entered once its health drops: half of the last phase change's threshold, and below where it is now
     b.any ??= []
     const hps = b.any.map((r) => (r.when ?? []).find((c) => c.cond === 'hp_below')).filter(Boolean).map((c) => Number(c.percent))
-    const now = this.preview ? Math.floor(this.preview.sim.hp * 100 / Math.max(1, this.preview.sim.maxHp)) : 100
-    const thr = Math.max(5, Math.min(Math.round(Math.min(100, ...hps) / 2), now - 10))
+    const thr = hps.length ? Math.max(5, Math.round(Math.min(...hps) / 2)) : 50
     const door = members.find(([, st]) => st.move === 'chase')?.[0] ?? members[0]?.[0]
     if (door) b.any.push({ to: map[door], when: [{ cond: 'hp_below', percent: thr }], once: true })
     this.changed()
@@ -660,7 +685,7 @@ export class NodeEditor {
       ...(this.pvOpen && p ? [p.stage, p.evEl, p.controls(), p.nowEl, p.varsEl] : [])
     ])
     side.append(pv)
-    if (p && this.pvOpen) requestAnimationFrame(() => p.draw())
+    if (p && this.pvOpen) { p.wake(); requestAnimationFrame(() => p.draw()) }
     const ins = el('div', { class: 'me-ins' }, sel ? this.inspector(sel) : [el('span', { class: 'me-muted', text: `Tap a ${this.K.node} to edit it here. The preview runs the real rules.` })])
     side.append(ins)
     if (sel && this.phone && (this.step !== null || this.pickAct)) side.append(this.stepSheet(sel))
@@ -785,7 +810,7 @@ export class NodeEditor {
             (() => { const i = el('input', { value: b.label ?? '', 'aria-label': 'Name' }); i.addEventListener('change', () => { b.label = i.value; set() }); return el('div', { class: 'me-frow' }, [el('label', { text: 'Name' }), i]) })(),
             numField('Slot', b.order, '', (v) => { b.order = Math.max(1, Math.round(v ?? 1)); set() }, { hint: 'the key that selects it' }),
             selectField('Ammo', b.ammo ?? '', [['', 'never runs out'], ...Object.keys(W.ammo ?? {}).map((k) => [k, W.ammo[k].label ?? k])], (v) => { if (v) b.ammo = v; else { delete b.ammo; delete b.per } set() }, 'the pools are on Arsenal'),
-            b.ammo ? numField('Uses a shot', b.per ?? 1, '', (v) => { b.per = Math.max(0, Math.round(v ?? 1)); set() }, { hint: '"it has at least N ammo" defaults to this' }) : null].filter(Boolean))])]
+            b.ammo ? numField('A shot counts as', b.per ?? 1, 'ammo', (v) => { b.per = Math.max(0, Math.round(v ?? 1)); set() }, { hint: `what "it has ammo" asks for when it names no number. What a shot spends is its "use N ammo" steps${this.spends() ? `: ${this.spends()}` : ''}.` }) : null].filter(Boolean))])]
     }
     const prop = this.prop
     const pct = Math.round((Number(b.pain_chance ?? 0) / 256) * 100)
@@ -796,7 +821,7 @@ export class NodeEditor {
           numField('Health', b.hp, '', (v) => { b.hp = Math.max(1, Math.round(v ?? 1)); set() }, { lo: 1, hi: 100000, say }),
           numField('Flinches', pct, '% of hits', (v) => { b.pain_chance = Math.max(0, Math.min(256, Math.round((v ?? 0) * 2.56))); set() }, { hint: 'how often a hit makes it flinch (its pain state)', lo: 0, hi: 100, say })]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Speed and senses' }),
-          prop ? numField('Runs at', Number(prop.speed ?? 4), 'm/s', (v) => { prop.speed = fxOf(v ?? 4); set() }, { hint: 'how fast it runs at you or backs away. A husk: 4, a hound: 9. A phase can be faster.', lo: 0.5, hi: 40, say }) : null,
+          prop ? numField('Runs at', Number(prop.speed ?? 4), 'm/s', (v) => { prop.speed = fxOf(v ?? 4); set() }, { hint: 'how fast it runs at you or backs away: 4 is a walk, 9 a sprint. A phase can be faster.', lo: 0.5, hi: 40, say }) : null,
           numField('Sees', fxNum(b.sight) ?? '', 'm', (v) => { if (v === null) delete b.sight; else b.sight = fxOf(v); set() }, { placeholder: 'engine default' }),
           numField('Turn speed', b.turn_speed ?? '', '', (v) => { if (v === null) delete b.turn_speed; else b.turn_speed = Math.round(v); set() }, { hint: 'higher turns to face you faster', placeholder: 'engine default' }),
           checkField('Flies', !!b.flying, (v) => { if (v) b.flying = true; else delete b.flying; set() }),
@@ -808,10 +833,15 @@ export class NodeEditor {
     ]
   }
 
+  /** What its "use N ammo" steps spend, by state. */
+  spends () {
+    return Object.entries(this.nodes).flatMap(([n, st]) => (st.sequence ?? []).filter((p) => p.action === 'consume').map((p) => `${p.n ?? 1} in ${n}`)).join(', ')
+  }
+
   summary () {
     const b = this.thing
     const atk = Object.entries(this.nodes).flatMap(([n, st]) => (st.sequence ?? []).filter((p) => (this.K.acts[p.action]?.g === 'Attack' && p.action !== 'telegraph') || p.action === 'spawn').map((p) => `In ${n}: ${sentence(this.K.acts, p)}.`))
-    if (this.kind === 'weapon') return `${b.label ?? this.name}: ${atk.length ? atk.slice(0, 3).join(' ') : 'nothing fires yet: give a state a step.'} Ammo: ${b.ammo ? `${b.per ?? 1} ${b.ammo} a shot` : 'never runs out'}.`
+    if (this.kind === 'weapon') return `${b.label ?? this.name}: ${atk.length ? atk.slice(0, 3).join(' ') : 'nothing fires yet: give a state a step.'} Ammo: ${b.ammo ? (this.spends() ? `${b.ammo}, ${this.spends()}` : `${b.ammo}, but no step uses any`) : 'never runs out'}.`
     return `${b.hp ?? '?'} health, runs at ${Number(this.prop?.speed ?? 4)} m/s, sees ${fxNum(b.sight) ?? 'as far as the engine lets it'} m.${atk.length ? ' ' + atk.slice(0, 3).join(' ') : ' No attack yet: add a step to a state.'}${b.flying ? ' It flies.' : ''}`
   }
 
@@ -871,7 +901,18 @@ export class NodeEditor {
           el('div', { class: 'me-row' }, [el('label', { class: 'me-muted', text: 'sprite' }),
             (() => { const s = el('select', { 'aria-label': 'Its sprite' }, [el('option', { value: '', text: '(none)' }), ...sheets.map((x) => el('option', { value: x, text: x }))]); s.value = sheet ?? ''; s.addEventListener('change', () => { prop.art.sheet = s.value; prop.art.states = s.value ? guessStates(this.sheets.animations(s.value)) : {}; prop.height = S.module.sprites?.[s.value]?.worldHeight ?? prop.height; L.anim = null; this.changed() }); return s })(),
             button('Import a sprite…', async () => { const n = await S.importSheet?.(); if (n) { prop.art.sheet = n; prop.art.states = guessStates(this.sheets.animations(n)); this.changed() } }),
-            S.editInPlugin && sheet ? button('Edit in ThreeSprite', () => S.editInPlugin('file:tsprite', sheet)) : null]),
+            S.editInPlugin && sheet && S.rec?.assets?.[`sources/sprites/${sheet}.tsprite`] ? button('Edit in ThreeSprite', () => S.editInPlugin('file:tsprite', sheet)) : null,
+            // A sheet with no project (imported as pictures) cannot be opened as one: drawing "it" would start a
+            // blank project under its name, and saving would replace the art every monster drawn with it uses.
+            S.editInPlugin && !(sheet && S.rec?.assets?.[`sources/sprites/${sheet}.tsprite`]) ? button('Draw a sprite of its own…', async () => {
+              const raw = await ask('the new sprite\'s name (capitals and digits)', this.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'SPRITE')
+              const nm = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '')
+              if (!nm) return
+              if (S.module.sprites?.[nm] || S.rec?.assets?.[`sources/sprites/${nm}.tsprite`]) { this.say(`${nm} is taken: pick another name.`, 'warn'); return }
+              prop.art = { kind: 'atlas', sheet: nm, states: { 0: 'idle', 1: 'walk', 2: 'attack', 3: 'pain', 4: 'death' } }
+              this.changed()
+              S.editInPlugin('file:tsprite', nm)
+            }) : null]),
           el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: 'animation' }), ...anims.map((a) => el('button', { class: 'me-vbtn', 'data-on': (L.anim ?? anims[0]) === a ? '1' : '0', text: a, onclick: () => { L.anim = a; L.t0 = performance.now(); L.play = true; this.render() } }))]),
           el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: 'side' }), ...sideNames.map((x, i) => el('button', { class: 'me-vbtn', 'data-on': Math.round(L.facing * 8) % 8 === i ? '1' : '0', text: x, onclick: () => { L.facing = i / 8; this.render() } }))]),
           el('div', { class: 'me-row' }, [button(L.play ? 'Pause' : 'Play', () => { L.play = !L.play; L.t0 = performance.now(); this.render() })])]),
@@ -926,7 +967,11 @@ export class NodeEditor {
           el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its swing, in every state' }), ...this.swingSection(this.thing, 'This weapon'), ...slashRows(this.S, 'weapon', this.name, changed)])]
     return [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its numbers' }),
       el('span', { class: 'me-muted', text: 'Numbers it remembers, like which phase it is in or a cooldown. One exists as soon as a step sets it or a rule checks it: add a "set the number" step to make one.' }),
-      ...(names.length ? names.map((v) => el('div', { class: 'me-frow inline' }, [el('span', { class: 'me-mono', text: v }), el('span', { class: 'me-muted', text: [...vars[v]].join('; ') })])) : [el('span', { class: 'me-muted', text: 'none yet' })])]), ...more.filter(Boolean)]
+      ...(names.length ? names.map((v) => {
+        const start = el('input', { type: 'text', inputmode: 'numeric', value: String(this.thing.vars?.[v] ?? 0), 'aria-label': `${v} starts at`, style: 'width:56px' })
+        start.addEventListener('change', () => { const n = Math.round(Number(start.value)); if (Number.isFinite(n)) { (this.thing.vars ??= {})[v] = n; this.changed() } })
+        return el('div', { class: 'me-frow inline' }, [el('span', { class: 'me-mono', text: v }), el('span', { class: 'me-muted', text: [...vars[v]].filter((t) => !/^starts at/.test(t)).join('; ') }), el('label', { class: 'me-muted' }, ['starts at ', start])])
+      }) : [el('span', { class: 'me-muted', text: 'none yet' })])]), ...more.filter(Boolean)]
   }
 }
 

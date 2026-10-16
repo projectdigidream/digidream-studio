@@ -9,7 +9,7 @@ import { el, button, confirmDialog } from '../ui.js'
 import { MISSILE_ACTIONS, groupsWithMore, unphrased, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
 import { flight } from '../missileflight.js'
 import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
-import { injectCss, sentenceEl, chooser, numField, selectField } from './common.js'
+import { injectCss, sentenceEl, chooser, numField, selectField, toast, trackFocus, restoreFocus } from './common.js'
 import { vfxDef } from './preview.js'
 
 const SVG = 'http://www.w3.org/2000/svg'
@@ -38,6 +38,7 @@ export class MissileEditor {
     injectCss()
     if (!document.querySelector('style[data-mi]')) document.head.appendChild(el('style', { 'data-mi': '1', text: CSS }))
     this.root = el('div', { class: 'me', 'data-kind': 'missile' })
+    trackFocus(this.root)
     this.name = null
     this.dist = 8
     this.fromPlayer = false
@@ -60,7 +61,7 @@ export class MissileEditor {
   }
   close () { this.root.hidden = true; cancelAnimationFrame(this.raf) }
   changed () { this.S.moduleChanged(); this.render() }
-  say (m, l = 'ok') { this.S.status(m, l) }
+  say (m, l = 'ok') { this.S.status(m, l); toast(this.root, m, l) }
 
   /** Who fires it: monster states, weapon states, other missiles. */
   users (name) {
@@ -100,7 +101,14 @@ export class MissileEditor {
     }))
     if (!names.length) list.append(el('span', { class: 'me-muted', text: 'No missiles yet: name one above and press New.' }))
     const main = el('div', { class: 'mi-main' }, this.m ? this.mainPanels() : [])
-    this.root.replaceChildren(top, el('div', { class: 'mi-body' }, [list, main]))
+    // an edit redraws the page; where it was scrolled to stays, or the next tap lands elsewhere
+    const was = this.root.querySelector('.mi-body')?.scrollTop ?? 0
+    const body = el('div', { class: 'mi-body' }, [list, main])
+    const note = this.root.querySelector(':scope > .me-toast')
+    this.root.replaceChildren(top, body)
+    if (note) this.root.appendChild(note)
+    body.scrollTop = was
+    restoreFocus(this.root)
   }
 
   mainPanels () {
@@ -119,7 +127,7 @@ export class MissileEditor {
     if (F.end === 'up') checks.push('It climbs out of reach.')
     if (F.end === 'over') checks.push(`It passes over the target at ${F.endZ.toFixed(1)} m.`)
     if (F.end === 'expired') checks.push(`It runs out after ${F.endX.toFixed(1)} m, before the target at ${this.dist} m: make it last longer, or fly faster.`)
-    if (blast?.hurts_owner && fxNum(blast.radius) >= this.dist) checks.push(`The blast (${fxNum(blast.radius)} m) reaches its shooter ${this.dist} m away: it hurts itself.`)
+    if (blast && fxNum(blast.radius) >= this.dist) checks.push(blast.hurts_owner ? `The blast (${fxNum(blast.radius)} m) reaches its shooter ${this.dist} m away: it hurts itself.` : `The blast (${fxNum(blast.radius)} m) reaches back to its shooter ${this.dist} m away; the shooter is safe only because it does not hurt the one who fired it, but anything beside the shooter is hit.`)
     if (!used.length) checks.push('Nothing fires it yet: give a monster\'s state a "fire the missile" step, or a weapon\'s a "launch the missile".')
     const info = F.end === 'hit' ? `${this.fromPlayer ? 'fired level' : g(m) ? 'thrown to land on the target\'s middle' : 'aimed at the target\'s middle'} · reaches ${this.dist} m in ${F.T.toFixed(2)} s (${F.ticks} ticks)${g(m) ? ` · peaks ${F.peak.toFixed(1)} m up` : ''}`
       : `${F.end === 'floor' ? 'lands' : F.end} at ${F.endX.toFixed(1)} m after ${F.T.toFixed(2)} s`
@@ -138,7 +146,7 @@ export class MissileEditor {
       numField('Speed', fxNum(m.speed) ?? '', 'm/s', (v) => { m.speed = fxOf(v ?? 1); set() }, { hint: m.throw ? 'its launch speed: the angle is solved to land' : 'how fast it flies along the ground', lo: 0.1, hi: 200, say }),
       numField('Falls', fxNum(m.gravity) ?? '', 'm/s²', (v) => { if (!v) delete m.gravity; else m.gravity = fxOf(v); set() }, { hint: 'empty or 0: flies straight. A monster throws a falling missile on the arc that lands on you.', placeholder: 'flies straight' }),
       fxNum(m.gravity) ? selectField('Thrown', m.throw ?? '', [['', 'at its speed, on the one arc that lands'], ['low', 'low: the flat angle at a launch speed'], ['high', 'high: the lob']], (v) => { if (v) m.throw = v; else delete m.throw; set() }) : null,
-      numField('Homing', m.homing ? Math.round(Number(m.homing) * 60) : '', '°/s', (v) => { if (!v) delete m.homing; else m.homing = Math.max(1, Math.round(v / 60)); set() }, { hint: `0 flies on; more turns after the target${m.homing ? ` (${m.homing}° a tick)` : ''}. A player's homes on what their auto-aim picks.`, placeholder: 'none' }),
+      numField('Homing', m.homing ? Math.round(Number(m.homing) * 60) : '', '°/s', (v) => { if (!v) { delete m.homing; set(); return } const k = Math.max(1, Math.round(v / 60)); if (k * 60 !== v) this.say(`The engine turns a missile by whole degrees a tick, 60 a second: ${v}°/s is kept as ${k * 60}°/s.`, 'warn'); m.homing = k; set() }, { hint: `0 flies on; more turns after the target${m.homing ? ` (${m.homing}° a tick)` : ''}. A player's homes on what their auto-aim picks.`, placeholder: 'none' }),
       m.homing ? numField('Homing starts after', m.homing_after ? secs(m.homing_after) : '', 's', (v) => { if (!v) delete m.homing_after; else m.homing_after = ticksOf(v); set() }, { placeholder: 'at once' }) : null,
       m.homing ? numField('Gives up beyond', m.homing_cone ?? '', '°', (v) => { if (!v) delete m.homing_cone; else m.homing_cone = Math.round(v); set() }, { hint: 'a target further off its heading than this is not chased', placeholder: 'never' }) : null,
       numField('Lasts', m.life === undefined ? '' : secs(m.life), 's', (v) => { if (v === null) delete m.life; else m.life = ticksOf(v); set() }, { hint: m.life !== undefined ? `${m.life} ticks; then "when it runs out" happens` : 'for ever', placeholder: 'for ever' }),
@@ -154,7 +162,7 @@ export class MissileEditor {
         onclick: () => { m.on_hit ??= []; const i = m.on_hit.findIndex((p) => p.action === 'vfx' && Number(p.kind) === Number(id)); if (i >= 0) m.on_hit.splice(i, 1); else m.on_hit.push({ action: 'vfx', kind: Number(id), at: 'impact' }); set() } })
     })])
     const looks = [
-      selectField('Drawn as', m.prop ?? '', [['', '(nothing: an unseen shot)'], ...(S.propNames?.() ?? []).map((p) => [p, p])], (v) => { if (v) m.prop = v; else delete m.prop; set() }, 'a prop of the module (Props), drawn with its own sprite and scale'),
+      this.drawnAs(m, set),
       numField('While flying, plays state', m.anim_fly ?? '', '', (v) => { if (v === null) delete m.anim_fly; else m.anim_fly = Math.round(v); set() }, { placeholder: "the prop's" }),
       numField('When it bursts, plays state', m.anim_burst ?? '', '', (v) => { if (v === null) delete m.anim_burst; else m.anim_burst = Math.round(v); set() }, { placeholder: 'none' }),
       numField('Burst lasts', m.burst_ticks ? secs(m.burst_ticks) : '', 's', (v) => { if (!v) delete m.burst_ticks; else m.burst_ticks = ticksOf(v); set() }, { placeholder: 'none' })
@@ -175,6 +183,19 @@ export class MissileEditor {
             delete this.all[this.name]; this.name = Object.keys(this.all)[0] ?? null; this.changed()
           } })])])
       ].filter(Boolean))]
+  }
+
+  /** What it is drawn as: the module's own props first, then the ones the engine serves. */
+  drawnAs (m, set) {
+    const S = this.S
+    const own = (S.module.props ?? []).map((p) => p.name)
+    const served = (S.propNames?.() ?? []).filter((n) => !own.includes(n))
+    const s = el('select', { 'aria-label': 'Drawn as' }, [el('option', { value: '', text: '(nothing: an unseen shot)' }),
+      own.length ? el('optgroup', { label: 'this module\'s' }, own.map((n) => el('option', { value: n, text: n }))) : null,
+      served.length ? el('optgroup', { label: 'served with the engine' }, served.map((n) => el('option', { value: n, text: n }))) : null].filter(Boolean))
+    s.value = m.prop ?? ''
+    s.addEventListener('change', () => { if (s.value) m.prop = s.value; else delete m.prop; set() })
+    return el('div', { class: 'me-frow' }, [el('label', { text: 'Drawn as' }), s, el('span', { class: 'me-muted', text: 'a prop, drawn with its own sprite and scale' })])
   }
 
   /** One of its action lists, each a sentence with its fields. */
@@ -206,8 +227,10 @@ export class MissileEditor {
   picture (F) {
     const s = document.createElementNS(SVG, 'svg')
     s.setAttribute('class', 'mi-svg'); s.setAttribute('viewBox', '0 0 640 220'); s.setAttribute('role', 'img'); s.setAttribute('aria-label', 'Its flight, seen from the side')
-    const Wm = Math.max(this.dist, F.endX) * 1.15 + 2
+    const blastR = fxNum((this.m.on_hit ?? []).find((p) => p.action === 'damage_area')?.radius) ?? 0
+    const Wm = Math.max(this.dist, F.endX + blastR) * 1.15 + 2
     const sx = 600 / Wm
+    this.sx = sx
     const sy = Math.min(sx, 150 / (Math.max(...F.pts.map((p) => p[1]), 2.2) + 0.5))
     this.px = (x) => 20 + x * sx
     this.py = (z) => 190 - z * sy
@@ -234,12 +257,15 @@ export class MissileEditor {
       const F = this.F
       if (this.shot && F && this.dot?.isConnected) {
         const t = (now - this.shot.t0) / 1000
-        const i = Math.min(F.pts.length - 1, Math.floor(t * 60))
+        // a frame's time can be a moment before the click that fired: never before the launch
+        const i = Math.max(0, Math.min(F.pts.length - 1, Math.floor(t * 60)))
         if (t < F.T) { this.dot.setAttribute('visibility', 'visible'); this.dot.setAttribute('cx', this.px(F.pts[i][0])); this.dot.setAttribute('cy', this.py(F.pts[i][1])) } else {
           this.dot.setAttribute('visibility', 'hidden')
           if (!this.shot.burst) {
             this.shot.burst = true
-            for (const p of this.m?.on_hit ?? []) if (p.action === 'vfx') { const def = vfxDef(this.S, p.kind); if (def?.type === 'particles') this.parts.push({ def, list: emitBurst(def, { x: 0, y: 0.5, z: 0 }, 0.5, 0.3) }) }
+            // filling its blast: an 8 m blast bursts eight metres wide, as the engine sends the radius with the effect
+            const r = fxNum((this.m?.on_hit ?? []).find((p) => p.action === 'damage_area')?.radius) ?? 0.3
+            for (const p of this.m?.on_hit ?? []) if (p.action === 'vfx') { const def = vfxDef(this.S, p.kind); if (def?.type === 'particles') this.parts.push({ def, list: emitBurst(def, { x: 0, y: 0.5, z: 0 }, 0.5, r) }) }
           }
           if (!this.parts.length && t > F.T + 0.5) this.shot = null
         }
@@ -253,7 +279,7 @@ export class MissileEditor {
           const c = rampColour(b.def.colour, b.def.colourEnd ?? b.def.colour, k)
           const e = document.createElementNS(SVG, 'circle')
           e.setAttribute('cx', this.px(F.endX + p.x)); e.setAttribute('cy', this.py(F.endZ + p.y))
-          e.setAttribute('r', Math.max(1, ((b.def.size ?? 0.1) + ((b.def.sizeEnd ?? 0) - (b.def.size ?? 0.1)) * k) * 20))
+          e.setAttribute('r', Math.max(1, ((b.def.size ?? 0.1) + ((b.def.sizeEnd ?? 0) - (b.def.size ?? 0.1)) * k) * this.sx * 0.5))
           e.setAttribute('style', `fill:rgb(${Math.round(c.r * 255)} ${Math.round(c.g * 255)} ${Math.round(c.b * 255)});opacity:${b.def.blend === 'alpha' ? 0.9 * (1 - k) : 1}`) // content: the module's particle colour
           this.partsG.appendChild(e)
         }

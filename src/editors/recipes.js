@@ -56,7 +56,7 @@ export const MOB_RECIPES = {
               sequence: [P(0, 'impulse', { speed: 14, towards: 'target' }), P(0.3, 'melee', { damage: 20, range: '1.8', knockback: 8 }), P(0.3, 'set_cooldown', { var: 'rush_cd', ticks: S(3) })] },
       pain: pain(0.25), death: death() } }) },
   boss: { label: 'Boss (3 phases)', note: 'three phases at 66% and 33%, summons and a leap', hp: 900, speed: 4, missile: true,
-    brain: (m, kin) => ({ initial: 'idle', pain_chance: 26, vars: { phase: 0, slam_cd: 0, shot_cd: 0, leap_cd: 0, adds_cd: 0 },
+    brain: (m, kin) => ({ initial: 'idle', pain_chance: 26, vars: { phase: 1, slam_cd: 0, shot_cd: 0, leap_cd: 0, adds_cd: 0 },
       phases: [{ id: 'p1', name: 'Phase 1: slam and shells' }, { id: 'p2', name: 'Phase 2: the roar', speed: 5 }, { id: 'p3', name: 'Phase 3: frenzy', speed: 6.5 }],
       any: [{ to: 'roar', when: [{ cond: 'hp_below', percent: 66 }], once: true }, { to: 'enrage', when: [{ cond: 'hp_below', percent: 33 }], once: true }],
       states: {

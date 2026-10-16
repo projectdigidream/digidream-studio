@@ -60,6 +60,7 @@ export class BrainSim {
     this.releasedAt = -1
     this.heldFrom = -1
     this.hurtAt = -1e9
+    this.behind = false
     this.dead = false
     this.prev = null
     this.adds = {}
@@ -190,7 +191,7 @@ export class BrainSim {
         said(`fires ${name}`); break
       }
       case 'consume': if (this.ammo !== null) this.ammo = Math.max(0, this.ammo - Number(a.n ?? 1)); break
-      case 'teleport': { const d = num(a.distance, 3); this.dist = a.to === 'near' ? Math.max(num(a.min, 1), d * 0.75) : d; said(`teleports ${a.to ?? 'behind'} the target`); break }
+      case 'teleport': { const d = num(a.distance, 3); this.dist = a.to === 'near' ? Math.max(num(a.min, 1), d * 0.75) : d; this.behind = (a.to ?? 'behind') === 'behind' ? !this.behind : Math.random() < 0.5; this.teleported = this.tick; said(`teleports ${a.to ?? 'behind'} the target`); break }
       case 'impulse': if (this.kind === 'mob' && (a.towards ?? 'target') === 'target') this.dist = Math.max(1.2, this.dist - num(a.speed) * 0.25); break
       case 'melee': if (this.kind === 'mob' && this.dist <= num(a.range) + 0.05) { said(`hits for ${a.damage}`); if (a.knockback) this.dist = Math.min(30, this.dist + num(a.knockback) * 0.25) } else said(`swings and misses (${Math.round(this.dist * 10) / 10} m)`); break
       case 'goto': { const to = a.state ?? a.phase; if (this.nodes[to]) { this.why = `goes to ${to}: a "leave now" step`; this.enter(to) } break }
@@ -210,7 +211,8 @@ export class BrainSim {
     const target = this.seen
     switch (c.cond) {
       // both kinds
-      case 'chance': return false
+      // a roll, as the engine's dnp.random is one: the preview is not a replay
+      case 'chance': return Math.random() * 100 < Number(c.percent ?? 0)
       case 'var_at_least': return Number(this.vars[c.var] ?? 0) >= Number(c.value ?? 0)
       case 'var_is': return Number(this.vars[c.var] ?? 0) === Number(c.value ?? 0)
       case 'cooldown_ready': return (this.cools[c.var] ?? 0) <= 0

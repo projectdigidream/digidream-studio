@@ -247,6 +247,7 @@ function defaultOf (part, ctx = {}) {
   if (k === 'missile' && ctx.missile) return ctx.missile
   if (k === 'sound' && ctx.sound) return ctx.sound
   if (k === 'state' && ctx.state) return ctx.state
+  if (k === 'mob' && ctx.mob) return ctx.mob
   if (k === 'n') return part[3]
   if (k === 'enum') return part[3]
   if (k === 'bool') return part[3]

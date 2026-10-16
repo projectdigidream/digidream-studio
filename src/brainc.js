@@ -125,8 +125,26 @@ export function compileMob (brain, body = null) {
   for (const k of BRAIN_KEYS) delete b[k]
   const { nodes, onceVars } = compileNodes(brain.states, { kind: 'mob', any: brain.any, phases: brain.phases, baseSpeed: body?.speed ?? 4 })
   b.states = nodes
-  if (onceVars.length) { b.vars = { ...(b.vars ?? {}) }; for (const v of onceVars) b.vars[v] ??= 0 }
+  declare(b, nodes, onceVars)
   return b
+}
+
+/**
+ * Every number a brain names, declared (starting at 0) unless it is already:
+ * the runtime refuses a `var` it was not told about, and the editor lets a
+ * cooldown or a number be named on the spot, where it is used. A var the
+ * module declares keeps its own starting value.
+ */
+function declare (b, nodes, extra = []) {
+  const named = new Set(extra)
+  const look = (o) => { if (o && typeof o.var === 'string' && o.var) named.add(o.var) }
+  for (const n of Object.values(nodes ?? {})) {
+    for (const t of n.transitions ?? []) for (const c of t.when ?? []) look(c)
+    for (const a of n.sequence ?? []) look(a)
+  }
+  if (!named.size) return
+  b.vars = { ...(b.vars ?? {}) }
+  for (const v of named) b.vars[v] ??= 0
 }
 
 /** A weapon as weapons.load{} takes it. */
@@ -137,7 +155,7 @@ export function compileWeapon (weapon) {
   for (const k of ['any', 'recipe']) delete w[k]
   const { nodes, onceVars } = compileNodes(weapon.phases, { kind: 'weapon', any: weapon.any })
   w.phases = nodes
-  if (onceVars.length) { w.vars = { ...(w.vars ?? {}) }; for (const v of onceVars) w.vars[v] ??= 0 }
+  declare(w, nodes, onceVars)
   return w
 }
 

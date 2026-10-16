@@ -7,6 +7,55 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **Fixes from the first testers of the new editors** (four of them, two on a
+  phone):
+  - **Play in a browser said nothing** on Home and the rail: its message went
+    to the status strip, which a page hides. It asks in a dialog now, and
+    offers to export a pack.
+  - **The editors' messages were never seen** ("Type a name first" when a
+    recipe was picked with no name) for the same reason. They show on the page.
+  - **A monster made from Blank could not use a cooldown**: the number had to
+    be declared, and nothing could declare it. Every number a brain names is
+    declared now, and Advanced sets where each one starts.
+  - **"A % chance" never held in the preview.** It is a roll.
+  - **The preview stopped** when its panel was hidden and shown again,
+    showing "running".
+  - **The Missiles page jumped to the top after every edit**, so the next tap
+    landed elsewhere.
+  - **Fire on the Missiles page threw** when a frame came a moment before the
+    click.
+  - **An edit made straight into the next field was lost**: the page was
+    redrawn under it. The focus goes where it was going.
+  - **"Edit in ThreeSprite" on a sheet with no project** opened a blank
+    sprite under that sheet's name, and saving would have replaced its art.
+    It offers to draw a new sprite of the monster's own.
+  - **A weapon's ammo was said twice.** Overview's figure is what "it has ammo"
+    asks for; what a shot spends is its "use N ammo" steps, and the summary
+    reads those.
+- **The preview says more of what it does**:
+  - an end branch it will take ("on to frenzy, a branch as it ends");
+  - cooldowns as cooldowns ("cooldown ready: 2.5 s left"), not also as
+    numbers;
+  - a teleport, shown on the other side of the target;
+  - a health slider that follows the hits;
+  - buttons that stay put, in rows (run, the target, its health).
+- **The Missiles page**:
+  - a blast bursts as wide as it is;
+  - the picture is wide enough to show it;
+  - a blast that reaches back to its shooter is said;
+  - "Drawn as" lists the module's props before the engine's;
+  - an unwhole homing rate says what it is kept as.
+- **Smaller fixes**:
+  - a new phase says when it starts, and its threshold no longer depends on
+    the preview's health;
+  - a new state's phase is chosen;
+  - a new weapon state goes back to resting, not to the draw;
+  - a summon starts on one of the module's monsters;
+  - death "stays dead";
+  - yes/no parts are checkboxes;
+  - a rule on a card opens it;
+  - a rule leaning on other monsters says the preview has none.
+
 - **0.3.4.1 and 0.3.4.2 on Windows, Linux and macOS were studio 0.3.4**: the
   desktop builds took the studio's pages from the engine kit they were built
   on (the packager's build_studio.mjs). They now come from the studio, and a

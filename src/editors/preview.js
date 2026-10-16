@@ -77,7 +77,7 @@ export class Preview {
     this.canvas = el('canvas', { class: 'me-stage', width: 380, height: 150, 'aria-label': this.kind === 'mob' ? 'The monster, as the game draws it' : 'The weapon, held' })
     this.nowEl = el('span', { class: 'me-now' })
     this.varsEl = el('span', { class: 'me-vars' })
-    this.evEl = el('span', { class: 'me-muted' })
+    this.evEl = el('span', { class: 'me-muted me-ev' })
     this.stateEl = el('span', { class: 'me-mono me-muted' })
     // A weapon is seen as it is held: its first-person view model playing the
     // state's picture (viewform.js), with shots and sparks drawn over it.
@@ -110,6 +110,8 @@ export class Preview {
 
   start () { this.running = true; this.last = performance.now(); this.loop() }
   pause () { this.running = false }
+  /** Shown again (its panel reopened): a run that was going on goes on. */
+  wake () { if (!this.stopped && !this.raf) { this.last = performance.now(); this.loop() } }
   /** For good: the editor closed, or made another. */
   stop () { this.running = false; this.stopped = true; cancelAnimationFrame(this.raf); this.raf = 0; this.vp && (this.vp.view = null) }
   toggle () { if (this.running) this.pause(); else this.start() }
@@ -189,12 +191,17 @@ export class Preview {
     useText(ctx, skin.canvas('common', 'text'))
     ctx.textAlign = 'left'
     ctx.fillText(`${s.state} · ${this.host.animOf(s.state) ?? ''}`, 6, 14)
-    const selfX = w * 0.15
-    const tgtX = w * (0.3 + Math.min(20, s.dist) / 20 * 0.62)
+    // left to right: it, then the target; behind the target (a teleport) the other way round
+    const gap = (0.15 + Math.min(20, s.dist) / 20 * 0.62) * w
+    const selfX = s.behind ? w * 0.85 : w * 0.15
+    const tgtX = s.behind ? selfX - gap : selfX + gap
     const px = this.kind === 'mob' ? Math.min(60, (floor - 22) / Math.max(1.2, this.host.sheets.height(sub.prop?.art?.sheet) * Number(sub.prop?.scale ?? 1) * 1.1)) : 40
     if (this.kind === 'mob') {
       const hover = sub.flying ? Math.min(30, Number(sub.hover ?? 2) * px * 0.4) : 0
-      const drew = this.host.sheets.draw(ctx, sub.prop?.art?.sheet, this.host.animOf(s.state), s.elapsed / TPS, 0, selfX, floor - hover, px, Number(sub.prop?.scale ?? 1))
+      // a teleport is seen: a blink of the picture where it lands
+      if (s.teleported && s.tick - s.teleported < 12) ctx.globalAlpha = (s.tick - s.teleported) / 12
+      const drew = this.host.sheets.draw(ctx, sub.prop?.art?.sheet, this.host.animOf(s.state), s.elapsed / TPS, s.behind ? 0.5 : 0, selfX, floor - hover, px, Number(sub.prop?.scale ?? 1))
+      ctx.globalAlpha = 1
       if (!drew) { ctx.fillText('no picture: pick a sprite on Looks', selfX - 20, floor - 30) }
       // what it summoned, drawn small beside it
       let i = 0
@@ -241,8 +248,16 @@ export class Preview {
     ctx.globalAlpha = 1
     this.nowEl.textContent = this.why()
     this.stateEl.textContent = s.state ?? ''
-    const vars = Object.entries(s.vars).filter(([k]) => !k.startsWith('__')).map(([k, v]) => `${k} = ${v}`)
-    const cools = Object.entries(s.cools).filter(([, v]) => v > 0).map(([k, v]) => `${k} cooling ${secs(v)} s`)
+    if (this.hpEl && document.activeElement !== this.hpEl) this.hpEl.value = String(Math.max(0, Math.round(s.hp * 100 / Math.max(1, s.maxHp))))
+    // a cooldown is said as one, not also as a number
+    // the brain's cooldowns: the vars a set_cooldown or a cooldown_ready names
+    const coolNames = new Set(Object.keys(s.cools))
+    for (const st of Object.values(s.nodes)) {
+      for (const a of st.sequence ?? []) if (a.action === 'set_cooldown' && a.var) coolNames.add(a.var)
+      for (const t of st.transitions ?? []) for (const c of t.when ?? []) if (c.cond === 'cooldown_ready' && c.var) coolNames.add(c.var)
+    }
+    const vars = Object.entries(s.vars).filter(([k]) => !k.startsWith('__') && !coolNames.has(k)).map(([k, v]) => `${k} = ${v}`)
+    const cools = [...coolNames].map((k) => ((s.cools[k] ?? 0) > 0 ? `cooldown ${k}: ${secs(s.cools[k])} s left` : `cooldown ${k}: over`))
     const ammo = this.kind === 'weapon' ? [s.ammo === null ? 'ammo: never runs out' : `ammo: ${s.ammo} (Reset refills 50)`] : []
     this.varsEl.textContent = [...ammo, ...vars, ...cools].join(' · ') || 'numbers: none set, no cooldown running'
     if (this.evAt && performance.now() - this.evAt > 2200) { this.evEl.textContent = ''; this.evAt = 0 }
@@ -256,21 +271,28 @@ export class Preview {
     const lead = this.running ? `Now in ${s.state}` : `In ${s.state}`
     const i = (st.transitions ?? []).findIndex((t) => s.holdsAll(t.when))
     if (i >= 0) return `${lead}: goes to ${st.transitions[i].to} (rule ${i + 1}).`
+    // an end branch (a transition on its own length, brainc.js): which one would be taken as it ends
+    const ends = (st.transitions ?? []).filter((t) => (t.when ?? []).some((c) => (c.cond === 'state_elapsed' || c.cond === 'phase_elapsed') && Number(c.ticks) === s.stateTicks))
+    const end = ends.find((t) => s.holdsAll(t.when.filter((c) => !((c.cond === 'state_elapsed' || c.cond === 'phase_elapsed') && Number(c.ticks) === s.stateTicks))))
+    if (end && s.stateTicks !== null) return `${lead}: no rule holds; after ${secs(s.stateTicks)} s, on to ${end.to} (a branch as it ends).`
     if (s.stateTicks !== null) return `${lead}: no rule holds; after ${secs(s.stateTicks)} s, ${st.next === '@previous' ? 'back to what it was doing' : st.next ? `on to ${st.next}` : 'it stays'}.`
     return `${lead}: no rule holds, so it stays.`
   }
 
   controls () {
     if (this.kind === 'mob') {
-      return el('div', { class: 'me-ctl' }, [
-        button(this.running ? 'Pause' : 'Run', (e) => { this.toggle(); e.currentTarget.textContent = this.running ? 'Pause' : 'Run' }),
-        button('Hit', () => this.hit(false)), button('Flinch', () => this.hit(true)), button('Kill', () => this.kill()), button('Reset', () => this.reset()),
-        button(this.sim.seen ? 'in sight' : 'hidden', (e) => { this.sim.seen = !this.sim.seen; e.currentTarget.textContent = this.sim.seen ? 'in sight' : 'hidden' }),
-        el('span', { class: 'me-muted', text: 'target' }),
-        el('button', { icon: 'action.zoomout', 'aria-label': 'Target nearer', onclick: () => { this.sim.dist = Math.max(0, Math.round((this.sim.dist - 1) * 10) / 10) } }),
-        el('button', { text: '+', 'aria-label': 'Target further', onclick: () => { this.sim.dist = Math.min(20, Math.round((this.sim.dist + 1) * 10) / 10) } }),
-        el('span', { class: 'me-muted', text: 'health' }),
-        (() => { const r = el('input', { type: 'range', min: 0, max: 100, step: 5, value: 100, 'aria-label': 'Its health, in percent' }); r.addEventListener('input', () => { this.sim.hp = this.sim.maxHp * Number(r.value) / 100 }); return r })()
+      this.hpEl = el('input', { type: 'range', min: 0, max: 100, step: 5, value: 100, 'aria-label': 'Its health, in percent' })
+      this.hpEl.addEventListener('input', () => { this.sim.hp = this.sim.maxHp * Number(this.hpEl.value) / 100 })
+      return el('div', { class: 'me-pvctl' }, [
+        el('div', { class: 'me-ctl' }, [
+          button(this.running ? 'Pause' : 'Run', (e) => { this.toggle(); e.currentTarget.textContent = this.running ? 'Pause' : 'Run' }),
+          button('Hit', () => this.hit(false)), button('Flinch', () => this.hit(true)), button('Kill', () => this.kill()), button('Reset', () => this.reset())]),
+        el('div', { class: 'me-ctl' }, [
+          el('span', { class: 'me-muted', text: 'the target:' }),
+          button(this.sim.seen ? 'in sight' : 'hidden', (e) => { this.sim.seen = !this.sim.seen; e.currentTarget.textContent = this.sim.seen ? 'in sight' : 'hidden' }),
+          el('button', { text: 'nearer', 'aria-label': 'Target nearer', onclick: () => { this.sim.dist = Math.max(0, Math.round((this.sim.dist - 1) * 10) / 10) } }),
+          el('button', { text: 'further', 'aria-label': 'Target further', onclick: () => { this.sim.dist = Math.min(20, Math.round((this.sim.dist + 1) * 10) / 10) } })]),
+        el('label', { class: 'me-ctl me-muted' }, ['its health ', this.hpEl])
       ])
     }
     const hold = el('button', { class: 'me-hold', text: 'Hold to fire' })
