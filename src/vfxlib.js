@@ -315,12 +315,30 @@ export class VfxPreview {
 }
 
 /** What a picker offers: the module's own kinds, then the ones the app serves. */
+/**
+ * A kind in a word, by how it looks -- the catalogue gives kinds numbers and no
+ * names, and "11 · particles" says nothing about which one is the explosion.
+ */
+export function vfxLook (d) {
+  if (!d) return 'unknown'
+  if (d.type === 'tracer') return 'tracer'
+  if (d.attach) return 'trail that follows'
+  if (d.blend === 'alpha') return 'smoke'
+  const c = Number(d.colour ?? 0)
+  const r = (c >> 16) & 255; const g = (c >> 8) & 255; const b = c & 255
+  if ((d.size ?? 0.1) >= 0.3) return 'fireball'
+  if (g > r * 1.3 && g > b) return 'green specks'
+  if (r > g * 2 && r > b * 2) return 'red specks'
+  if ((d.speed ?? 0) >= 9) return 'sparks'
+  return 'specks'
+}
+
 export function vfxChoices (module, served = new Map()) {
   const out = []
-  for (const v of module.vfx ?? []) out.push([String(v.id), `${v.id} · ${v.type === 'tracer' ? 'tracer' : 'particles'} (this module)`])
+  for (const v of module.vfx ?? []) out.push([String(v.id), `${v.id} · ${vfxLook(v)} (this module)`])
   for (const [id, d] of served) {
     if ((module.vfx ?? []).some((v) => v.id === id)) continue
-    out.push([String(id), `${id} · ${d.type}`])
+    out.push([String(id), `${id} · ${vfxLook(d)}`])
   }
   return out.sort((a, b) => Number(a[0]) - Number(b[0]))
 }

@@ -35,6 +35,15 @@ anything not released yet is under **Unreleased**.
   - A phone on its side keeps the rail. Its preview stays closed until asked,
     and a step opens in a sheet over the side panel.
   - The player keeps the old window.
+- **A Missiles page**: the module's missiles, shared by its monsters and
+  weapons, each with a side view of its flight as the engine flies it. It
+  throws on the arc that lands, falls, bounces and runs out, and the engine's
+  particle kinds burst where it lands.
+  - It edits what the missile does when it hits, runs out, bounces and on its
+    way (splits, bomblets), how it homes, and its looks and size.
+  - It says who fires it.
+- **Particle kinds say what they look like** ("11 · fireball", "13 · smoke")
+  wherever one is picked, not "11 · particles".
 - **The editors' own words, compiled to the engine's** (brainc.js): rules that
   apply in any state, "only once", branches taken as a state's time runs out,
   and a boss's phases with their speed are written as plain vocabulary when the
