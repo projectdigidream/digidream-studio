@@ -16,6 +16,7 @@
 //
 import { packPath } from '../soundpacks.js'
 import { toBytes } from './protocol.js'
+import { nameTsprite } from '../sheets.js'
 
 /**
  * Where a kind's SOURCE lives in the record, for the kinds that are baked:
@@ -131,7 +132,9 @@ export function makeKinds (S) {
 
     // A sprite project and a music project: the sources the module keeps for
     // its sheets and tracks; the bakers make what the game loads.
-    'file:tsprite': sourceKind(S, { label: 'sprite', dir: 'sprites', ext: '.tsprite', binary: true, names: () => Object.keys(S.module.sprites ?? {}) }),
+    // ThreeSprite is handed the project under the sheet's own name: one drawn
+    // or imported as SPRT says what the studio calls it, and exports as that.
+    'file:tsprite': sourceKind(S, { label: 'sprite', dir: 'sprites', ext: '.tsprite', binary: true, names: () => Object.keys(S.module.sprites ?? {}), handOut: (bytes, n) => nameTsprite(bytes, n) }),
     // Music is baked when asked for (the Music page's "bake now") or at Play and
     // Export, not on every save: a song can take a while, and is edited often.
     'file:msproj': sourceKind(S, { label: 'music', dir: 'music', ext: '.msproj', binary: false, names: () => [...(S.trackUrls?.keys() ?? [])], bakeOnSave: false }),
@@ -173,7 +176,7 @@ export function makeKinds (S) {
 }
 
 /** A kind whose documents are source files under sources/<dir>/, baked into what the game loads. */
-function sourceKind (S, { label, dir, ext, binary, names, bakeOnSave = true }) {
+function sourceKind (S, { label, dir, ext, binary, names, bakeOnSave = true, handOut = null }) {
   const path = (n) => `sources/${dir}/${n}${ext}`
   return {
     label,
@@ -184,7 +187,8 @@ function sourceKind (S, { label, dir, ext, binary, names, bakeOnSave = true }) {
     async read (n) {
       const b = S.rec.assets?.[path(n)]
       if (!b) return { payload: binary ? new Uint8Array(0) : '', name: n }
-      return { payload: binary ? new Uint8Array(await b.arrayBuffer()) : await b.text(), name: n }
+      const payload = binary ? new Uint8Array(await b.arrayBuffer()) : await b.text()
+      return { payload: handOut?.(payload, n) ?? payload, name: n }
     },
     async write (n, payload) {
       const assets = (S.rec.assets ??= {})

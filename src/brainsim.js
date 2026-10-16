@@ -18,7 +18,10 @@
 //
 // What it does NOT simulate, by decision: other monsters (`mob_within`,
 // `count_within`, `prop_within`, `ally_in_front` read as nobody there), walls,
-// sight lines and paths. Those are checked in a level.
+// sight lines and paths. Those are checked in a level. The one crowd it has
+// is its own: what it summons stands where it landed (the step's offset, its
+// scatter at the most) and nothing kills it, so "no more than N within" and
+// a spawn's `limit` stop it summoning, as they would in a room.
 //
 // Pure: no DOM. Distances in metres, time in ticks.
 //
@@ -64,6 +67,7 @@ export class BrainSim {
     this.dead = false
     this.prev = null
     this.adds = {}
+    this.brood = []                 // what it summoned: { mob, d (m from it), limited }
     this.shots = []
     this.events = []
     this.why = ''
@@ -183,7 +187,14 @@ export class BrainSim {
       case 'add_var': this.vars[a.var] = Number(this.vars[a.var] ?? 0) + Number(a.by ?? a.value ?? 1); break
       case 'var_random': { const lo = Number(a.min ?? 0); const hi = Number(a.max ?? lo); this.vars[a.var] = lo + Math.floor(Math.random() * (hi - lo + 1)); break }
       case 'set_param': if (a.param === 'move_speed') this.speed = num(a.value, this.speed); break
-      case 'spawn': { const n = Number(a.count ?? 1); this.adds[a.mob] = (this.adds[a.mob] ?? 0) + n; said(`summons ${n} ${a.mob}`); break }
+      case 'spawn': {
+        // A budget, as acts.spawn keeps it: the living brood of limited spawns.
+        if (a.limit !== undefined && this.brood.filter((b) => b.limited).length >= Number(a.limit)) { said(`summons none: ${a.limit} already`); break }
+        const n = Number(a.count ?? 1)
+        const d = Math.abs(num(a.offset)) + num(a.jitter)
+        for (let i = 0; i < n; i++) this.brood.push({ mob: a.mob, d, limited: a.limit !== undefined })
+        this.adds[a.mob] = (this.adds[a.mob] ?? 0) + n; said(`summons ${n} ${a.mob}`); break
+      }
       case 'missile': case 'launch': {
         const name = a.kind ?? a.missile
         const sp = num(this.missiles[name]?.speed, 15)
@@ -202,6 +213,8 @@ export class BrainSim {
   }
 
   // ---- conditions ----
+  /** How many of its own summons a crowd condition sees. */
+  near (c) { return this.brood.filter((b) => (c.mob == null || b.mob === c.mob) && b.d <= num(c.distance)).length }
   holdsAll (when) { return Array.isArray(when) ? when.every((c) => this.holds(c)) : true }
   holds (c) {
     const v = this.raw(c)
@@ -225,7 +238,10 @@ export class BrainSim {
       case 'hp_below': return this.hp * 100 < Number(c.percent ?? 0) * this.maxHp
       case 'state_elapsed': return this.elapsed >= Number(c.ticks ?? 0)
       case 'was_hurt': return this.tick - this.hurtAt <= Number(c.within ?? 18)
-      case 'mob_within': case 'count_within': case 'prop_within': case 'ally_in_front': case 'hurt_by_mob':
+      // its own summons, the only monsters near it here (conds.mob_within, count_within)
+      case 'mob_within': return this.near(c) >= 1
+      case 'count_within': return this.near(c) >= Number(c.at_least ?? 1)
+      case 'prop_within': case 'ally_in_front': case 'hurt_by_mob':
       case 'target_above': case 'target_below': case 'stuck': return false
       // a weapon's
       case 'always': return true

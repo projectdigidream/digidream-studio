@@ -76,7 +76,8 @@ export class Preview {
     this.acc = 0
     this.canvas = el('canvas', { class: 'me-stage', width: 380, height: 150, 'aria-label': this.kind === 'mob' ? 'The monster, as the game draws it' : 'The weapon, held' })
     this.nowEl = el('span', { class: 'me-now' })
-    this.varsEl = el('span', { class: 'me-vars' })
+    // One line when room is short (a state open beside it): a tap shows it all.
+    this.varsEl = el('span', { class: 'me-vars', onclick: () => { this.varsEl.dataset.open = this.varsEl.dataset.open === '1' ? '0' : '1' } })
     this.evEl = el('span', { class: 'me-muted me-ev' })
     this.stateEl = el('span', { class: 'me-mono me-muted' })
     // A weapon is seen as it is held: its first-person view model playing the
@@ -98,7 +99,7 @@ export class Preview {
     const old = this.sim
     this.sim = new BrainSim(sub.compiled, { kind: this.kind, speed: Number(sub.prop?.speed ?? 4), ammo: sub.ammo === undefined ? 50 : sub.ammo, missiles: sub.missiles })
     if (old && !startAt && this.sim.nodes[old.state]) {
-      for (const k of ['tick', 'vars', 'cools', 'hp', 'dist', 'seen', 'grounded', 'ammo', 'fire', 'pressedAt', 'releasedAt', 'heldFrom', 'hurtAt', 'dead', 'prev', 'adds', 'shots', 'state', 'entered', 'seq', 'stateTicks', 'why', 'speed']) this.sim[k] = old[k]
+      for (const k of ['tick', 'vars', 'cools', 'hp', 'dist', 'seen', 'grounded', 'ammo', 'fire', 'pressedAt', 'releasedAt', 'heldFrom', 'hurtAt', 'dead', 'prev', 'adds', 'brood', 'shots', 'state', 'entered', 'seq', 'stateTicks', 'why', 'speed']) this.sim[k] = old[k]
       this.sim.maxHp = Number(sub.compiled.hp ?? old.maxHp)
     } else if (startAt) this.sim.reset(startAt)
     // a "show the effect" step bursts at the monster (or the muzzle), as the game draws it
@@ -174,7 +175,7 @@ export class Preview {
     const c = this.canvas
     const w = c.clientWidth || 380
     const h = c.clientHeight || 150
-    if (c.width !== w * devicePixelRatio) { c.width = w * devicePixelRatio; c.height = h * devicePixelRatio }
+    if (c.width !== w * devicePixelRatio || c.height !== h * devicePixelRatio) { c.width = w * devicePixelRatio; c.height = h * devicePixelRatio }
     const ctx = c.getContext('2d')
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
     ctx.clearRect(0, 0, w, h)
@@ -260,6 +261,7 @@ export class Preview {
     const cools = [...coolNames].map((k) => ((s.cools[k] ?? 0) > 0 ? `cooldown ${k}: ${secs(s.cools[k])} s left` : `cooldown ${k}: over`))
     const ammo = this.kind === 'weapon' ? [s.ammo === null ? 'ammo: never runs out' : `ammo: ${s.ammo} (Reset refills 50)`] : []
     this.varsEl.textContent = [...ammo, ...vars, ...cools].join(' · ') || 'numbers: none set, no cooldown running'
+    this.varsEl.title = this.varsEl.textContent
     if (this.evAt && performance.now() - this.evAt > 2200) { this.evEl.textContent = ''; this.evAt = 0 }
   }
 
@@ -287,12 +289,15 @@ export class Preview {
         el('div', { class: 'me-ctl' }, [
           button(this.running ? 'Pause' : 'Run', (e) => { this.toggle(); e.currentTarget.textContent = this.running ? 'Pause' : 'Run' }),
           button('Hit', () => this.hit(false)), button('Flinch', () => this.hit(true)), button('Kill', () => this.kill()), button('Reset', () => this.reset())]),
+        // The target and its health on one line where the panel is wide
+        // enough, on two where it is not; nothing in it changes width.
         el('div', { class: 'me-ctl' }, [
-          el('span', { class: 'me-muted', text: 'the target:' }),
-          button(this.sim.seen ? 'in sight' : 'hidden', (e) => { this.sim.seen = !this.sim.seen; e.currentTarget.textContent = this.sim.seen ? 'in sight' : 'hidden' }),
-          el('button', { text: 'nearer', 'aria-label': 'Target nearer', onclick: () => { this.sim.dist = Math.max(0, Math.round((this.sim.dist - 1) * 10) / 10) } }),
-          el('button', { text: 'further', 'aria-label': 'Target further', onclick: () => { this.sim.dist = Math.min(20, Math.round((this.sim.dist + 1) * 10) / 10) } })]),
-        el('label', { class: 'me-ctl me-muted' }, ['its health ', this.hpEl])
+          el('span', { class: 'me-ctl' }, [
+            el('span', { class: 'me-muted', text: 'the target:' }),
+            el('button', { class: 'me-seen', text: this.sim.seen ? 'in sight' : 'hidden', onclick: (e) => { this.sim.seen = !this.sim.seen; e.currentTarget.textContent = this.sim.seen ? 'in sight' : 'hidden' } }),
+            el('button', { text: 'nearer', 'aria-label': 'Target nearer', onclick: () => { this.sim.dist = Math.max(0, Math.round((this.sim.dist - 1) * 10) / 10) } }),
+            el('button', { text: 'further', 'aria-label': 'Target further', onclick: () => { this.sim.dist = Math.min(20, Math.round((this.sim.dist + 1) * 10) / 10) } })]),
+          el('label', { class: 'me-ctl me-muted me-hp' }, ['its health ', this.hpEl])])
       ])
     }
     const hold = el('button', { class: 'me-hold', text: 'Hold to fire' })

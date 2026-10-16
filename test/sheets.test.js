@@ -9,7 +9,8 @@
 //
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { importSheetFile, sheetRecord, guessStates, sheetName } from '../src/sheets.js'
+import { importSheetFile, sheetRecord, guessStates, sheetName, nameTsprite, DEFAULT_SPRITE } from '../src/sheets.js'
+import { inspectTsprite } from '../vendor/tsprite.js'
 import { parseAtlas } from '../../engine/client/src/render/atlas.js'
 import { readProject, compare } from '../../engine/tools/tsprite/read.js'
 import { ROOT } from './oracle.js'
@@ -62,6 +63,22 @@ const asJson = { name: 'SPIR.json', bytes: new TextEncoder().encode(JSON.stringi
 let asked = null
 const r2 = await importSheetFile(asJson, { parseAtlas, pickPng: async (image) => { asked = image; return { name: image, bytes: r.png } } })
 check(asked === 'SPIR.png' && r2.name === 'SPIR' && r2.png.length === r.png.length, `a manifest asks for its picture by name and takes it (${asked})`)
+
+// --- a project's sprite id: SPRT, ThreeSprite's default, is nobody's name -------------------
+// Every sprite ThreeSprite starts says SPRT until it is named, so two of them
+// imported by their id would be one sheet, the second over the first.
+const sprt = nameTsprite(bytes, DEFAULT_SPRITE)
+check(inspectTsprite(sprt).sprite === 'SPRT', `a project can be given an id (${inspectTsprite(sprt).sprite})`)
+const imp = await importSheetFile({ name: 'imp.tsprite', bytes: sprt }, { parseAtlas, pickPng: async () => null })
+const cac = await importSheetFile({ name: 'cacodemon.tsprite', bytes: sprt }, { parseAtlas, pickPng: async () => null })
+check(imp.name === 'IMP' && cac.name === 'CACODEMON' && imp.manifest.sprite === 'IMP', `two SPRT projects come in under their files' names (${imp.name}, ${cac.name})`)
+const back = nameTsprite(sprt, 'IMP')
+check(inspectTsprite(back).sprite === 'IMP' && inspectTsprite(back).animations.length === 4, 'a project handed out carries its sheet\'s name, and all of its animations')
+const again = await importSheetFile({ name: 'whatever.tsprite', bytes: back }, { parseAtlas, pickPng: async () => null })
+check(again.name === 'IMP', `so it comes back as itself, whatever the file is called (${again.name})`)
+check(nameTsprite(back, 'IMP') === back, 'a project that has the name already is the same bytes')
+check(inspectTsprite(nameTsprite(bytes, 'X')).canvas === inspectTsprite(bytes).canvas, 'renaming keeps the rest of the project')
+check(nameTsprite(new Uint8Array([1, 2, 3]), 'X') === null, 'CONTROL: bytes that are not a project are not renamed')
 
 // --- controls -------------------------------------------------------------------------------
 let refused = null

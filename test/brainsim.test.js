@@ -142,6 +142,63 @@ if (!existsSync(LUAJIT)) {
     }
   }
   check(seen.size >= 5, `CONTROL: the variants take different paths (${seen.size} distinct), so agreeing is not agreeing on nothing`)
+
+  // ITS OWN SUMMONS are the crowd the preview has: "no more than 2 spirits
+  // within 6 m" stops it calling more, as in the engine, where the spirits
+  // stand where they landed. Controls: summoned 3 m off, a 1 m count never
+  // sees them and the calling goes on (in both); a spawn's limit stops it too.
+  const caller = (cond, spawn = {}) => ({
+    hp: 100, initial: 'idle', sight: '40', turn_speed: 12,
+    states: {
+      idle: { anim: 0, move: 'stop', face: 'hold', transitions: [{ to: 'call', when: cond ? [cond] : [] }] },
+      call: { anim: 2, move: 'stop', face: 'hold', ticks: 16, next: 'idle', sequence: [{ at: 0, action: 'spawn', mob: 'spirit', count: 2, ...spawn }] },
+      pain: { anim: 3, move: 'stop', face: 'hold', ticks: 10, next: '@previous' },
+      death: { anim: 4, move: 'stop', face: 'hold', solid: false, ticks: 100, next: 'death' }
+    }
+  })
+  const spirit = { hp: 10, initial: 'idle', states: { idle: { anim: 0, move: 'stop', face: 'hold' }, death: { anim: 4, move: 'stop', face: 'hold', solid: false, ticks: 100, next: 'death' } } }
+  const fewer = (distance) => ({ cond: 'count_within', at_least: 3, mob: 'spirit', distance, negate: true })
+  const UNTIL = 200
+  const engineKids = (brain, name) => {
+    const lua = emitMobsLua({ id: 't', mobs: { missiles: {}, mobs: { caller: brain, spirit } }, props: [{ name: 'caller', speed: 4 }, { name: 'spirit', speed: 4 }] })
+    const f = join(dir, name)
+    writeFileSync(f, `local W = dofile("tools/mobcheck/world.lua")
+dofile("maps/scripts/mob_vocab.lua")
+dofile("maps/scripts/mobs.lua")
+${lua}
+W.reset(); mobs.reset()
+local z = mobs.spawn("caller", { x = W.mkfx(0), y = W.mkfx(0), z = W.mkfx(0) })
+W.add("player", 9, 0, 0)
+W.see = true
+for _ = 1, ${UNTIL} do W.tick_n = W.tick_n + 1; W.advance(); on_tick() end
+local n = 0
+for _, o in pairs(mobs.live) do if o.def.name == "spirit" and o.e:valid() then n = n + 1 end end
+print("KIDS " .. n)
+`)
+    const r = spawnSync(LUAJIT, [f], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+    const out = (r.stdout ?? '') + (r.stderr ?? '')
+    return { n: Number(/KIDS (\d+)/.exec(out)?.[1] ?? -1), out }
+  }
+  const simKids = (brain) => {
+    const sim = new BrainSim(compileMob(brain, { speed: 4 }), { kind: 'mob', speed: 4 })
+    for (let t = 0; t < UNTIL; t++) sim.step()
+    return sim.brood.length
+  }
+  const cases = {
+    'no more than 2 within 6 m': caller(fewer('6')),
+    'CONTROL summoned 3 m off, counted within 1 m': caller(fewer('1'), { offset: '3' }),
+    'a limit of 3, no rule': caller({ cond: 'state_elapsed', ticks: 8 }, { limit: 3 })
+  }
+  const kids = {}
+  for (const [cname, brain] of Object.entries(cases)) {
+    const e = engineKids(brain, `kids_${Object.keys(kids).length}.lua`)
+    const p = simKids(brain)
+    kids[cname] = p
+    check(e.n >= 0, `the engine ran "${cname}":\n${e.out}`)
+    check(e.n === p, `${cname}: the preview summons as many as the engine (${e.n} / ${p})`)
+  }
+  check(kids['no more than 2 within 6 m'] === 4 && kids['a limit of 3, no rule'] === 4, `"no more than 2" and a limit of 3 each stop it at 4, two calls of 2 (${JSON.stringify(kids)})`)
+  check(kids['CONTROL summoned 3 m off, counted within 1 m'] > 8, `CONTROL: summons it cannot count do not stop it (${kids['CONTROL summoned 3 m off, counted within 1 m']})`)
 }
 
 console.log(`brainsim: ${checks} checks, ${fails} failures`)

@@ -8,6 +8,9 @@
 //
 if (!process.env.DNP_STUDIO_PAGE_TEST) { console.log('plugins.page: 0 checks, 0 failures (set DNP_STUDIO_PAGE_TEST=1 to run)'); process.exit(0) }
 import { createRequire } from 'node:module'
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 let puppeteer
 try { puppeteer = createRequire(import.meta.url)('puppeteer-core') } catch {
   try { puppeteer = (await import('puppeteer-core')).default } catch { console.log('plugins.page: skipped (no puppeteer-core; set NODE_PATH)'); process.exit(0) }
@@ -194,6 +197,76 @@ if (await page.evaluate(() => window.__studio.plugins.plugins.has('threesprite')
   await settle(500)
   check((await page.evaluate(() => window.__studio.module.sprites.SPIRIT.animations[0])) === 'idle', 'and one undo puts the sheet back as it was')
   await page.evaluate(() => { const S = window.__studio; for (const k of ['sources/sprites/SPIRIT.tsprite', 'sprites/SPIRIT.png', 'sprites/SPIRIT.json']) delete S.rec.assets[k]; delete S.module.sprites.SPIRIT; S.sheets.delete('SPIRIT'); S.moduleChanged() })
+
+  // NEW SPRITES, EACH ITS OWN. ThreeSprite starts every sprite as SPRT: two
+  // drawn here for two monsters, and two SPRT projects drawn elsewhere and
+  // imported, are four sheets, none over another.
+  const drawn = {}
+  for (const n of ['IMPA', 'CACO']) {
+    await page.evaluate((n) => window.__studio.editInPlugin('file:tsprite', n), n)
+    const f = await (await page.waitForSelector('iframe.sx-frame')).contentFrame()
+    await f.waitForFunction((n) => window.__editorStore?.getState().source.path === `${n}.tsprite`, { timeout: 60000 }, n)
+    await f.waitForSelector('.modal [role=dialog], .modal', { timeout: 20000 })
+    drawn[n] = await f.evaluate(() => [...document.querySelectorAll('.modal input')][1]?.value)
+    await f.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent === 'Create').click())
+    await f.waitForFunction((n) => window.__editorStore.getState().doc.spriteName === n, { timeout: 10000 }, n)
+    await f.evaluate((n) => window.__editorStore.getState().commit('suite test', (d) => { const id = `a${n}`; d.animations[id] = { id, name: `${n.toLowerCase()}_idle`, fps: 8, loop: true, frameCount: 1, boneTracks: {}, partTracks: {} }; d.animationOrder.push(id) }), n)
+    await page.waitForFunction(() => document.querySelector('.sx-status')?.textContent === 'changed', { timeout: 10000 })
+    await page.click('[data-action="editor-back"]')
+    await page.waitForFunction(() => !document.querySelector('.sx-editor'), { timeout: 30000 }).catch(() => {})
+    drawn[`${n}_status`] = await page.evaluate(() => document.querySelector('.sx-status')?.textContent ?? 'closed')
+  }
+  const two = await page.evaluate(async () => {
+    const S = window.__studio
+    const { inspectTsprite } = await import('/studio/vendor/tsprite.js')
+    const of = async (n) => { const b = S.rec.assets[`sources/sprites/${n}.tsprite`]; return b ? inspectTsprite(new Uint8Array(await b.arrayBuffer())).sprite : null }
+    return { impa: S.module.sprites.IMPA?.animations, caco: S.module.sprites.CACO?.animations, ids: [await of('IMPA'), await of('CACO')], sprt: !!S.module.sprites.SPRT }
+  })
+  check(drawn.IMPA === 'IMPA' && drawn.CACO === 'CACO', `ThreeSprite's new-sprite form takes the studio's name as the sprite id (${drawn.IMPA}, ${drawn.CACO})`)
+  check(two.impa?.includes('impa_idle') && !two.impa.includes('caco_idle') && two.caco?.includes('caco_idle') && !two.caco.includes('impa_idle') && !two.sprt, `two sprites drawn for two monsters are two sheets, each with its own animations (${JSON.stringify(two)} ${drawn.IMPA_status} ${drawn.CACO_status})`)
+  check(two.ids.join() === 'IMPA,CACO', `and each project is named as its sheet (${two.ids.join()})`)
+  // A project that says SPRT, opened from its sheet: ThreeSprite is handed it under the sheet's name.
+  await page.evaluate(async () => {
+    const S = window.__studio
+    const { nameTsprite } = await import('/studio/src/sheets.js')
+    const bytes = new Uint8Array(await (await fetch(new URL('test/fixtures/spirit.tsprite', location.href.replace(/#.*$/, '')))).arrayBuffer())
+    S.rec.assets['sources/sprites/GHOUL.tsprite'] = new Blob([nameTsprite(bytes, 'SPRT')])
+    await S.bakeSource('file:tsprite', 'GHOUL'); S.moduleChanged()
+    S.editInPlugin('file:tsprite', 'GHOUL')
+  })
+  {
+    const f = await (await page.waitForSelector('iframe.sx-frame')).contentFrame()
+    await f.waitForFunction(() => window.__editorStore?.getState().source.path === 'GHOUL.tsprite', { timeout: 60000 })
+    await f.waitForFunction(() => window.__editorStore.getState().doc.animationOrder.length > 0, { timeout: 20000 })
+    const id = await f.evaluate(() => window.__editorStore.getState().doc.spriteName)
+    check(id === 'GHOUL', `a project drawn as SPRT opens in ThreeSprite under its sheet's name (${id})`)
+    await page.click('[data-action="editor-discard"]')
+    await page.waitForFunction(() => !document.querySelector('.sx-editor'), { timeout: 30000 }).catch(() => {})
+  }
+  // Two SPRT projects through the picker: the second is asked a name, and the first keeps its art.
+  // Saved as imp.tsprite, as ThreeSprite would by the project's name: the sheet takes the file's name.
+  const sprtDir = mkdtempSync(join(tmpdir(), 'sprt-'))
+  const sprtFile = join(sprtDir, 'imp.tsprite')
+  writeFileSync(sprtFile, await page.evaluate(async () => {
+    const { nameTsprite } = await import('/studio/src/sheets.js')
+    const bytes = new Uint8Array(await (await fetch(new URL('test/fixtures/spirit.tsprite', location.href.replace(/#.*$/, '')))).arrayBuffer())
+    return [...nameTsprite(bytes, 'SPRT')]
+  }).then((a) => Buffer.from(a)))
+  const named = []
+  for (let i = 0; i < 2; i++) {
+    const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 10000 }), page.evaluate(() => { window.__imp = window.__studio.importSheet() })])
+    await chooser.accept([sprtFile])
+    if (i === 1) {
+      const asked = await page.waitForSelector('dialog[open] input', { timeout: 20000 }).catch(() => null)
+      named.push(asked ? await page.evaluate(() => document.querySelector('dialog[open] input').value) : 'not asked')
+      if (asked) await page.evaluate(() => [...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'OK').click())
+    }
+    named.push(await page.evaluate(() => window.__imp))
+  }
+  rmSync(sprtDir, { recursive: true, force: true })
+  const imps = await page.evaluate(() => { const S = window.__studio; return Object.keys(S.module.sprites).filter((n) => /^(IMP(_\d+)?|SPRT\w*)$/.test(n)) })
+  check(named[0] === 'IMP' && named[1] === 'IMP_2' && named[2] === 'IMP_2' && imps.join() === 'IMP,IMP_2', `two SPRT projects imported are two sheets, named by their file: the second is asked its name, IMP_2 offered (${JSON.stringify(named)} ${imps.join()})`)
+  await page.evaluate(() => { const S = window.__studio; for (const n of ['IMPA', 'CACO', 'GHOUL', 'IMP', 'IMP_2']) { for (const k of Object.keys(S.rec.assets)) if (k.includes(`/${n}.`)) delete S.rec.assets[k]; delete S.module.sprites[n]; S.sheets.delete(n) } S.moduleChanged() })
 }
 
 // DIGIDREAMSOUND, bundled (studio/plugins/sfx): a sound pack opened from the

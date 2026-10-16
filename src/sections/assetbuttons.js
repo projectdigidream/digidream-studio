@@ -5,6 +5,7 @@ import { button, ask, withIcon } from '../ui.js'
 import { shell } from '../bridge.js'
 import { writePack } from '../pack.js'
 import { exportsOf, cleanName, copyName } from '../assetcopy.js'
+import { nameTsprite } from '../sheets.js'
 
 const bytesOf = async (b) => (b == null ? null : typeof b === 'string' ? new TextEncoder().encode(b) : typeof b.arrayBuffer === 'function' ? new Uint8Array(await b.arrayBuffer()) : b)
 
@@ -15,6 +16,8 @@ export function exportButtons (S, kind, name) {
     if (x.pack) bytes = await writePack(await Promise.all(x.pack.map(async (p) => ({ path: p.split('/').pop(), bytes: await bytesOf(S.rec.assets[p]) }))))
     else bytes = await bytesOf(S.rec.assets[x.path])
     if (!bytes) { S.status(`${name}: nothing to export`, 'warn'); return }
+    // A sprite's project leaves as this sheet, whatever id it was drawn with.
+    if (kind === 'sprite' && x.id === 'project') bytes = nameTsprite(bytes, name) ?? bytes
     const ok = await shell.share(x.file, bytes)
     S.status(ok ? `${x.file}: ${x.label}, out of the studio` : `${x.file} not saved`, ok ? 'ok' : 'warn')
   }))

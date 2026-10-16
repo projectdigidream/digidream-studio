@@ -667,7 +667,9 @@ export class NodeEditor {
     const isBeh = this.tab === 'behaviour'
     const sel = this.sel && this.nodes[this.sel] ? this.sel : null
     const mini = this.phone && !sel && !this.pvOpen
-    const side = el('aside', { class: 'me-side', 'data-gone': isBeh ? '0' : '1', 'data-mini': mini ? '1' : '0', 'data-wide': sel ? '1' : '0' })
+    // A state open on a desktop: a wider panel, the preview drawn smaller over
+    // it, so the state's own fields have the most of the height.
+    const side = el('aside', { class: 'me-side', 'data-gone': isBeh ? '0' : '1', 'data-mini': mini ? '1' : '0', 'data-wide': sel ? '1' : '0', 'data-compact': sel && !this.phone ? '1' : '0' })
     if (!isBeh) return side
     const p = this.preview
     if (mini) {

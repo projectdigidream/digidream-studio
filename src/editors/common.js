@@ -71,6 +71,12 @@ export const CSS = `
 .me-chooser{background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-strong);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:8px}
 .me-cgl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dnp-color-text-secondary)}
 .me-copts{display:flex;flex-wrap:wrap;gap:6px}
+.me-ctabs{display:flex;flex-wrap:wrap;gap:4px}
+.me-ctab{border:1px solid var(--dnp-color-line-main);border-radius:999px;min-height:32px;padding:2px 11px;background:transparent;color:var(--dnp-color-text-secondary);font:inherit;font-size:12px;cursor:pointer}
+.me-ctab[data-on="1"]{border-color:var(--dnp-color-select);color:var(--dnp-color-text-primary);font-weight:600;box-shadow:0 0 0 1px var(--dnp-color-select) inset}
+.me-cfind{max-width:220px}
+.me-chooser[data-tabs="1"]:not([data-q="1"]) .me-cgl{display:none}
+.me-cgroup[hidden],.me-copt[hidden]{display:none}
 .me-copt{border:0;border-radius:8px;padding:6px 10px;background:var(--dnp-color-bg-sunken);color:var(--dnp-color-text-primary);font:inherit;font-size:13px;cursor:pointer;text-align:left}
 .me-tl{position:relative;height:44px;background:var(--dnp-color-bg-sunken);border-radius:9px;overflow:hidden}
 .me-mk{position:absolute;top:5px;width:16px;height:16px;margin-left:-8px;border-radius:50%;border:0;padding:0;cursor:pointer;background:var(--dnp-color-accent)}
@@ -109,6 +115,17 @@ export const CSS = `
 .me-stage{position:relative;width:100%;height:150px;background:var(--dnp-color-bg-sunken);border-radius:9px;overflow:hidden;display:block}
 .me-now{font-size:12px;color:var(--dnp-color-text-secondary)}
 .me-vars{font-size:12px;color:var(--dnp-color-text-secondary);font-family:var(--dnp-font-mono)}
+.me-seen{min-width:5.6em}
+.me-hp input{width:110px}
+.me-side[data-compact="1"]{flex-basis:540px}
+.me-side[data-compact="1"] .me-pv{gap:4px;padding:6px 10px}
+.me-side[data-compact="1"] .me-stage{height:112px}
+.me-side[data-compact="1"] .me-pvctl{gap:4px}
+.me-side[data-compact="1"] .me-pvctl button{min-height:32px !important;height:32px;padding-top:0;padding-bottom:0}
+.me-side[data-compact="1"] .me-ins .me-frow:has(> label):not(.inline){display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;column-gap:10px;row-gap:2px}
+.me-side[data-compact="1"] .me-ins .me-frow:has(> label):not(.inline)>.me-muted{grid-column:2}
+.me-side[data-compact="1"] .me-ins .me-numw input{max-width:160px}
+.me-side[data-compact="1"] .me-vars:not([data-open="1"]){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .me-ctl{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .me-strip{display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 0}
 .me-vlab{writing-mode:vertical-rl;font-size:12px}
@@ -140,7 +157,12 @@ export const CSS = `
 .me-vbtn{border:1px solid var(--dnp-color-line-main);border-radius:8px;background:var(--dnp-color-bg-sunken);color:inherit;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
 .me-vbtn[data-on="1"]{border-color:var(--dnp-color-select);font-weight:600}
 @media (max-height:560px) and (orientation:landscape){
-  .me-copt{padding:4px 8px;font-size:12px}
+  .me-copt{padding:4px 8px;font-size:12px;min-height:36px !important;height:auto}
+  .me-ctab{min-height:30px !important;height:30px;padding:0 9px !important;font-size:12px}
+  .me-ctabs{gap:3px}
+  /* the keyboard would cover half the screen: the groups are the way in */
+  .me-cfind{display:none}
+  .me-chooser>.me-row:first-child>span.me-muted{display:none}
   .me-copts{gap:4px}
   .me-side{flex-basis:300px}
   .me-side[data-wide="1"]{flex-basis:350px}
@@ -272,13 +294,44 @@ export function sentenceEl (table, obj, ctx, key = null) {
 // ---- the chooser ---------------------------------------------------------------------------
 
 /** The grouped list of what can be added. `groups` from phrases.groupsOf. */
+// The group each chooser was last picked from, so the next pick starts there.
+const lastGroup = new Map()
+
+/**
+ * The grouped chooser: one group shown at a time, picked from a row of chips
+ * (a phone held in one hand gets a short list, not a long scroll), and a
+ * "find" box over all of them when there are many. Every option stays in the
+ * page; the groups not shown are hidden.
+ */
 export function chooser (title, note, groups, onPick, onCancel) {
-  return el('div', { class: 'me-chooser' }, [
+  let on = groups.some((g) => g.label === lastGroup.get(title)) ? lastGroup.get(title) : groups[0]?.label
+  const tabbed = groups.length > 1
+  const secs = groups.map((g) => el('div', { class: 'me-cgroup', 'data-group': g.label }, [el('div', { class: 'me-cgl', text: g.label }),
+    el('div', { class: 'me-copts' }, g.opts.map((o) => el('button', { class: 'me-copt', text: o.label, onclick: () => { lastGroup.set(title, g.label); onPick(o.key) } })))]))
+  const total = groups.reduce((n, g) => n + g.opts.length, 0)
+  const find = total > 12 ? el('input', { type: 'search', class: 'me-cfind', placeholder: `find among ${total}…`, 'aria-label': `Find: ${title}`, autocomplete: 'off' }) : null
+  const tabs = tabbed ? groups.map((g) => el('button', { class: 'me-ctab', text: g.label, onclick: () => { on = g.label; lastGroup.set(title, on); if (find) find.value = ''; show() } })) : []
+  const none = el('span', { class: 'me-muted', text: 'nothing called that' })
+  const box = el('div', { class: 'me-chooser', 'data-tabs': tabbed ? '1' : '0' }, [
     el('div', { class: 'me-row' }, [el('b', { class: 'me-muted', text: title }), note ? el('span', { class: 'me-muted', text: note }) : null, el('span', { class: 'me-grow' }),
       el('button', { class: 'me-lnk', text: 'cancel', onclick: onCancel })]),
-    ...groups.map((g) => el('div', {}, [el('div', { class: 'me-cgl', text: g.label }),
-      el('div', { class: 'me-copts' }, g.opts.map((o) => el('button', { class: 'me-copt', text: o.label, onclick: () => onPick(o.key) })))]))
+    tabbed ? el('div', { class: 'me-ctabs' }, tabs) : null,
+    find, ...secs, none
   ])
+  function show () {
+    const q = find?.value.trim().toLowerCase() ?? ''
+    box.dataset.q = q ? '1' : '0'
+    groups.forEach((g, i) => {
+      let any = false
+      for (const b of secs[i].querySelectorAll('.me-copt')) { const hit = !q || b.textContent.toLowerCase().includes(q); b.hidden = !hit; any ||= hit }
+      secs[i].hidden = q ? !any : tabbed && g.label !== on
+      if (tabs[i]) tabs[i].dataset.on = !q && g.label === on ? '1' : '0'
+    })
+    none.hidden = !q || secs.some((x) => !x.hidden)
+  }
+  find?.addEventListener('input', show)
+  show()
+  return box
 }
 
 // ---- rule cards ------------------------------------------------------------------------------
@@ -312,7 +365,8 @@ export function ruleCards (o) {
       : o.key === 'ends' ? (when.length > 1 ? 'as it ends, if all of these hold:' : 'as it ends, if:') : when.length > 1 ? 'when all of these hold:' : 'when:'
     const w = o.warn?.(r)
     // the preview has no other monsters (they are a level's business): say so where a rule leans on them
-    const crowd = (r.when ?? []).some((c) => ['mob_within', 'count_within', 'prop_within', 'ally_in_front', 'hurt_by_mob'].includes(c.cond))
+    const crowd = (r.when ?? []).some((c) => ['prop_within', 'ally_in_front', 'hurt_by_mob'].includes(c.cond))
+    const own = !crowd && (r.when ?? []).some((c) => ['mob_within', 'count_within'].includes(c.cond))
     const conds = when.map((c, i) => el('div', { class: 'me-crow' }, [
       sentenceEl(table, c, { ...ctx, live: true, spec: ctx.condSpec?.(c.cond) }),
       el('button', { class: 'me-x', 'aria-label': 'Remove this condition', icon: 'action.close', onclick: () => { when.splice(i, 1); ctx.changed() } })
@@ -323,6 +377,7 @@ export function ruleCards (o) {
       el('span', { class: 'me-muted', text: whenWord }),
       w ? el('span', { class: 'me-warn', icon: 'status.warning', text: ` ${w}` }) : null,
       crowd ? el('span', { class: 'me-muted', text: 'The preview has no other monsters or props: it reads this as nobody being near. Check it in a level.' }) : null,
+      own ? el('span', { class: 'me-muted', text: 'In the preview the only monsters near it are the ones it summons, standing where they landed. Others are checked in a level.' }) : null,
       ...conds,
       picking
         ? chooser('Add a condition', 'every condition must hold', groupsWithMore(table, 'cond', ctx.moreConds), (key) => { when.push(newCond(table, key)); o.setPicking(null); ctx.changed() }, () => o.setPicking(null))

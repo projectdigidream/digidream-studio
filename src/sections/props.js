@@ -5,7 +5,8 @@
 // the studio's shared state and verbs through S, given at install.
 //
 import { parseAtlas, frameKey } from '/src/render/atlas.js'
-import { importSheetFile, sheetRecord } from '../sheets.js'
+import { importSheetFile, sheetRecord, nameTsprite } from '../sheets.js'
+import { copyName, cleanName } from '../assetcopy.js'
 import { shell } from '../bridge.js'
 import { el, button, text, muted, ask, confirmDialog } from '../ui.js'
 import { moduleProps, newProp, deleteProp, renameProp, placementsOf, propRows } from '../props.js'
@@ -24,13 +25,28 @@ export async function importSheet () {
       pickPng: async (image) => { S.status(`now pick ${image}`, 'ok'); return shell.importFile('.png') }
     })
   } catch (e) { S.status(String(e.message ?? e), 'error'); return null }
+  // A name the module already has is never taken over unasked: a second
+  // sprite, made with the same id, would replace the first one's art.
+  const taken = (n) => !!S.module.sprites?.[n] || !!S.rec.assets?.[`sources/sprites/${n}.tsprite`]
+  if (taken(r.name)) {
+    const raw = await ask(`There is a sheet called ${r.name} already. This one's name (A-Z, 0-9, _), or ${r.name} to replace it`, copyName(r.name, taken))
+    const to = cleanName(raw ?? '')
+    if (!to) { S.status('not imported', 'warn'); return null }
+    if (taken(to) && !await confirmDialog(`Replace the sheet ${to}, and the art of everything drawn with it?`)) { S.status('not imported', 'warn'); return null }
+    r.name = to
+    r.manifest.sprite = to
+    r.manifest.image = `${to}.png`
+  }
   // A PROJECT is kept as the sheet's source (docs/PLUGINS.md, Bakers), so it can
-  // be opened in ThreeSprite again; the sheet is baked from it.
+  // be opened in ThreeSprite again; the sheet is baked from it. It carries the
+  // sheet's name, so it goes out again as this sheet.
   if (/\.tsprite$/i.test(f.name) && S.bakeSource) {
     S.rec.assets ??= {}
-    S.rec.assets[`sources/sprites/${r.name}.tsprite`] = new Blob([f.bytes])
+    const src = `sources/sprites/${r.name}.tsprite`
+    const prev = S.rec.assets[src]
+    S.rec.assets[src] = new Blob([nameTsprite(f.bytes, r.name) ?? f.bytes])
     const b = await S.bakeSource('file:tsprite', r.name)
-    if (!b.ok) { delete S.rec.assets[`sources/sprites/${r.name}.tsprite`]; S.status(b.error, 'error'); return null }
+    if (!b.ok) { if (prev) S.rec.assets[src] = prev; else delete S.rec.assets[src]; S.status(b.error, 'error'); return null }
     S.moduleChanged()
     S.redraw()
     S.status(`sheet ${r.name} imported with its project: ${r.manifest.animations.length} animation(s)${r.warnings.length ? ' -- ' + r.warnings.join('; ') : ''}`, 'ok')

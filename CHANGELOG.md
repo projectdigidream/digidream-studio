@@ -7,6 +7,33 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **Sprites made with ThreeSprite's defaults replaced each other.** Every new
+  ThreeSprite sprite is called SPRT until its id is changed, and an import
+  named the sheet after that id, so a second SPRT project imported silently
+  took the first one's sheet, source and art. An import now:
+  - names an unnamed (SPRT) project after its file;
+  - asks before taking a name the module already has, offering a free one
+    (NAME_2), and replaces a sheet only when that is confirmed.
+
+  A project the studio hands out (to ThreeSprite, or exported as .tsprite)
+  carries its sheet's name as its id, so it comes back as itself.
+- **The state editor was cramped** on a desktop: a 400 px column under the
+  preview, with about 350 px of height. With a state open:
+  - the panel is wider;
+  - the preview is drawn smaller, with its buttons in two rows and its numbers
+    on one line (a tap shows them all);
+  - each field's label sits beside it.
+- **"No more than N monsters within" never stopped a summoner in the
+  preview**, which had no monsters at all. What a monster summons is now the
+  preview's crowd: the summons stand where they landed, they count for "a
+  monster is within", "at least" and "no more than", and a summon's `limit`
+  is kept, as the engine keeps them (held to the engine's own run in the
+  test).
+- **Choosing a condition or a step on a phone took four or five swipes**: every
+  group was listed at once. One group shows at a time, picked from a row of
+  chips; the chooser opens on the group last used; and on a desktop a find box
+  searches all the groups.
+
 - **Fixes from the first testers of the new editors** (four of them, two on a
   phone):
   - **Play in a browser said nothing** on Home and the rail: its message went
