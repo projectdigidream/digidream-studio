@@ -877,8 +877,9 @@ export class NodeEditor {
           el('div', { class: 'me-row' }, [button(L.play ? 'Pause' : 'Play', () => { L.play = !L.play; L.t0 = performance.now(); this.render() })])]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Each state plays' }), el('span', { class: 'me-muted', text: 'An animation of the sprite, by name.' }),
           ...states.map(([n, st]) => { const cur = this.animOf(st.anim); const opts = anims.map((a) => [a, a]); if (cur && !anims.includes(cur)) opts.unshift([cur, `${cur} (missing)`]); return selectField(n, cur, opts, (v) => { st.anim = this.animNumber(v); L.anim = v; this.changed() }, cur && !anims.includes(cur) ? `${sheet || 'the sprite'} has no "${cur}": pick one` : '') })]),
-        el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Sounds' }), el('span', { class: 'me-muted', text: 'Every sound its steps play, from the module\'s sound packs. Add one with a "play the sound" step; add packs on the Sounds page.' }),
-          ...(sounds.length ? sounds.map(({ n, p }) => S.soundField(n, p.name, (v) => { p.name = v; this.changed() })) : [el('span', { class: 'me-muted', text: 'none yet' })])]),
+        el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Sounds' }), el('span', { class: 'me-muted', text: 'Every sound its steps play, from the module\'s sound packs. Add one with a "play the sound" step.' }),
+          ...(sounds.length ? sounds.map(({ n, p }) => S.soundField(n, p.name, (v) => { p.name = v; this.changed() })) : [el('span', { class: 'me-muted', text: 'none yet' })]),
+          el('div', { class: 'me-row' }, [button('Bring in sounds of your own…', () => S.go('sounds')), el('span', { class: 'me-muted', text: 'a pack made in the sound tool, on the Sounds page' })])]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its body' }),
           numField('Width (radius)', fxNum(prop.radius) ?? 0.35, 'm', (v) => { prop.radius = fxOf(v ?? 0.35); this.changed() }),
           numField('Drawn at', Number(prop.scale ?? 1), '× size', (v) => { if (v === null || v === 1) delete prop.scale; else prop.scale = fxOf(v); this.changed() }, { hint: 'the picture only; its body stays its size', lo: 0.25, hi: 6, say: (m) => this.say(m, 'warn') })])
