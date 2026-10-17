@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **Whether a plugin editor's changes were kept was unclear**: its bar said
+  "changed". It says "changed · saved when you go back", and its two buttons
+  say what each does (save and go back; throw the changes away).
+
 ## 0.4.1 -- 2026-10-17
 
 Built on engine 0.2.2.

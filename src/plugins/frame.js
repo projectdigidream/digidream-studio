@@ -30,6 +30,9 @@ export function parseEditArg (arg) {
 /** Where the studio's own page for a kind is: the way back when there was no "from". */
 const HOME_OF = { 'file:texture': 'textures', 'file:sfxproj': 'sounds', 'file:tsprite': 'sprites', 'file:msproj': 'music', 'record:script': 'scripts', 'record:mob': 'monsters' }
 
+/** An editor with unsaved changes, in its bar: and when they are kept. */
+const CHANGED = 'changed · saved when you go back'
+
 /** A question with several answers; resolves the chosen value, or null. */
 export function choose (question, answers) {
   return new Promise((resolve) => {
@@ -100,10 +103,10 @@ class EditorSession {
     this.iframe = el('iframe', { class: 'sx-frame', title: this.editor.label, allow: 'autoplay; clipboard-read; clipboard-write; fullscreen' })
     this.root = el('div', { class: 'sx-editor', 'data-editor': this.editor.key, 'data-kind': this.kindId }, [
       el('div', { class: 'sx-bar ui-topbar' }, [
-        el('button', { class: 'sx-back ui-button ui-button--primary ui-button--small', 'data-action': 'editor-back', title: 'back to the studio, saving', onclick: () => this.finish(true) }, withIcon('action.back', 'studio')),
+        el('button', { class: 'sx-back ui-button ui-button--primary ui-button--small', 'data-action': 'editor-back', title: 'save, and back to the studio', onclick: () => this.finish(true) }, withIcon('action.back', 'studio')),
         el('span', { class: 'sx-title ui-topbar__title', text: `${this.editor.label} · ${this.kind.label} ${name}` }),
         this.statusEl,
-        el('button', { class: 'st-danger sx-discard ui-button ui-button--danger ui-button--small ui-button--icon', 'data-action': 'editor-discard', title: 'discard: back without saving', onclick: () => this.finish(false) }, withIcon('action.close'))
+        el('button', { class: 'st-danger sx-discard ui-button ui-button--danger ui-button--small ui-button--icon', 'data-action': 'editor-discard', title: 'throw the changes away, and back to the studio', onclick: () => this.finish(false) }, withIcon('action.close'))
       ]),
       this.iframe
     ])
@@ -136,8 +139,9 @@ class EditorSession {
   wire () {
     const S = this.S
     const p = this.port
-    p.on('dirty', (m) => { this.dirty = !!m.dirty; this.status(this.dirty ? 'changed' : '') })
-    p.on('edit', () => { this.dirty = true; this.status('changed') })
+    // what Back does, said beside the word: "changed" alone left people unsure it was kept
+    p.on('dirty', (m) => { this.dirty = !!m.dirty; this.status(this.dirty ? CHANGED : '') })
+    p.on('edit', () => { this.dirty = true; this.status(CHANGED) })
     p.on('draft', (m) => { this.dirty = true; putDraft(S.module.id, this.kindId, this.key, { editor: this.editor.key, payload: m.payload }).catch(() => {}) })
     p.on('close', (m) => this.finish(m.save !== false))
     p.on('error', (m) => this.status(m.message, 'error'))
