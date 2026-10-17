@@ -23,6 +23,7 @@
 //
 import { loadTsprite } from '../vendor/tsprite.js'
 import { unzipSync, zipSync } from '../vendor/fflate.js'
+import { composeTsprite } from './tsprite_still.js'
 
 export const sheetName = (s) => String(s).toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
 
@@ -59,7 +60,7 @@ export function nameTsprite (bytes, name) {
  */
 export async function importSheetFile (file, { parseAtlas, pickPng }) {
   if (/\.tsprite$/i.test(file.name)) {
-    const r = loadTsprite(file.bytes)
+    const { r } = composeTsprite(loadTsprite, file.bytes)
     const manifest = JSON.parse(JSON.stringify(r.sheet.manifest))
     const own = manifest.sprite && manifest.sprite !== DEFAULT_SPRITE ? manifest.sprite : ''
     const name = sheetName(own || file.name.replace(/\.tsprite$/i, '')) || sheetName(manifest.sprite ?? '')

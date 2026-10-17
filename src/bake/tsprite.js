@@ -9,13 +9,15 @@
 // not the project's sprite name: a renamed sheet stays renamed.
 //
 import { loadTsprite } from '../../vendor/tsprite.js'
+import { composeTsprite } from '../tsprite_still.js'
 
 // 2: ThreeSprite's runtime with each view's own layer order (partOrderByView);
 // sheets baked by 1 drew every view in the one order, so they are baked again.
 export const version = '2'
 
 export async function bake ({ key, bytes }) {
-  const r = loadTsprite(bytes)
+  // a sprite with no animations yet is one still picture, not no sheet at all
+  const { r, still } = composeTsprite(loadTsprite, bytes)
   const manifest = JSON.parse(JSON.stringify(r.sheet.manifest))
   manifest.sprite = key
   manifest.image = `${key}.png`
@@ -25,6 +27,6 @@ export async function bake ({ key, bytes }) {
       [`sprites/${key}.png`]: r.png
     },
     meta: { manifest },
-    problems: r.warnings ?? []
+    problems: [...(r.warnings ?? []), ...(still ? [`${key} has no animations yet: drawn as one still picture until it has some`] : [])]
   }
 }

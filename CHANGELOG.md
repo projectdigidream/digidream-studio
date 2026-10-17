@@ -7,6 +7,11 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **A monster given a sprite of its own was drawn nowhere** -- its Looks
+  preview stayed black (on a phone, where it was tried), and the game had no
+  sheet for it: ThreeSprite composes a sheet from a sprite's animations, and a
+  sprite as it is first drawn has none. It is drawn as one still picture until
+  it has animations, and Looks names the states that play it for want of theirs.
 - **Whether a plugin editor's changes were kept was unclear**: its bar said
   "changed". It says "changed · saved when you go back", and its two buttons
   say what each does (save and go back; throw the changes away).
