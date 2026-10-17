@@ -5,6 +5,17 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **A missile's trail**: on the Missiles page, Looks → "Trail" picks one of
+  the particle kinds to follow it from launch until it bursts, at that kind's
+  rate, drawn along the flight in the preview. Needs the engine's missile
+  trails.
+- **Particles carried with their body**: on the Particles page, "on a body"
+  says whether a trail's or an attached emitter's specks are left behind where
+  they came out (smoke) or move with it (a flame, an aura). Every kind now
+  keeps its rate, which a trail emits at.
+
 ## 0.4.0.2 -- 2026-10-17
 
 Built on engine 0.2.1.2.

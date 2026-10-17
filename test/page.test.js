@@ -1034,6 +1034,57 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     return { name, info, path: !!document.querySelector('.me .mi-path'), peak: ed.F.peak, end: ed.F.end }
   })
   check(mis.path && mis.end === 'hit' && mis.peak > 3 && mis.peak < 3.5 && /peaks/.test(mis.info), `a falling missile is thrown on the engine's arc: lands 10 m on, peaking about 3.3 up (${JSON.stringify(mis)})`)
+  // ITS TRAIL: a particle kind picked under Looks follows it in the preview,
+  // left behind where it was, and stops at the burst; the engine's file names it.
+  const trail = await page.evaluate(async (name) => {
+    const S = window.__studio
+    const ed = S.missileEditor
+    const m = S.module.mobs.missiles[name]
+    const { vfxDef } = await import('/studio/src/editors/preview.js')
+    const kind = (S.vfxChoices() ?? []).map(([id]) => Number(id)).find((id) => vfxDef(S, id)?.type === 'particles')
+    if (kind === undefined) return { kind: null }
+    const sel = document.querySelector('.me .mi-main select[aria-label="Trail"]')
+    if (!sel) return { kind, sel: false }
+    sel.value = String(kind); sel.dispatchEvent(new Event('change'))
+    const r = { kind, sel: true, picked: m.trail, card: /trails/.test(document.querySelector('.me .mi-list [data-on="1"]')?.textContent ?? '') }
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    ed.shot = { t0: performance.now() }; ed.parts = []
+    await wait(ed.F.T * 500)
+    const tr = ed.shot?.trail
+    const at = ed.F.pts[Math.min(ed.F.pts.length - 1, Math.floor((performance.now() - ed.shot.t0) / 1000 * 60))][0]
+    r.flying = tr?.list.length ?? 0
+    r.behind = !!tr && tr.list.every((p) => p.x <= at + 0.5)
+    r.drawn = ed.partsG.childElementCount
+    await wait(Math.max(0, (ed.F.T - (performance.now() - ed.shot.t0) / 1000) * 1000) + 200)
+    r.youngest = tr.list.length ? Math.min(...tr.list.map((p) => p.age)) : null
+    const { emitMobsLua } = await import('/studio/src/mobs_emit.js')
+    const { compileMobs } = await import('/studio/src/brainc.js')
+    r.lua = new RegExp(`trail = ${kind}\\b`).test(emitMobsLua(S.module))
+    r.problems = S.vocab.validateMobs(compileMobs(S.module.mobs, S.module.props), { props: S.propNames() }).filter((p) => /trail/.test(p))
+    // CARRIED: a speck with no speed of its own stays on the missile; left
+    // behind, the trail is as long as the flight its specks have lived through
+    const { newVfx } = await import('/studio/src/vfxlib.js')
+    const still = newVfx(S.module, 'particles', [...(S.servedVfx?.keys() ?? [])])
+    Object.assign(still, { count: 1, rate: 60, life: 1, lifeVar: 0, speed: 0, speedVar: 0, gravity: 0, drag: 0 })
+    const spread = async (carry) => {
+      if (carry) still.carry = 1; else delete still.carry
+      m.trail = still.id; S.moduleChanged()
+      ed.shot = { t0: performance.now() }; ed.parts = []
+      await wait(Math.min(ed.F.T * 1000 - 100, 900))
+      const l = ed.shot?.trail?.list ?? []
+      return l.length ? Math.max(...l.map((p) => p.x)) - Math.min(...l.map((p) => p.x)) : null
+    }
+    r.left = await spread(false)
+    r.carried = await spread(true)
+    S.module.vfx = S.module.vfx.filter((v) => v !== still)
+    delete m.trail; S.moduleChanged()
+    return r
+  }, mis.name)
+  check(trail.kind !== null && trail.sel && trail.picked === trail.kind && trail.card, `a missile's trail is picked under Looks, and its card says it trails (${JSON.stringify(trail)})`)
+  check(trail.flying > 0 && trail.behind && trail.drawn > 0, `in flight the trail's specks come out where it is and are left behind it (${JSON.stringify(trail)})`)
+  check(trail.youngest === null || trail.youngest >= 0.1, `and none come out after it bursts (${JSON.stringify(trail)})`)
+  check(trail.lua && !trail.problems?.length, `the engine's file names the trail, and the engine's vocabulary takes it (${JSON.stringify({ lua: trail.lua, problems: trail.problems })})`)
+  check(trail.left > 2 && trail.carried !== null && trail.carried < 0.5, `a carried trail's specks go with the missile; left behind, they stretch along its flight (${JSON.stringify({ left: trail.left, carried: trail.carried })})`)
   await page.evaluate(() => window.__studio.go('map'))
   // THE PHONE ON ITS SIDE: the rail stays, the preview waits behind a strip, a state opens beside the list.
   const phone = await browser.newPage()

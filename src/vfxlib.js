@@ -32,7 +32,7 @@ export const PARTICLE_FIELDS = [
   { name: 'drag', type: 'num', min: 0, max: 8, step: 0.1 },
   { name: 'size', type: 'num', min: 0.01, max: 2, step: 0.01 },
   { name: 'sizeEnd', label: 'size_end', type: 'num', min: 0, max: 2, step: 0.01, doc: 'Size at the end of a speck\'s life. Smoke grows; sparks shrink.' },
-  { name: 'rate', type: 'int', min: 1, max: 400, step: 5, attachedOnly: true, doc: 'Specks a second, for an attached emitter.' },
+  { name: 'rate', type: 'int', min: 1, max: 400, step: 5, def: 40, doc: 'Specks a second while it follows a body: an attached emitter, or a missile\'s trail.' },
   { name: 'linger', type: 'num', min: 0, max: 3, step: 0.02, attachedOnly: true, doc: 'How long it keeps going after the last event. The chainsaw re-sends every few ticks; letting go lets it lapse.' }
 ]
 
@@ -77,10 +77,16 @@ export function vfxRows (v, ctx) {
   rows.push(row('emits', select('', attached ? 'attach' : 'burst',
     [['burst', 'a burst, where the event happened'], ['attach', 'attached: follows the body it came from']],
     (val) => { v.attach = val === 'attach' ? 1 : 0; ctx.changed() }).lastChild))
+  // ON A BODY (an attached emitter, a missile's trail): left behind where they
+  // came out, or carried along with it.
+  rows.push(addHelp(row('on a body', select('', v.carry ? 'carry' : 'leave',
+    [['leave', 'left behind where they came out (smoke, a trail)'], ['carry', 'carried with it (a flame, an aura)']],
+    (val) => { if (val === 'carry') v.carry = 1; else delete v.carry; ctx.changed() }).lastChild),
+  'When it follows a body -- attached, or a missile\'s trail -- each speck either stays where it came out, or moves with the body as it goes.'))
   for (const f of PARTICLE_FIELDS) {
     if (f.attachedOnly && !attached) continue
     if (f.name === 'count' && attached) continue
-    rows.push(addHelp(number(f.label ?? f.name, v[f.name] ?? 0, { min: f.min, max: f.max, step: f.step }, (n) => { v[f.name] = n; ctx.changed() }), f.doc))
+    rows.push(addHelp(number(f.label ?? f.name, v[f.name] ?? f.def ?? 0, { min: f.min, max: f.max, step: f.step }, (n) => { v[f.name] = n; ctx.changed() }), f.doc))
   }
   rows.push(colourRow('colour', v.colour ?? 0xffaa33, (n) => { v.colour = n; ctx.changed() }))
   rows.push(colourRow('colour_end', v.colourEnd ?? 0x662200, (n) => { v.colourEnd = n; ctx.changed() }))
@@ -237,7 +243,7 @@ export class VfxPreview {
     dist.sort((x, y) => x - y)
     const r = dist.length ? dist[Math.floor(dist.length * 0.8)] : 0.5
     // An attached emitter's body goes round a circle as well.
-    return Math.max(0.6, def.attach ? r + 1.2 : r) + (def.sizeEnd ?? def.size ?? 0.1)
+    return Math.max(0.6, def.attach || def.carry ? r + 1.2 : r) + (def.sizeEnd ?? def.size ?? 0.1)
   }
 
   /** The skin changed: the stage colour, and the scene drawn again in the new one. */
@@ -288,8 +294,9 @@ export class VfxPreview {
         this.view.spawn(def.id ?? 0, { x: -0.6, y: 1.2, z: 0.9 }, { x: 4, y: 1.2, z: -0.6 }, now)
         this.next = now + (def.life ?? 0.12) + 0.5
       }
-    } else if (def.attach) {
-      // Round a circle, so it can be seen to follow the body it is on.
+    } else if (def.attach || def.carry) {
+      // Round a circle, so it can be seen to follow the body it is on (and,
+      // carried, to take its specks along).
       const a = (now - this.t0) * Math.PI * 0.5
       const at = { x: Math.cos(a) * 1.2, y: 1, z: Math.sin(a) * 1.2 }
       this.view.attach(def.id ?? 0, 1, -a / (Math.PI * 2) + 0.25, now)
@@ -298,7 +305,7 @@ export class VfxPreview {
       this.view.spawn(def.id ?? 0, from, { x: this.radius || 0, y: 1, z: 0 }, now)
       this.next = now + Math.max(0.8, (def.life ?? 0.5) + (def.lifeVar ?? 0) + 0.3)
     }
-    if (!def.attach) this.view.update(now)
+    if (!def.attach && !def.carry) this.view.update(now)
     this.#size()
     // The reach fills most of the view's height.
     const d = this.fit * this.zoom / Math.tan((this.camera.fov / 2) * Math.PI / 180) / 0.8

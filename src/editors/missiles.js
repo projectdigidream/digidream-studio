@@ -2,8 +2,8 @@
 // Missiles: the module's, shared by every monster and weapon
 // (module.mobs.missiles, docs/MOBS.md "Missiles"). A side view of its flight as
 // the engine flies it (missileflight.js), fired at a stand-in target, with the
-// engine's particle kinds bursting where it lands; what it does when it hits,
-// runs out, bounces and on its way; and who fires it.
+// engine's particle kinds bursting where it lands and trailing it on its way;
+// what it does when it hits, runs out, bounces and on its way; and who fires it.
 //
 import { el, button, confirmDialog } from '../ui.js'
 import { MISSILE_ACTIONS, groupsWithMore, unphrased, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
@@ -101,7 +101,7 @@ export class MissileEditor {
       const u = this.users(n)
       return el('button', { class: 'me-gcard', 'data-on': n === this.name ? '1' : '0', onclick: () => { this.name = n; this.sel = null; this.picking = null; this.shot = null; this.render() } }, [
         el('b', { class: 'me-mono', text: n }),
-        el('span', { class: 'me-muted', text: `${fxNum(q.speed) ?? '?'} m/s${fxNum(q.gravity) ? ', falls' : ', flies straight'}${q.homing ? ', homing' : ''}${q.bounces ? `, bounces ${q.bounces}` : ''}` }),
+        el('span', { class: 'me-muted', text: `${fxNum(q.speed) ?? '?'} m/s${fxNum(q.gravity) ? ', falls' : ', flies straight'}${q.homing ? ', homing' : ''}${q.bounces ? `, bounces ${q.bounces}` : ''}${q.trail !== undefined ? ', trails' : ''}` }),
         el('span', { class: 'me-muted', text: u.length ? `used by ${u.map((x) => x.label).join(', ')}` : 'not used yet' })])
     }))
     if (!names.length) list.append(el('span', { class: 'me-muted', text: 'No missiles yet: name one above and press New.' }))
@@ -133,6 +133,7 @@ export class MissileEditor {
     if (F.end === 'over') checks.push(`It passes over the target at ${F.endZ.toFixed(1)} m.`)
     if (F.end === 'expired') checks.push(`It runs out after ${F.endX.toFixed(1)} m, before the target at ${this.dist} m: make it last longer, or fly faster.`)
     if (blast && fxNum(blast.radius) >= this.dist) checks.push(blast.hurts_owner ? `The blast (${fxNum(blast.radius)} m) reaches its shooter ${this.dist} m away: it hurts itself.` : `The blast (${fxNum(blast.radius)} m) reaches back to its shooter ${this.dist} m away; the shooter is safe only because it does not hurt the one who fired it, but anything beside the shooter is hit.`)
+    if (m.trail !== undefined && vfxDef(S, m.trail)?.type !== 'particles') checks.push(`Its trail is particle kind ${m.trail}, which ${vfxDef(S, m.trail) ? 'is a tracer, not particles' : 'the module does not have'}: nothing follows it. Pick one under Looks.`)
     if (!used.length) checks.push('Nothing fires it yet: give a monster\'s state a "fire the missile" step, or a weapon\'s a "launch the missile".')
     const info = F.end === 'hit' ? `${this.fromPlayer ? 'fired level' : g(m) ? 'thrown to land on the target\'s middle' : 'aimed at the target\'s middle'} · reaches ${this.dist} m in ${F.T.toFixed(2)} s (${F.ticks} ticks)${g(m) ? ` · peaks ${F.peak.toFixed(1)} m up` : ''}`
       : `${F.end === 'floor' ? 'lands' : F.end} at ${F.endX.toFixed(1)} m after ${F.T.toFixed(2)} s`
@@ -168,6 +169,7 @@ export class MissileEditor {
     })])
     const looks = [
       this.drawnAs(m, set),
+      this.trailField(m, set),
       numField('While flying, plays state', m.anim_fly ?? '', '', (v) => { if (v === null) delete m.anim_fly; else m.anim_fly = Math.round(v); set() }, { placeholder: "the prop's" }),
       numField('When it bursts, plays state', m.anim_burst ?? '', '', (v) => { if (v === null) delete m.anim_burst; else m.anim_burst = Math.round(v); set() }, { placeholder: 'none' }),
       numField('Burst lasts', m.burst_ticks ? secs(m.burst_ticks) : '', 's', (v) => { if (!v) delete m.burst_ticks; else m.burst_ticks = ticksOf(v); set() }, { placeholder: 'none' })
@@ -201,6 +203,16 @@ export class MissileEditor {
     s.value = m.prop ?? ''
     s.addEventListener('change', () => { if (s.value) m.prop = s.value; else delete m.prop; set() })
     return el('div', { class: 'me-frow' }, [el('label', { text: 'Drawn as' }), s, el('span', { class: 'me-muted', text: 'a prop, drawn with its own sprite and scale' })])
+  }
+
+  /** Particles that follow it from launch until it bursts: one of the particle kinds, at that kind's rate. */
+  trailField (m, set) {
+    const S = this.S
+    const kinds = (S.vfxChoices?.() ?? []).filter(([id]) => vfxDef(S, id)?.type === 'particles')
+    const opts = [['', 'none'], ...kinds.map(([id, label]) => [String(id), label])]
+    if (m.trail !== undefined && !kinds.some(([id]) => Number(id) === Number(m.trail))) opts.push([String(m.trail), `${m.trail} · not a particle kind of the module`])
+    return selectField('Trail', m.trail === undefined ? '' : String(m.trail), opts, (v) => { if (v) m.trail = Number(v); else delete m.trail; set() },
+      'particles that follow it on its way; the kind\'s rate (Particles page) is how thick')
   }
 
   /** One of its action lists, each a sentence with its fields. */
@@ -264,26 +276,42 @@ export class MissileEditor {
         const t = (now - this.shot.t0) / 1000
         // a frame's time can be a moment before the click that fired: never before the launch
         const i = Math.max(0, Math.min(F.pts.length - 1, Math.floor(t * 60)))
-        if (t < F.T) { this.dot.setAttribute('visibility', 'visible'); this.dot.setAttribute('cx', this.px(F.pts[i][0])); this.dot.setAttribute('cy', this.py(F.pts[i][1])) } else {
+        if (t < F.T) {
+          this.dot.setAttribute('visibility', 'visible'); this.dot.setAttribute('cx', this.px(F.pts[i][0])); this.dot.setAttribute('cy', this.py(F.pts[i][1]))
+          // its trail, as the game's attached emitter runs one: the kind's rate
+          // a second, out of where it is NOW, left behind to live their own life
+          const def = this.m?.trail !== undefined ? vfxDef(this.S, this.m.trail) : null
+          if (def?.type === 'particles') {
+            if (!this.shot.trail) { this.shot.trail = { def, list: [], ox: 0, oy: 0, carry: 0 }; this.parts.push(this.shot.trail) }
+            const tr = this.shot.trail
+            // carried (`carry 1`): every speck out moves as the missile did since the last frame
+            if (def.carry && tr.last) for (const p of tr.list) { p.x += F.pts[i][0] - tr.last[0]; p.y += F.pts[i][1] - tr.last[1] }
+            tr.last = F.pts[i]
+            tr.carry += (def.rate ?? 40) * dt
+            const n = Math.floor(tr.carry)
+            if (n > 0) { tr.carry -= n; tr.list.push(...emitBurst({ ...def, count: n }, { x: F.pts[i][0], y: F.pts[i][1], z: 0 }, 0.5, 0)) }
+          }
+        } else {
           this.dot.setAttribute('visibility', 'hidden')
           if (!this.shot.burst) {
             this.shot.burst = true
             // filling its blast: an 8 m blast bursts eight metres wide, as the engine sends the radius with the effect
             const r = fxNum((this.m?.on_hit ?? []).find((p) => p.action === 'damage_area')?.radius) ?? 0.3
-            for (const p of this.m?.on_hit ?? []) if (p.action === 'vfx') { const def = vfxDef(this.S, p.kind); if (def?.type === 'particles') this.parts.push({ def, list: emitBurst(def, { x: 0, y: 0.5, z: 0 }, 0.5, r) }) }
+            for (const p of this.m?.on_hit ?? []) if (p.action === 'vfx') { const def = vfxDef(this.S, p.kind); if (def?.type === 'particles') this.parts.push({ def, list: emitBurst(def, { x: 0, y: 0.5, z: 0 }, 0.5, r), ox: F.endX, oy: F.endZ }) }
           }
           if (!this.parts.length && t > F.T + 0.5) this.shot = null
         }
       }
       for (const b of this.parts) stepParticles(b.list, dt, b.def)
-      this.parts = this.parts.filter((b) => b.list.length)
+      // a trail still flying stays, though it has nothing out yet
+      this.parts = this.parts.filter((b) => b.list.length || (b === this.shot?.trail && !this.shot.burst))
       if (this.partsG?.isConnected && F) {
         this.partsG.replaceChildren()
         for (const b of this.parts) for (const p of b.list) {
           const k = p.age / p.life
           const c = rampColour(b.def.colour, b.def.colourEnd ?? b.def.colour, k)
           const e = document.createElementNS(SVG, 'circle')
-          e.setAttribute('cx', this.px(F.endX + p.x)); e.setAttribute('cy', this.py(F.endZ + p.y))
+          e.setAttribute('cx', this.px(b.ox + p.x)); e.setAttribute('cy', this.py(b.oy + p.y))
           e.setAttribute('r', Math.max(1, ((b.def.size ?? 0.1) + ((b.def.sizeEnd ?? 0) - (b.def.size ?? 0.1)) * k) * this.sx * 0.5))
           e.setAttribute('style', `fill:rgb(${Math.round(c.r * 255)} ${Math.round(c.g * 255)} ${Math.round(c.b * 255)});opacity:${b.def.blend === 'alpha' ? 0.9 * (1 - k) : 1}`) // content: the module's particle colour
           this.partsG.appendChild(e)

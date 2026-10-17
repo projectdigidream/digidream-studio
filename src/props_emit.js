@@ -28,7 +28,7 @@ const VFX_NUM = [
   ['count', 'count'], ['life', 'life'], ['life_var', 'lifeVar'],
   ['speed', 'speed'], ['speed_var', 'speedVar'], ['cone', 'cone'],
   ['gravity', 'gravity'], ['drag', 'drag'], ['size', 'size'], ['size_end', 'sizeEnd'],
-  ['attach', 'attach'], ['rate', 'rate'], ['linger', 'linger']
+  ['attach', 'attach'], ['rate', 'rate'], ['linger', 'linger'], ['carry', 'carry']
 ]
 const hex6 = (n) => (Number(n) >>> 0).toString(16).padStart(6, '0')
 
@@ -42,10 +42,11 @@ export function vfxLine (v) {
   }
   const out = [`vfx ${v.id} particles`]
   for (const [word, key] of VFX_NUM) {
-    // An attached emitter counts nothing and a one-shot burst has no rate, so
-    // neither writes the other's fields: a line that says both is a line whose
-    // reader has to guess which was meant.
-    if (v.attach ? (key === 'count') : (key === 'rate' || key === 'linger' || key === 'attach')) continue
+    // An attached emitter counts nothing, and only it lingers after its last
+    // event. A rate is also what a missile's trail emits at, whatever the kind,
+    // so any kind keeps one; `carry` is written only when it is on.
+    if (v.attach ? (key === 'count') : (key === 'linger' || key === 'attach')) continue
+    if (key === 'carry' && !v.carry) continue
     if (v[key] === undefined || v[key] === null) continue
     out.push(`${word} ${num(v[key])}`)
   }
