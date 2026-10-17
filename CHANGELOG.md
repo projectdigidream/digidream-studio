@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.0.2 -- 2026-10-17
+
+Built on engine 0.2.1.2.
+
 ### Added
 
 - **What a particle is drawn as** (engine 0.2.1.2): on the Particles page, "drawn
