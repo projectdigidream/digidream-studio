@@ -11,6 +11,9 @@ anything not released yet is under **Unreleased**.
   as" a soft dot (as before), a hard disc, square, hexagon or star, or a
   picture of the module's own -- coloured by the kind's ramp, so one white
   picture makes a burst of any colour, and previewed by the game's own code.
+- **ThreeSprite 0.2.1** bundled: it saves as you go (a new sprite is no longer
+  lost on reload), lays itself out for a phone held sideways, and a sprite's
+  id follows its name.
 
 ## 0.4.0.1 -- 2026-10-17
 
