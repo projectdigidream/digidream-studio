@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **The Package page on Android offered "Download the android kit"** though
+  the app carries it, and the button took the whole app to an error page it
+  could not leave. It is no longer offered, and a link out of the app opens in
+  the phone's browser (the engine's Android shell, next engine release).
+
 ### Added
 
 - **A missile's trail**: on the Missiles page, Looks → "Trail" picks one of
