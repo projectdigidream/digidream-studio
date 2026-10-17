@@ -20,7 +20,8 @@ const SNAP_PX = 16
  * grid. `except` keeps a dragged corner from snapping to its own room.
  */
 export function snapAt (S, x, y, z = 0, except = null) {
-  return snapToMap(S.doc, x, y, { tolerance: SNAP_PX * S.viewport.worldPerPixel(z), except })
+  // at most half a unit, however far out the view: zoomed out, a corner meant to leave a gap jumped onto the wall
+  return snapToMap(S.doc, x, y, { tolerance: Math.min(SNAP_PX * S.viewport.worldPerPixel(z), 0.5), except })
 }
 
 export function groundAt (S, info, z) {

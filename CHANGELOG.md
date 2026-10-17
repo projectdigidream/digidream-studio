@@ -75,6 +75,22 @@ anything not released yet is under **Unreleased**.
   they are kept in a file of the app's as well.
 - **"the new sprite's name (capitals and digits)"** read as a rule to follow;
   the studio upper-cases the name itself and no longer says so.
+- **Closing a side panel twice flipped the map to the game view** (the panel's
+  × sits where PLAN/GAME is), and the arrow keys then changed a slider in the
+  closed panel. A tap there just after closing is let go, and the focus
+  leaves with the panel.
+- **A sky strip was imported as two frames**: a picture twice as wide as tall
+  is the shape the Sky page asks for, and is a still picture now; side by
+  side frames are guessed from three up.
+- **Zoomed out, a corner snapped onto a wall metres away**, leaving a room
+  touching the one it sits in (which no map bakes). Snapping reaches half a
+  unit at most.
+- **Looks offered eight sides for a sprite drawn from one**, and a state the
+  sprite had no animation for (a death) played idle without a word. A
+  one-view sprite has no sides to pick, and each such state is named with
+  what the game plays instead.
+- The Package page numbers the steps it shows (it skipped from 3 to 5 off
+  Android), and says why a desktop build fetches the android kit.
 
 ### Added
 

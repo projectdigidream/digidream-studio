@@ -51,6 +51,8 @@ export class Sheets {
     return { anim: anim.name, frame: i, frames: n, view, views: src.atlas.views.count, fps: anim.fps, loop: anim.loop !== false, tall: src.atlas.worldHeight * scale }
   }
   height (sheet) { return this.get(sheet)?.atlas.worldHeight ?? 1 }
+  /** How many sides it is drawn from, once loaded (null before). */
+  views (sheet) { return this.get(sheet)?.atlas.views.count ?? null }
   animations (sheet) { return this.get(sheet)?.atlas.animations.map((a) => a.name) ?? this.S.module.sprites?.[sheet]?.animations ?? [] }
 }
 

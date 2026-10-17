@@ -17,6 +17,7 @@ const check = (ok, label) => { checks++; if (!ok) { fails++; console.log(`  FAIL
 // --- the guess, from a picture's shape -------------------------------------------------
 check(JSON.stringify(guessSheet(64, 512)) === JSON.stringify({ layout: 'vertical', frames: 8, fps: DEFAULT_FPS }), 'a picture eight squares tall is offered as eight vertical frames (qPainter\'s layout)')
 check(guessSheet(256, 64)?.layout === 'horizontal' && guessSheet(256, 64).frames === 4, 'four squares wide, as four horizontal frames')
+check(guessSheet(256, 128) === null && guessSheet(512, 256) === null, 'CONTROL: twice as wide as tall is a sky strip\'s shape, a still picture, not two frames')
 check(guessSheet(64, 64) === null && guessSheet(64, 100) === null && guessSheet(64, 64 * 300) === null, 'CONTROL: a square, an uneven shape and too many frames are not guessed')
 
 // --- cut where the client cuts -----------------------------------------------------------

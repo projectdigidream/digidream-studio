@@ -1364,6 +1364,50 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(Math.abs(Number(r.speed) - 7.5) < 1e-3, `a decimal comma is read as a point (${r.speed})`)
 }
 
+// THE PANEL'S × AND THE LOOKS TAB: a tap on PLAN just after the panel closed
+// (its × sits there) is let go, the focus leaves with the panel (arrow keys
+// changed a hidden slider), and a state playing an animation the sprite has
+// not is named with what the game plays instead.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    const out = {}
+    await S.go('map'); await wait(500)
+    S.select({ kind: 'sector', id: S.doc.order[0] }); await wait(300)
+    document.querySelector('.st-sheet input.st-val')?.focus()
+    const mode = S.viewport.mode
+    S.ui.hideSheet()
+    out.blurred = !document.querySelector('.st-sheet')?.contains(document.activeElement)
+    S.ui.viewBtn.click(); await wait(50)
+    out.heldBack = S.viewport.mode === mode
+    await wait(600)
+    S.ui.viewBtn.click(); await wait(50)
+    out.flipsAfter = S.viewport.mode !== mode
+    S.ui.viewBtn.click(); await wait(50)
+    // Looks: a state playing an animation the sprite has not
+    const mob = Object.keys(S.module.mobs?.mobs ?? {})[0]
+    if (mob) {
+      await S.go('monsters', mob); await wait(800)
+      const ed = S.monsterEditor
+      const prop = ed.prop
+      const st = Object.values(ed.nodes)[0]
+      const hadAnim = st.anim; const hadArt = JSON.stringify(prop.art)
+      prop.art.states = { ...(prop.art.states ?? {}), 9: 'nosuchanim' }
+      st.anim = 9
+      ed.tab = 'look'; ed.render(); await wait(1500)
+      out.warn = [...document.querySelectorAll('.me .me-warn')].map((e) => e.textContent).find((t) => /nosuchanim/.test(t)) ?? null
+      out.views = ed.look?.views
+      out.sideRow = [...document.querySelectorAll('.me .me-row')].map((r) => r.textContent).find((t) => /^side/.test(t))?.slice(0, 60)
+      st.anim = hadAnim; prop.art = JSON.parse(hadArt); ed.render()
+    }
+    await S.go('map')
+    return out
+  })
+  check(r.blurred && r.heldBack && r.flipsAfter, `a tap where the panel's × was is let go, the focus leaves with it, and PLAN works a moment later (${JSON.stringify(r)})`)
+  check(r.warn === null ? false : /no animation called nosuchanim, so the game plays \w+ instead/.test(r.warn), `Looks says when a state plays an animation the sprite has not (${r.warn})`)
+}
+
 // A STEP IS ADDED from beside the list, on a monster and a weapon: the chooser
 // opens whole (in the column beside the list it was once squeezed to an empty
 // bar), and a step picked from it lands in the state.

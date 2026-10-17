@@ -945,6 +945,8 @@ export class NodeEditor {
       const anims = this.sheetAnims()
       const a = L.anim && anims.includes(L.anim) ? L.anim : anims[0]
       const r = this.sheets.draw(ctx, sheet, a, L.play ? (performance.now() - L.t0) / 1000 : 0, L.facing, w / 2, h - 18, px, Number(prop.scale ?? 1))
+      // the sides offered are the sprite's: drawn again once it has loaded and says how many
+      if (r && r.views !== L.views) { L.views = r.views; this.render(); return }
       info.textContent = r ? `${r.anim} · frame ${r.frame + 1} of ${r.frames} · ${r.fps} fps · ${r.loop ? 'loops' : 'plays once'} · side ${r.view} of ${r.views} · ${Math.round(r.tall * 100) / 100} m tall` : sheet ? `loading ${sheet}…` : 'no sprite yet: pick one, or import one'
       requestAnimationFrame(draw)
     }
@@ -973,9 +975,11 @@ export class NodeEditor {
               S.editInPlugin('file:tsprite', nm)
             }) : null]),
           el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: 'animation' }), ...anims.map((a) => el('button', { class: 'me-vbtn', 'data-on': (L.anim ?? anims[0]) === a ? '1' : '0', text: a, onclick: () => { L.anim = a; L.t0 = performance.now(); L.play = true; this.render() } }))]),
-          el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: 'side' }), ...sideNames.map((x, i) => el('button', { class: 'me-vbtn', 'data-on': Math.round(L.facing * 8) % 8 === i ? '1' : '0', text: x, onclick: () => { L.facing = i / 8; this.render() } }))]),
+          (L.views ?? this.sheets.views(sheet)) === 1 ? el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: 'side: one picture, the same from every side' })]) : el('div', { class: 'me-row' }, [el('span', { class: 'me-muted', text: 'side' }), ...sideNames.map((x, i) => el('button', { class: 'me-vbtn', 'data-on': Math.round(L.facing * 8) % 8 === i ? '1' : '0', text: x, onclick: () => { L.facing = i / 8; this.render() } }))]),
           el('div', { class: 'me-row' }, [button(L.play ? 'Pause' : 'Play', () => { L.play = !L.play; L.t0 = performance.now(); this.render() })])]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Each state plays' }), el('span', { class: 'me-muted', text: 'An animation of the sprite, by name.' }),
+          // what the game shows instead, said: a death the sprite has no animation for played idle without a word
+          ...(sheet && anims.length ? states.filter(([, st]) => { const a = this.animOf(st.anim); return a && !anims.includes(a) }).map(([n, st]) => el('span', { class: 'me-warn', icon: 'status.warning', text: ` ${n}: the sprite has no animation called ${this.animOf(st.anim)}, so the game plays ${anims[0]} instead. Pick one, or draw it.` })) : []),
           ...states.map(([n, st]) => { const cur = this.animOf(st.anim); const opts = anims.map((a) => [a, a]); if (cur && !anims.includes(cur)) opts.unshift([cur, `${cur} (missing)`]); return selectField(n, cur, opts, (v) => { st.anim = this.animNumber(v); L.anim = v; this.changed() }, cur && !anims.includes(cur) ? `${sheet || 'the sprite'} has no "${cur}": pick one` : '') })]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Sounds' }), el('span', { class: 'me-muted', text: 'Every sound its steps play, from the module\'s sound packs. Add one with a "play the sound" step.' }),
           ...(sounds.length ? sounds.map(({ n, p }) => S.soundField(n, p.name, (v) => { p.name = v; this.changed() })) : [el('span', { class: 'me-muted', text: 'none yet' })]),

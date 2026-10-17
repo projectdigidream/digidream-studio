@@ -27,7 +27,8 @@ export const DEFAULT_FPS = 8
  */
 export function guessSheet (w, h) {
   if (h > w && w > 0 && h % w === 0 && h / w >= 2 && h / w <= MAX_FRAMES) return { layout: 'vertical', frames: h / w, fps: DEFAULT_FPS }
-  if (w > h && h > 0 && w % h === 0 && w / h >= 2 && w / h <= MAX_FRAMES) return { layout: 'horizontal', frames: w / h, fps: DEFAULT_FPS }
+  // side by side, three or more: twice as wide as tall is the shape of a sky strip and a panorama, which the Sky page asks for
+  if (w > h && h > 0 && w % h === 0 && w / h >= 3 && w / h <= MAX_FRAMES) return { layout: 'horizontal', frames: w / h, fps: DEFAULT_FPS }
   return null
 }
 

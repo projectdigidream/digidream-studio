@@ -407,7 +407,7 @@ export class Ui {
     this.status = el('div', { class: 'st-status ui-pill', text: '' })
     this.undoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'undo', onclick: () => on.undo() }, [icon('action.undo')])
     this.redoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'redo', onclick: () => on.redo() }, [icon('action.redo')])
-    this.viewBtn = el('button', { text: 'PLAN', title: 'plan / game view', onclick: () => on.view() })
+    this.viewBtn = el('button', { text: 'PLAN', title: 'plan / game view', onclick: () => { if (!this.#justClosed()) on.view() } })
     this.rotL = el('button', { class: 'ui-button ui-button--icon', title: 'rotate', onclick: () => on.rotate(-1) }, [icon('action.rotateleft')])
     this.rotR = el('button', { class: 'ui-button ui-button--icon', title: 'rotate', onclick: () => on.rotate(1) }, [icon('action.rotate')])
     // Back to the module, on a phone held upright where there is no rail.
@@ -478,8 +478,17 @@ export class Ui {
     this.sheetBody.scrollTop = keep
   }
 
+  // THE PANEL'S × SITS WHERE PLAN/GAME IS once the panel has gone: a second
+  // tap on it flipped the view, and the focus left on a hidden slider made
+  // the arrow keys change it. A tap there just after closing is let go, and
+  // the focus leaves with the panel.
+  #closedAt = 0
+  #justClosed () { return performance.now() - this.#closedAt < 500 }
+
   hideSheet () {
     if (this.sheet.dataset.open !== '1') return
+    this.#closedAt = performance.now()
+    if (this.sheet.contains(document.activeElement)) document.activeElement.blur()
     this.sheet.dataset.open = '0'
     this.layer.dataset.sheet = '0'
     const cb = this.onSheetClose
