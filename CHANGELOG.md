@@ -5,6 +5,14 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.0 -- 2026-10-17
+
+Built on engine 0.2.1.
+
+New monster, weapon and missile editors; markers (world-anchored UI) in
+Screens, on monsters, in graphs and as signs on maps; a wall's texture turned
+and scaled; and the fixes three rounds of testers found.
+
 ### Fixed
 
 - **From a first-person tester on a phone (a Godot developer):**
