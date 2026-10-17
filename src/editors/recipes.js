@@ -94,6 +94,15 @@ export const WEAPON_RECIPES = {
     draw: { anim: 0, ticks: S(0.3), next: 'ready' },
     ready: { anim: 0, transitions: [{ to: 'fire', when: [{ cond: 'button_pressed' }, { cond: 'has_ammo', n: 1 }] }] },
     fire: { anim: 2, ticks: S(0.3), next: 'ready', sequence: [P(0, 'hitscan', { damage: 12, range: '32', spread: 1, tracer: 1, hit_vfx: 12 }), P(0, 'consume', { n: 1 }), P(0, 'vfx', { effect: 12 })] } }) },
+  // A blade: each press a slash, its swing's shape in the step like any attack;
+  // pressed again during the slash, a heavier one follows (the newer swing replaces the older).
+  blade: { label: 'Blade', note: 'a slash each press, a heavier one if pressed again', phases: () => ({
+    draw: { anim: 0, ticks: S(0.3), next: 'ready' },
+    ready: { anim: 0, transitions: [{ to: 'slash', when: [{ cond: 'button_pressed' }] }] },
+    slash: { anim: 2, ticks: S(0.4), next: 'ready', transitions: [{ to: 'heavy', when: [{ cond: 'button_pressed' }, { cond: 'phase_elapsed', ticks: S(0.15) }] }],
+      sequence: [P(0, 'swing', { damage: 15, reach: '1.6', half_arc: '0.0833', sweep_from: '-0.1667', sweep_to: '0.1667', ticks: S(0.2), cooldown: 0, knockback: '2' })] },
+    heavy: { anim: 2, ticks: S(0.6), next: 'ready',
+      sequence: [P(0, 'swing', { damage: 30, reach: '1.9', half_arc: '0.0833', sweep_from: '0.2083', sweep_to: '-0.2083', ticks: S(0.3), cooldown: S(0.2), knockback: '5' })] } }) },
   launcher: { label: 'Launcher', note: 'one heavy shot and a kick', per: 1, missile: true, phases: (m) => ({
     draw: { anim: 0, ticks: S(0.3), next: 'ready' },
     ready: { anim: 0, transitions: [{ to: 'fire', when: [{ cond: 'button_pressed' }, { cond: 'has_ammo', n: 1 }] }] },

@@ -1100,6 +1100,36 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   }
 }
 
+// A SWING IS A STEP like any other attack (engine 0.2.1.1): the Blade recipe's
+// slash is "swing for 15 damage, ..." in its state, its other numbers under
+// "more of it", written into the weapon's file as a step the engine validates;
+// the state has no swing form of its own.
+{
+  const blade = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('weapons'); await new Promise((r) => setTimeout(r, 500))
+    const ed = S.weaponEditor
+    ed.screen = 'gallery'; ed.render(); await new Promise((r) => setTimeout(r, 200))
+    const i = document.querySelector('.me input[aria-label^="The new weapon"]'); i.value = 'test_blade'; i.dispatchEvent(new Event('input'))
+    ;[...document.querySelectorAll('.me button')].find((b) => b.textContent === 'Blade').click(); await new Promise((r) => setTimeout(r, 400))
+    ed.tab = 'behaviour'; ed.render(); ed.select('slash'); await new Promise((r) => setTimeout(r, 200))
+    const rows = [...document.querySelectorAll('.me .me-side .me-srow')].map((x) => x.textContent)
+    const own = [...document.querySelectorAll('.me .me-side .me-h')].some((h) => /own swing/i.test(h.textContent))
+    ed.step = 0; ed.render(); await new Promise((r) => setTimeout(r, 200))
+    const more = document.querySelector('.me .me-side .me-more summary')?.textContent ?? ''
+    const { emitWeaponsLua } = await import('/studio/src/weapons_emit.js')
+    const { compileArsenal } = await import('/studio/src/brainc.js')
+    const lua = emitWeaponsLua(S.module)
+    const problems = S.vocab.validateWeapons({ ...S.module, weapons: compileArsenal(S.module.weapons) }).filter((p) => /test_blade/.test(p))
+    const { deleteWeapon } = await import('/studio/src/weapons_emit.js'); deleteWeapon(S.module, 'test_blade'); S.moduleChanged()
+    await S.go('map')
+    return { rows, own, more, step: /action = "swing",\s*damage = 15/.test(lua), problems }
+  })
+  check(blade.rows.some((r) => /swing for 15 damage, 1\.6 m long, from -60° to 60°/.test(r)) && !blade.own, `the Blade's slash is a swing step with its numbers, and the state has no swing form of its own (${JSON.stringify(blade.rows)})`)
+  check(/more of it .*knockback/.test(blade.more), `its other numbers are under "more of it" (${blade.more})`)
+  check(blade.step && !blade.problems.length, `and the weapon's file carries the step, which the engine's vocabulary accepts (${blade.problems.join(' | ')})`)
+}
+
 // MARKERS (docs/MARKERS.md): small UI hung on things in the world. Screens →
 // markers makes their looks, drawn by the client's own MarkerView over a
 // monster; a monster wears one as its bar (and its preview shows it); a sign

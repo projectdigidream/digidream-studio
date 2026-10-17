@@ -317,7 +317,7 @@ export class NodeEditor {
         const pool = Object.keys(W.ammo ?? {})[0]
         this.home[name] = { label, order, initial: 'draw', phases: r.phases(r.missile ? missile() : null), ...(r.per && pool ? { ammo: pool, per: r.per } : {}) }
         // a gun on the screen, at rest and firing, until it has pictures of its own
-        giveWeaponLook(S, name)
+        giveWeaponLook(S, name, { blade: how === 'blade' })
       }
     }
     this.newName = ''
@@ -813,8 +813,20 @@ export class NodeEditor {
     out.push(...blk.list)
     if (!this.phone) { if (blk.editor) out.push(blk.editor); if (blk.adder) out.push(blk.adder) }
     if (!this.pickAct) out.push(button(`+ add a step at ${secs(this.addAt(n))} s`, () => { this.pickAct = true; this.step = null; this.render() }))
-    // A WEAPON STATE MAY CARRY ITS OWN SWING, replacing the weapon's while it is in it: what makes a combo escalate.
-    if (!isMob) out.push(el('div', { class: 'me-h', text: 'Its own swing' }), ...this.swingSection(st, `This ${this.K.node}`))
+    // A swing is a step now, its shape in it. A state that still carries a swing
+    // of its own (a module written before) shows it, with the way to a step.
+    if (!isMob && st.swing) {
+      out.push(el('div', { class: 'me-h', text: 'Its own swing (the older way)' }),
+        el('span', { class: 'me-muted', text: 'A swing shape kept on the state, which the attack button swings. A swing step does the same with its numbers in it, at the moment it says.' }),
+        button('turn it into a swing step', async () => {
+          if (!await confirmDialog(`Make ${n}'s swing a step at 0 s? A weapon with a swing step in any state swings only through its steps: the attack button then just moves it from state to state.`)) return
+          ;(st.sequence ??= []).unshift({ at: 0, action: 'swing', ...JSON.parse(JSON.stringify(st.swing)) })
+          delete st.swing
+          this.changed()
+          this.say(`${n} now swings through a step at 0 s, with the shape it had.`)
+        }),
+        ...this.swingSection(st, `This ${this.K.node}`))
+    }
     return out.filter(Boolean)
   }
 
@@ -826,7 +838,9 @@ export class NodeEditor {
     const p = this.preview
     return stepsBlock({ node: st, table: this.K.acts, ctx: this.ctx(), length: len, head: p?.running && p.sim.state === n ? p.sim.elapsed : null,
       sel: this.step, setSel: (i) => { this.step = i; this.pickAct = false; this.render() }, picking: this.pickAct, setPicking: (b) => { this.pickAct = b; this.render() },
-      addAt: this.addAt(n), actCtx: this.actCtx(), onMissile: (m) => this.S.go('missiles', m) })
+      addAt: this.addAt(n), actCtx: this.actCtx(), onMissile: (m) => this.S.go('missiles', m),
+      // the swing a step leaves numbers out of: a weapon state's own (an older module's), else the declared one
+      declared: () => (this.kind === 'weapon' ? st.swing ?? this.thing.swing : this.thing.swing) ?? null })
   }
 
   stepSheet (n) {
@@ -1006,10 +1020,14 @@ export class NodeEditor {
     const changed = () => this.changed()
     const more = this.kind === 'mob'
       ? [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its brain: blood, pain, drops and the rest' }), ...brainRows(this.S, this.thing, { ...this.formCtx(), words: MOB_WORDS })]),
-          el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its own swing' }), ...this.swingSection(this.thing, 'This monster'), ...slashRows(this.S, 'monster', this.name, changed)]),
+          el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its default swing' }),
+            el('span', { class: 'me-muted', text: 'What a swing step leaves out. A swing is a step like any other attack (Behaviour: a state, + add a step, Attack): its numbers in it.' }),
+            ...this.swingSection(this.thing, 'This monster'), ...slashRows(this.S, 'monster', this.name, changed)]),
           this.prop ? el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its body states' }), ...bodyRows(this.S, this.prop, changed)]) : null]
       : [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'The weapon' }), ...weaponRows(this.S, this.name, this.thing, { ...this.formCtx(), words: WEAPON_WORDS })]),
-          el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its swing, in every state' }), ...this.swingSection(this.thing, 'This weapon'), ...slashRows(this.S, 'weapon', this.name, changed)])]
+          el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its default swing' }),
+            el('span', { class: 'me-muted', text: 'Swung by the attack button while no state has a swing step, and what a swing step leaves out. A swing is a step like any other attack: its numbers in it.' }),
+            ...this.swingSection(this.thing, 'This weapon'), ...slashRows(this.S, 'weapon', this.name, changed)])]
     return [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its numbers' }),
       el('span', { class: 'me-muted', text: 'Numbers it remembers, like which phase it is in or a cooldown. One exists as soon as a step sets it or a rule checks it: add a "set the number" step to make one.' }),
       ...(names.length ? names.map((v) => {

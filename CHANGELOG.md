@@ -7,7 +7,20 @@ anything not released yet is under **Unreleased**.
 
 ## 0.4.0.1 -- 2026-10-17
 
-Built on engine 0.2.1.
+Built on engine 0.2.1.1.
+
+### Changed
+
+- **A swing is an attack like any other**: a step with its numbers in it --
+  damage, how long, from which angle to which, how fast, and the rest under
+  "more of it" -- for monsters and weapons alike, at the moment of the state it
+  says, previewed like the other attacks (a newer swing replaces one still
+  sweeping; one during the cooldown does not happen). What a step leaves out
+  comes from the default swing, now named so on Advanced. A weapon state no
+  longer has a swing form of its own; one that carries a swing from before
+  shows it, with a way to turn it into a step.
+- **Blade**, a weapon recipe: a slash each press, and a heavier one if pressed
+  again during it.
 
 ### Fixed
 

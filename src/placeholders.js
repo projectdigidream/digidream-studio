@@ -79,6 +79,27 @@ export function gunPngs () {
   return [paint(false), paint(true)]
 }
 
+/** A blade held up at the bottom of the screen: [rest, mid-slash] -- the slash tilted, with a streak. */
+export function bladePngs () {
+  const [w, h] = GUN_SIZE
+  const paint = (slash) => {
+    const c = canvas(w, h)
+    const cx = w / 2
+    const steel = [196, 204, 218], edge = [236, 240, 248], dark = [88, 92, 104]
+    for (let y = 4; y < 58; y++) {
+      const lean = slash ? Math.round((58 - y) * 0.45) : 0       // the slash leans the blade over
+      const half = y < 10 ? Math.max(1, (y - 4) * 0.6) : 3
+      for (let x = -half; x <= half; x++) over(c, Math.round(cx + x + lean), y, x === -Math.round(half) ? dark : x >= 1 ? edge : steel, 1)
+    }
+    if (slash) for (let i = 0; i < 26; i++) glow(c, cx + 6 + i * 1.2, 30 - i * 0.6, 3, [200, 220, 255], 2)
+    rect(c, cx - 12, 58, 24, 4, [120, 96, 60])                   // the guard
+    rect(c, cx - 4, 62, 8, 18, [150, 104, 78])                   // the grip, in the hand
+    rect(c, cx - 10, 66, 20, 14, [150, 104, 78])
+    return png(c)
+  }
+  return [paint(false), paint(true)]
+}
+
 /** A picture name of the module's that is free: base, base_2, … (A-Z, 0-9, _). */
 function freePicture (S, base) {
   const name = String(base).toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 20) || 'PIC'
@@ -118,14 +139,14 @@ export function giveMissileLook (S, name, rgb) {
  * Give a weapon first-person pictures, when it has none: the placeholder gun
  * at rest, and firing for a moment. True when it was given them.
  */
-export function giveWeaponLook (S, name) {
+export function giveWeaponLook (S, name, { blade = false } = {}) {
   const vm = viewmodelsOf(S.module)
   const have = vm.weapons[name]
   if (have && ((have.ready ?? []).length || (have.fire ?? []).length || Object.keys(have.anims ?? {}).length)) return false
-  const [rest, fire] = gunPngs()
-  const a = freePicture(S, `${name}_gun`)
+  const [rest, fire] = blade ? bladePngs() : gunPngs()
+  const a = freePicture(S, `${name}_${blade ? 'blade' : 'gun'}`)
   addPicture(S, a, rest)
-  const f = freePicture(S, `${name}_gunf`)
+  const f = freePicture(S, `${name}_${blade ? 'bladef' : 'gunf'}`)
   addPicture(S, f, fire)
   vm.weapons[name] = { ready: [[a, 4]], fire: [[f, 4], [a, 6]] }
   return true

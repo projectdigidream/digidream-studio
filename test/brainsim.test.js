@@ -119,6 +119,26 @@ print("ROARS " .. tostring(mobs.live[z:index()].vars.roars or 0))
   check(g.state === 'ready' && g.ammo === 45, 'letting go early goes back to ready and costs nothing')
 }
 
+// ---- a swing, by the engine's rule (docs/SWINGS.md "A swing is a step") ----------------
+// Its shape is the step's, what it leaves out the declared swing's; a newer one
+// replaces one still sweeping and the replaced one starts no cooldown; one
+// during a cooldown does not happen; the cooldown starts when a swing ends.
+{
+  const brain = { hp: 100, initial: 'a', swing: { damage: 5, reach: '1', ticks: 10, cooldown: 30 }, states: { a: { anim: 0 } } }
+  const s = new BrainSim(brain, { kind: 'mob' })
+  s.dist = 1.4
+  const said = []
+  s.say = (w) => said.push(w)
+  s.act({ action: 'swing' })
+  check(/misses .*reaches 1\b/.test(said[0]), `a step with no shape swings the declared one: 1 m, missing at 1.4 (${said[0]})`)
+  s.tick += 5; s.act({ action: 'swing', damage: 20, reach: '2' })
+  check(said[1] === 'swings for 20', `one with its own shape, while the first still sweeps, replaces it (${said[1]})`)
+  s.tick += 12; s.act({ action: 'swing', damage: 9, reach: '2' })
+  check(/skipped/.test(said[2]), `one during the cooldown that started when it ended does not happen (${said[2]})`)
+  s.tick += 40; s.act({ action: 'swing', damage: 9, reach: '2' })
+  check(said[3] === 'swings for 9', `and after the cooldown it does (${said[3]})`)
+}
+
 // ---- against the engine ---------------------------------------------------------------
 if (!existsSync(LUAJIT)) {
   console.log('brainsim: no luajit (engine/scripts/setup_luajit.sh) -- parity checks skipped')

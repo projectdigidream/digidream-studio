@@ -25,7 +25,7 @@
 //
 // Pure: no DOM. Distances in metres, time in ticks.
 //
-import { fxNum, TPS } from './phrases.js'
+import { fxNum, TPS, SWING_SHAPE } from './phrases.js'
 
 export const THINK = 8
 const PREVIOUS = '@previous'
@@ -67,6 +67,8 @@ export class BrainSim {
     this.dead = false
     this.prev = null
     this.adds = {}
+    this.swingEnd = -1e9            // the tick the swing sweeping now ends
+    this.swingCdTo = -1e9           // and the tick its cooldown is over
     this.brood = []                 // what it summoned: { mob, d (m from it), limited }
     this.shots = []
     this.events = []
@@ -204,6 +206,23 @@ export class BrainSim {
       case 'consume': if (this.ammo !== null) this.ammo = Math.max(0, this.ammo - Number(a.n ?? 1)); break
       case 'teleport': { const d = num(a.distance, 3); this.dist = a.to === 'near' ? Math.max(num(a.min, 1), d * 0.75) : d; this.behind = (a.to ?? 'behind') === 'behind' ? !this.behind : Math.random() < 0.5; this.teleported = this.tick; said(`teleports ${a.to ?? 'behind'} the target`); break }
       case 'impulse': if (this.kind === 'mob' && (a.towards ?? 'target') === 'target') this.dist = Math.max(1.2, this.dist - num(a.speed) * 0.25); break
+      // A SWING (docs/ENGINE_NEEDS.md, the engine's rule): its shape is the step's,
+      // what it leaves out the declared swing's. A newer one replaces one still
+      // sweeping (which then starts no cooldown); one during a cooldown does not
+      // happen; the cooldown starts when a swing ends.
+      case 'swing': {
+        const sh = { ...(this.brain.swing ?? {}) }
+        for (const k of SWING_SHAPE) if (a[k] !== undefined) sh[k] = a[k]
+        if (this.tick < this.swingCdTo && this.tick >= this.swingEnd) { said('swing skipped: still cooling down'); break }
+        const ticks = Number(sh.ticks ?? 12)
+        this.swingEnd = this.tick + ticks
+        this.swingCdTo = this.swingEnd + Number(sh.cooldown ?? 0)
+        const reach = num(sh.reach, 1.5)
+        if (this.kind === 'mob') {
+          if (this.dist <= reach + 0.05) { said(`swings for ${sh.damage ?? '?'}`); if (sh.knockback) this.dist = Math.min(30, this.dist + num(sh.knockback) * 0.25) } else said(`swings and misses (${Math.round(this.dist * 10) / 10} m, it reaches ${reach})`)
+        } else said(`swings for ${sh.damage ?? '?'}`)
+        break
+      }
       case 'melee': if (this.kind === 'mob' && this.dist <= num(a.range) + 0.05) { said(`hits for ${a.damage}`); if (a.knockback) this.dist = Math.min(30, this.dist + num(a.knockback) * 0.25) } else said(`swings and misses (${Math.round(this.dist * 10) / 10} m)`); break
       case 'goto': { const to = a.state ?? a.phase; if (this.nodes[to]) { this.why = `goes to ${to}: a "leave now" step`; this.enter(to) } break }
       case 'despawn': this.dead = true; said('vanishes'); break

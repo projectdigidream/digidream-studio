@@ -12,6 +12,7 @@
 //        's'    a time, kept in ticks (60 a second), shown in seconds
 //        '%'    a percent, an int
 //        '°'    degrees, an int
+//        'turn' an angle kept as a fraction of a turn (fx), shown in degrees
 //        ''     a plain int
 //        'n+1'  a count shown one less than it is kept (count_within's at_least, negated)
 //   ['var', arg, default]             a name of one of its numbers
@@ -68,6 +69,7 @@ export function shown (part, obj) {
     if (unit === 's') return secs(v)
     if (unit === 'm' || unit === 'mps') { const n = fxNum(v); return n === null ? null : Math.round(n * 100) / 100 }
     if (unit === 'n+1') return Number(v) - 1
+    if (unit === 'turn') { const n = fxNum(v); return n === null ? null : Math.round(n * 3600) / 10 }
     return Number(v)
   }
   if (k === 'mob') return v ?? 'any'
@@ -86,6 +88,7 @@ export function store (part, obj, value) {
     if (unit === 's') obj[arg] = ticksOf(n)
     else if (unit === 'm' || unit === 'mps') obj[arg] = fxOf(n)
     else if (unit === 'n+1') obj[arg] = Math.max(1, Math.round(n) + 1)
+    else if (unit === 'turn') obj[arg] = fxOf(n / 360)
     else obj[arg] = Math.round(n)
     return
   }
@@ -94,7 +97,7 @@ export function store (part, obj, value) {
   if (value === '' || value === undefined) delete obj[arg]; else obj[arg] = value
 }
 
-const unitJoin = (u) => (!u || u === 'n+1' ? '' : u === '%' || u === '°' ? u : u === 'mps' ? ' m/s' : ` ${u}`)
+const unitJoin = (u) => (!u || u === 'n+1' ? '' : u === '%' || u === '°' ? u : u === 'turn' ? '°' : u === 'mps' ? ' m/s' : ` ${u}`)
 
 // ---------------------------------------------------------------- conditions
 
@@ -159,7 +162,12 @@ export const MOB_ACTIONS = {
   missile: { g: 'Attack', k: 'hit', p: [['t', 'fire the missile'], ['missile', 'kind', ''], ['t', 'at the target'], ['bool', 'lead', 'aiming ahead of it', false]] },
   hitscan: { g: 'Attack', k: 'hit', p: [['t', 'fire an instant shot for'], ['n', 'damage', '', 8], ['t', 'damage, range'], ['n', 'range', 'm', 32], ['t', ', spread'], ['n', 'spread', '°', 3]] },
   damage_area: { g: 'Attack', k: 'hit', p: [['t', 'a blast of'], ['n', 'damage', '', 30], ['t', 'damage within'], ['n', 'radius', 'm', 3], ['bool', 'hurts_owner', 'that hurts itself too', false]] },
-  swing: { g: 'Attack', k: 'hit', p: [['t', 'swing its own swing']] },
+  // A SWING IS AN ATTACK LIKE ANY OTHER (docs/ENGINE_NEEDS.md): its shape is its
+  // own, in the step -- the numbers it leaves out come from the declared swing
+  // (Advanced). A step with none of them swings the declared shape, said so.
+  swing: { g: 'Attack', k: 'hit', fixed: { half_arc: '0.0833', cooldown: 10 }, p: [['t', 'swing for'], ['n', 'damage', '', 12], ['t', 'damage,'], ['n', 'reach', 'm', 1.5], ['t', 'long, from'],
+    ['n', 'sweep_from', 'turn', -60], ['t', 'to'], ['n', 'sweep_to', 'turn', 60], ['t', 'over'], ['n', 'ticks', 's', 0.2]] },
+  'swing:declared': { g: 'Attack', k: 'hit', hidden: true, p: [['t', 'swing its default swing (on Advanced)']] },
   telegraph: { g: 'Attack', k: 'hit', p: [['t', 'warn the player with'], ['fx', 'effect', 12], ['t', 'for'], ['n', 'ticks', 's', 0.4]] },
   sound: { g: 'Sound and look', k: 'sound', p: [['t', 'play the sound'], ['sound', 'name', '']] },
   vfx: { g: 'Sound and look', k: 'sound', p: [['t', 'show the effect'], ['fx', 'kind', 12]] },
@@ -188,6 +196,12 @@ export const WEAPON_ACTIONS = {
   // one the player cannot tell landed. (The monster it hurts sprays its own blood.)
   hitscan: { g: 'Attack', k: 'hit', p: [['t', 'fire an instant shot for'], ['n', 'damage', '', 10], ['t', 'damage, range'], ['n', 'range', 'm', 32], ['t', ', spread'], ['n', 'spread', '°', 2],
     ['t', ', its ray'], ['fx?', 'tracer', 1, 'not drawn'], ['t', ', where it lands'], ['fx?', 'hit_vfx', 12, 'nothing']] },
+  // A SWING IS AN ATTACK LIKE ANY OTHER (docs/ENGINE_NEEDS.md): its shape is its
+  // own, in the step -- the numbers it leaves out come from the declared swing
+  // (Advanced). A step with none of them swings the declared shape, said so.
+  swing: { g: 'Attack', k: 'hit', fixed: { half_arc: '0.0833', cooldown: 10 }, p: [['t', 'swing for'], ['n', 'damage', '', 15], ['t', 'damage,'], ['n', 'reach', 'm', 1.5], ['t', 'long, from'],
+    ['n', 'sweep_from', 'turn', -60], ['t', 'to'], ['n', 'sweep_to', 'turn', 60], ['t', 'over'], ['n', 'ticks', 's', 0.2]] },
+  'swing:declared': { g: 'Attack', k: 'hit', hidden: true, p: [['t', 'swing its default swing (on Advanced)']] },
   launch: { g: 'Attack', k: 'hit', p: [['t', 'launch the missile'], ['missile', 'missile', '']] },
   damage_area: { g: 'Attack', k: 'hit', p: [['t', 'a blast of'], ['n', 'damage', '', 30], ['t', 'damage within'], ['n', 'radius', 'm', 2]] },
   telegraph: { g: 'Attack', k: 'hit', p: [['t', 'warn with'], ['fx', 'effect', 12], ['t', 'for'], ['n', 'ticks', 's', 0.2]] },
@@ -221,8 +235,12 @@ export function condKey (table, c) {
   if (c?.negate && table[`${c.cond}!`]) return `${c.cond}!`
   return c?.cond
 }
+/** The fields of a swing's shape (the vocabulary's swing_fields), which a swing step may carry. */
+export const SWING_SHAPE = ['damage', 'reach', 'half_arc', 'sweep_from', 'sweep_to', 'min_reach', 'ticks', 'cooldown', 'pitch_from', 'pitch_to', 'half_pitch', 'knockback', 'lift', 'slow', 'slow_ticks', 'hit_vfx', 'hit_vfx_radius']
+
 export function actKey (table, a) {
   if (a?.action === 'set_param' && a.param && table[`set_param:${a.param}`]) return `set_param:${a.param}`
+  if (a?.action === 'swing' && table['swing:declared'] && !SWING_SHAPE.some((k) => a[k] !== undefined)) return 'swing:declared'
   return a?.action
 }
 
@@ -300,6 +318,7 @@ export function groupsOf (table, kind, only = null, ctx = {}) {
   const out = []
   for (const key of Object.keys(table)) {
     if (only && !only(key)) continue
+    if (table[key].hidden) continue
     let grp = out.find((x) => x.label === table[key].g)
     if (!grp) { grp = { label: table[key].g, opts: [] }; out.push(grp) }
     const sample = kind === 'cond' ? newCond(table, key) : newAct(table, key, 0, ctx)

@@ -93,6 +93,8 @@ export const CSS = `
 .me-srow{display:flex;gap:8px;align-items:baseline;padding:7px 8px;border-radius:9px;cursor:pointer;font:inherit;font-size:13px;background:transparent;border:0;color:inherit;text-align:left}
 .me-srow[data-on="1"]{background:var(--dnp-color-bg-hover)}
 .me-srow .me-at{font-family:var(--dnp-font-mono);min-width:52px}
+.me-more summary{cursor:pointer}
+.me-more[open]{display:flex;flex-direction:column;gap:4px}
 .me-step{background:var(--dnp-color-bg-sunken);border:1px solid var(--dnp-color-line-strong);border-radius:9px;padding:6px 10px;display:flex;flex-direction:column;gap:6px}
 .me-sheet{position:absolute;left:6px;right:6px;bottom:6px;max-height:90%;overflow-y:auto;background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-strong);border-radius:14px;padding:8px 10px 12px;z-index:20;display:flex;flex-direction:column;gap:8px}
 .me-form{display:flex;flex-direction:column;gap:6px}
@@ -264,7 +266,7 @@ export function sentenceEl (table, obj, ctx, key = null) {
       const i = el('input', { type: 'text', inputmode: 'decimal', value: v ?? '', 'aria-label': arg })
       i.addEventListener('change', () => { if (i.value.trim() !== '' && Number.isFinite(Number(i.value))) set(Number(i.value)) })
       i.addEventListener('focus', () => i.select())
-      const unit = part[2] === 'mps' ? 'm/s' : part[2] === 's' ? 's' : part[2] === 'm' ? 'm' : part[2] === 'n+1' ? '' : part[2]
+      const unit = part[2] === 'mps' ? 'm/s' : part[2] === 's' ? 's' : part[2] === 'm' ? 'm' : part[2] === 'n+1' ? '' : part[2] === 'turn' ? '°' : part[2]
       out.append(el('span', { class: 'me-numw' }, [i, unit ? el('span', { class: 'me-muted', text: unit }) : null]))
     } else if (kind === 'var' || kind === 'text') {
       const i = el('input', { type: 'text', class: 'me-name-in', value: v ?? '', 'aria-label': `${arg} (a name)` })
@@ -460,8 +462,39 @@ function stepEditor (seq, i, table, ctx, o) {
       mis && o.onMissile ? el('button', { class: 'me-lnk', text: `edit ${mis}`, onclick: () => o.onMissile(mis) }) : null,
       el('span', { class: 'me-grow' }),
       el('button', { class: 'me-lnk danger', text: 'remove step', onclick: () => { seq.splice(i, 1); o.setSel(null); ctx.changed() } })]),
-    sentenceEl(table, p, { ...ctx, live: true, spec: ctx.actSpec?.(p.action) })
-  ])
+    sentenceEl(table, p, { ...ctx, live: true, spec: ctx.actSpec?.(p.action) }),
+    ...declaredSwing(p, table, ctx, o),
+    moreOf(p, table, ctx)
+  ].filter(Boolean))
+}
+
+// Which steps have "more of it" open: kept across redraws, per step.
+const moreOpen = new WeakSet()
+/**
+ * MORE OF IT: the step's arguments its sentence does not say (a swing's
+ * pitch, lift and slow, say), in the vocabulary's own form, folded away.
+ * Nothing the engine takes is out of reach, and the sentence stays short.
+ */
+function moreOf (p, table, ctx) {
+  const spec = ctx.actSpec?.(p.action)
+  const ph = table[actKey(table, p)]
+  if (!spec || !ph) return null
+  const said = new Set(ph.p.filter((q) => q[0] !== 't').map((q) => q[1]))
+  const rest = (spec.args ?? []).filter((a) => !said.has(a.name) && !['at', 'action'].includes(a.name))
+  if (!rest.length) return null
+  const d = el('details', { class: 'me-more' }, [el('summary', { class: 'me-muted', text: `more of it (${rest.map((a) => a.name).join(', ')})` }),
+    ...argFields(rest, p, { ...(ctx.argCtx ?? {}), onChange: () => ctx.changed() }, [], p.action)])
+  if (moreOpen.has(p)) d.open = true
+  d.addEventListener('toggle', () => { if (d.open) moreOpen.add(p); else moreOpen.delete(p) })
+  return d
+}
+
+/** A swing with no numbers of its own swings the declared one: said, and a way to give it its own. */
+function declaredSwing (p, table, ctx, o) {
+  if (actKey(table, p) !== 'swing:declared') return []
+  const shape = o.declared?.()
+  return [el('span', { class: 'me-muted', text: shape ? 'It swings the default swing, set on Advanced. Give it numbers of its own to make this swing different from the others.' : 'There is no default swing on Advanced, so this swing has no shape: give it numbers of its own.' }),
+    button('give it numbers of its own', () => { Object.assign(p, JSON.parse(JSON.stringify(shape ?? {})), shape?.damage === undefined ? newAct(table, 'swing', p.at) : {}, { at: p.at, action: 'swing' }); ctx.changed() })]
 }
 
 // ---- forms ------------------------------------------------------------------------------------
