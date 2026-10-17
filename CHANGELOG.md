@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.1 -- 2026-10-17
+
+Built on engine 0.2.2.
+
 ### Fixed
 
 - **The Package page on Android offered "Download the android kit"** though
