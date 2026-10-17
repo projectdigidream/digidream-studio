@@ -148,6 +148,9 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **A wall's texture can be turned and drawn larger**, as a floor's can: "turn
+  (°)" and "size" beside its offsets (map version 15; docs/WALL_STYLES.md).
+  Written only when they change something, so an older map keeps its hash.
 - **New monster and weapon editors** (src/editors/): Monsters and Weapons open
   an editor with tabs (Overview, Behaviour, Attacks, Looks, Advanced or
   Arsenal). Behaviour lists the states as sentences, or as a graph in lanes,

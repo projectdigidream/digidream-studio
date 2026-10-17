@@ -100,6 +100,10 @@ export function newEdge (doc, attrs = {}) {
     flags: {},
     middle: null, upper: null, lower: null,
     xoff: 0, yoff: 0,
+    // The picture turned (degrees) and drawn larger (scale), as a flat's is
+    // (docs/WALL_STYLES.md): about the side's texture origin, then shifted by
+    // the offsets, then scaled. 0 and 1 change nothing and are never written.
+    angle: 0, scale: 1,
     // 255 is the solid sheet every wall was drawn as; anything less lets the
     // picture's own alpha channel through, which is how a grate is made.
     alpha: 255,
@@ -268,6 +272,7 @@ export function validate (doc) {
     }
     for (const v of s.verts) {
       if (v.edge.alpha !== undefined && (v.edge.alpha < 0 || v.edge.alpha > 255)) say(`a wall's alpha ${v.edge.alpha} is outside 0..255`, sid)
+      if (v.edge.scale !== undefined && !(v.edge.scale > 0)) say(`a wall's texture scale must be greater than zero, got ${v.edge.scale}`, sid)
     }
     for (const t of [s.floorTex, s.ceilTex]) {
       if (!okTexture(t)) say(`texture name '${t}' is not usable (1..${CAP.textureName} chars, no spaces)`, sid)

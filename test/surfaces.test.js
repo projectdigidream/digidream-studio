@@ -108,5 +108,23 @@ check(validate(wild.doc).some((p) => /alpha 300 is outside 0\.\.255/.test(p.msg)
 const wall = build((doc, a) => { a.verts[0].edge.alpha = -5 })
 check(validate(wall.doc).some((p) => /alpha -5 is outside/.test(p.msg)), "CONTROL: and so is a wall's")
 
+// --- A WALL'S TURN AND SIZE (docs/WALL_STYLES.md): a flat's angle and scale, on a wall ------
+const turned = build((doc, a) => { const e = a.verts[0].edge; e.middle = 'BRICK'; e.angle = 30; e.scale = 2 })
+check(/tex BRICK[^\n]* angle 30 scale 2/.test(turned.emitted.text), "a wall's turn and size are written on its vertex line")
+const tb = bakeNative(turned.emitted.text, 'walls')
+check(tb.ok, `mapc accepts them:\n${tb.stderr}`)
+if (tb.ok) {
+  const { data } = await readBaked(tb.dnpm)
+  const side = data.sides.find((x) => x.turns > 0)
+  check(side && Math.abs(side.turns - 30 / 360) < 1e-6 && Math.abs(side.scale - 2) < 1e-6,
+        `and the runtime reads the wall back turned a twelfth and twice the size (${side ? `${side.turns} ${side.scale}` : 'no turned side'})`)
+}
+const wallDefaults = build((doc, a) => { a.verts[0].edge.angle = 0; a.verts[0].edge.scale = 1 })
+const wd = bakeNative(wallDefaults.emitted.text, 'wdef')
+check(bare.ok && wd.ok && Buffer.compare(Buffer.from(bare.dnpm), Buffer.from(wd.dnpm)) === 0 && !/ angle | scale /.test(wallDefaults.emitted.text.split('\n').filter((l) => /^\s*vertex/.test(l)).join('\n')),
+      'a wall at no turn and size 1 writes neither, so a map keeps its hash')
+const flatWall = build((doc, a) => { a.verts[0].edge.scale = 0 })
+check(validate(flatWall.doc).some((p) => /a wall's texture scale must be greater than zero/.test(p.msg)), "CONTROL: a wall's zero scale is named, as a flat's is")
+
 console.log(`surfaces: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)
