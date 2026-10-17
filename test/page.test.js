@@ -1281,6 +1281,89 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(sp.n0 === 1 && sp.n1 === 1 && sp.moved && /Moved the spawn "start"/.test(sp.status ?? ''), `placing a second start moves the first, and says so (${JSON.stringify(sp)})`)
 }
 
+// MORE FROM THE PLAYTEST: the graph's node list rows hold their words, a new
+// node is never dropped on another, a message reaches a page, the rail's own
+// section tapped again goes back to its list, a pickup is made by what it
+// gives, Fit view leaves nothing under the rail, a room drawn inside a room
+// starts as it without its panel over the map, a light's delete is deaf while
+// its colour is picked, and a decimal comma is a point.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    const out = {}
+    await S.go('graph'); await wait(800)
+    document.querySelector('.gw-palette')?.click(); await wait(300)
+    const items = [...document.querySelectorAll('.gw-menu-item')].slice(0, 8)
+    out.menuRowsFit = items.length > 0 && items.every((b) => b.getBoundingClientRect().height + 1 >= b.scrollHeight)
+    document.querySelector('.gw-menu button')?.click()
+    const gw = (await import('/studio/src/graphwin.js')).openGraph(S)
+    const a = gw.addFrom('act:log'); gw.picked = { kind: 'node', id: a }
+    const b = gw.addFrom('act:log'); gw.picked = { kind: 'node', id: a }
+    const c = gw.addFrom('act:log')
+    const ns = gw.graph.nodes.filter((n) => [a, b, c].includes(n.id)).map((n) => n.pos)
+    out.nodesApart = ns.length === 3 && ns.every((p, i) => ns.every((q, j) => i === j || Math.abs(p.x - q.x) > 100 || Math.abs(p.y - q.y) > 60))
+    gw.graph.nodes = gw.graph.nodes.filter((n) => ![a, b, c].includes(n.id)); gw.changed?.()
+    await S.go('home'); await wait(300)
+    S.say('a note on the page')
+    out.toast = document.querySelector('body > .st-toast')?.textContent
+    await S.go('props'); await wait(300)
+    const first = (S.module.props ?? [])[0]?.name
+    if (first) { S.showProp(first); await wait(300) }
+    const before = document.querySelector('.sd-page')?.textContent.slice(0, 80)
+    document.querySelector('.ui-rail__item[data-section="props"]')?.click(); await wait(500)
+    out.rail = !first || document.querySelector('.sd-page')?.textContent.slice(0, 80) !== before
+    S.module.weapons ??= { ammo: {}, weapons: {}, pickups: {} }
+    S.module.weapons.ammo ??= {}; S.module.weapons.pickups ??= {}
+    const hadPool = !!S.module.weapons.ammo.zz_pool
+    if (!hadPool) S.module.weapons.ammo.zz_pool = { label: 'Z', max: 200, initial: 0, order: 99 }
+    const box = document.createElement('div'); box.append(...S.arsenalRows(() => {}).flat())
+    out.pickups = [...box.querySelectorAll('button')].map((x) => x.textContent.trim()).filter((t) => /pickup$/.test(t)).map((t) => t.replace(/^\W+/, ''))
+    if (!hadPool) delete S.module.weapons.ammo.zz_pool
+    await S.go('map'); await wait(500)
+    S.ui.hideSheet(); S.frameToDoc(); await wait(300)
+    const rail = document.querySelector('.sd-rail')?.getBoundingClientRect().right ?? 0
+    const xs = []
+    for (const sid of S.doc.order) for (const v of S.doc.sectors[sid].verts) xs.push(S.viewport.toScreen(v.x, v.y, S.doc.sectors[sid].floor).x)
+    out.fit = { leftmost: Math.round(Math.min(...xs)), rail: Math.round(rail) }
+    const big = S.doc.sectors[S.doc.order[0]]
+    const bx = big.verts.reduce((q, v) => q + v.x, 0) / big.verts.length, by = big.verts.reduce((q, v) => q + v.y, 0) / big.verts.length
+    S.draw.corners = [{ x: bx - 0.5, y: by - 0.5 }, { x: bx + 0.5, y: by - 0.5 }, { x: bx + 0.5, y: by + 0.5 }, { x: bx - 0.5, y: by + 0.5 }]
+    const tools = await import('/studio/src/tools.js')
+    S.style.sector = { ...S.style.sector, floor: big.floor - 1 }
+    tools.finishRoom(S); await wait(600)
+    const made = S.doc.sectors[S.selection?.id]
+    out.room = { floor: made?.floor, parentFloor: big.floor, sheet: S.ui.sheetOpen, status: document.querySelector('.st-status')?.textContent }
+    S.undoHere(); await wait(300)
+    const { addLight } = await import('/studio/src/doc.js')
+    const l = addLight(S.doc, bx, by, 2); S.commit(); S.select({ kind: 'light', id: l.id }); await wait(300)
+    const color = document.querySelector('input[type=color]')
+    color?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    ;[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'delete')?.click(); await wait(100)
+    out.lightKept = S.doc.lights.some((x) => x.id === l.id)
+    color?.dispatchEvent(new Event('change')); await wait(900)
+    ;[...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'delete')?.click(); await wait(200)
+    out.lightGone = !S.doc.lights.some((x) => x.id === l.id)
+    await S.go('missiles'); await wait(500)
+    const ed = S.missileEditor
+    ed.newName = 'zz_comma'; ed.create(false); await wait(200)
+    const sp = document.querySelector('.me input[aria-label="Speed"]')
+    sp.value = '7,5'; sp.dispatchEvent(new Event('change')); await wait(200)
+    out.speed = S.module.mobs.missiles.zz_comma?.speed
+    delete S.module.mobs.missiles.zz_comma
+    S.module.props = (S.module.props ?? []).filter((p) => p.name !== 'zz_comma'); S.moduleChanged()
+    await S.go('map')
+    return out
+  })
+  check(r.menuRowsFit && r.nodesApart, `the graph's node list rows hold their words, and new nodes are not dropped on others (${JSON.stringify({ rows: r.menuRowsFit, apart: r.nodesApart })})`)
+  check(r.toast === 'a note on the page' && r.rail, `a message reaches a page, and the rail's own section tapped again goes back to its list (${JSON.stringify({ toast: r.toast, rail: r.rail })})`)
+  check(r.pickups.join() === 'health pickup,ammunition pickup,armour pickup', `a pickup is made by what it gives (${r.pickups.join(', ')})`)
+  check(r.fit.leftmost >= r.fit.rail, `Fit view leaves no corner of the map under the rail (${JSON.stringify(r.fit)})`)
+  check(r.room.floor === r.room.parentFloor && !r.room.sheet && /drawn inside/.test(r.room.status ?? ''), `a room drawn inside a room starts as it, and its panel does not come up over the map (${JSON.stringify(r.room)})`)
+  check(r.lightKept && r.lightGone, `a light's delete is deaf while its colour is being picked, and works after (${JSON.stringify({ kept: r.lightKept, gone: r.lightGone })})`)
+  check(Math.abs(Number(r.speed) - 7.5) < 1e-3, `a decimal comma is read as a point (${r.speed})`)
+}
+
 // A STEP IS ADDED from beside the list, on a monster and a weapon: the chooser
 // opens whole (in the column beside the list it was once squeezed to an empty
 // bar), and a step picked from it lands in the state.

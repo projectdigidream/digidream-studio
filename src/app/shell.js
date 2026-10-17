@@ -179,7 +179,7 @@ export class Shell {
     for (const s of this.router.rail) {
       if (s.id === 'home') continue
       const n = this.badges.get(s.id) ?? 0
-      items.push(el('button', { class: 'ui-rail__item', title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => this.router.go(s.id) },
+      items.push(el('button', { class: 'ui-rail__item', title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => (this.router.current?.id === s.id && !this.router.current.arg ? this.router.remount() : this.router.go(s.id)) },
         [icon(s.icon, 'ico'), el('span', { class: 'lbl ui-rail__label', text: s.label }), n ? el('span', { class: 'sd-badge ui-rail__badge ui-badge ui-badge--error', text: String(n) }) : null].filter(Boolean)))
     }
     // Undo and redo, for a phone on its side, where a window's own bar is the

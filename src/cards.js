@@ -133,8 +133,9 @@ function listView (S) {
     }
     if (!r) return
     if (!r.ok) { S.status(r.problems.join('\n'), 'error'); redraw(); return }
-    S.status(`${name}: ${r.triggers.length} trigger(s) written`, 'ok')
+    const said = `Added the ${name}: ${r.triggers.map((t) => t.name).join(', ')}.`
     S.commit()
+    ;(S.say ?? S.status)(said, 'ok')
     redraw()
   }
 

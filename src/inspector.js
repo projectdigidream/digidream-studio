@@ -294,6 +294,12 @@ function lightForm (l, doc, ctx) {
   const hex = `#${[l.r, l.g, l.b].map((c) => c.toString(16).padStart(2, '0')).join('')}`
   const color = el('input', { type: 'color', value: hex })
   color.style.height = '40px'
+  // THE PICKER OPENS OVER THE ROWS BELOW, delete among them: a drag on its hue
+  // deleted the light. While it is up, and a moment after, delete is deaf.
+  let pickerUp = 0
+  color.addEventListener('click', () => { pickerUp = Infinity })
+  color.addEventListener('pointerdown', () => roomBelow(color))
+  for (const ev of ['change', 'blur']) color.addEventListener(ev, () => { pickerUp = performance.now() + 800 })
   color.addEventListener('change', () => {
     const v = color.value
     l.r = parseInt(v.slice(1, 3), 16); l.g = parseInt(v.slice(3, 5), 16); l.b = parseInt(v.slice(5, 7), 16)
@@ -304,8 +310,13 @@ function lightForm (l, doc, ctx) {
     slider('radius', l.radius, { min: 1, max: 48, step: 0.5 }, (v, done) => { l.radius = v; done ? ctx.commit() : ctx.preview() }),
     slider('intensity', l.intensity, { min: 0, max: 4, step: 0.125 }, (v, done) => { l.intensity = v; done ? ctx.commit() : ctx.preview() }),
     number('height', l.z, { min: -32, max: 64, step: 0.25 }, (v) => { l.z = v; ctx.commit() }),
-    button('delete', () => { doc.lights = doc.lights.filter((x) => x.id !== l.id); ctx.select(null); ctx.commit() }, 'st-danger')
+    button('delete', () => { if (performance.now() < pickerUp) return; doc.lights = doc.lights.filter((x) => x.id !== l.id); ctx.select(null); ctx.commit() }, 'st-danger')
   ]
+}
+
+/** A colour field brought up its panel first, so the picker it opens has room below it (it opened off the window). */
+export function roomBelow (input) {
+  try { input.scrollIntoView({ block: 'start', behavior: 'instant' }) } catch {}
 }
 
 // --- pickers -----------------------------------------------------------------------

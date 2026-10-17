@@ -46,6 +46,35 @@ anything not released yet is under **Unreleased**.
   nudge moved a floor by whole metres, and digits typed at them went to the
   map as its keys. Each slider's number is typed too (a decimal comma is a
   point), and a swipe up or down over a slider scrolls the page.
+- **The graph's "+ node…" list printed each description over the next
+  title**, and a new node could land on top of another. Rows hold their
+  words, and a new node is put where nothing is.
+- **Messages under a page went unseen** (an import on Home, a renamed id in
+  Settings): the status strip is hidden there. They show over the page.
+- **Tapping Props in the rail did not go back to the list** from a prop. The
+  section showing, tapped again, goes back to its list.
+- **Every new pickup healed 25**, an ammunition clip too: "+ health pickup",
+  "+ ammunition pickup" and "+ armour pickup" each start as what they say.
+- **Fit view hid part of the map under the rail**; it fits the part of the
+  view one can see.
+- **A room drawn inside another started at the last room's heights** (a pit's
+  floor, a ceiling with no sky), and its panel came up over the spot being
+  drawn after every rectangle. It starts as the room it is drawn in, and its
+  panel opens only if one was open; the status line says what was drawn.
+- **A light's colour picker opened over its delete button**, and a drag on the
+  hue deleted the light: delete waits until the picker is closed. A colour
+  field is brought up its panel first, so its picker has room (the fog's
+  opened off the window).
+- **A decimal comma in the editors' numbers was refused without a word**; it
+  is read as a point.
+- **The presets said nothing** about what they added; they name the triggers
+  they wrote, long enough to read.
+- **The pointer started as "touch" on a computer**: it follows the device
+  ("auto"), and touch or mouse can still be chosen under Style.
+- **The style and pointer chosen were lost after a forced quit** of the app:
+  they are kept in a file of the app's as well.
+- **"the new sprite's name (capitals and digits)"** read as a rule to follow;
+  the studio upper-cases the name itself and no longer says so.
 
 ### Added
 

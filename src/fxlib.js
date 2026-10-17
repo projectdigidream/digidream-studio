@@ -69,6 +69,8 @@ export function fxRows (s, schema, ctx) {
       let input
       if (key === 'color') {
         input = el('input', { type: 'color', value: `#${fxWord('color', has ? e.params[key] : def)}` })
+        // up its panel first, so the picker has room below it (the fog's opened off the window)
+        input.addEventListener('pointerdown', () => { try { input.scrollIntoView({ block: 'start', behavior: 'instant' }) } catch {} })
         input.addEventListener('change', () => set(input.value.slice(1)))
       } else {
         const shown = key === 'top' && def < 0 ? 'ceiling' : String(Number(def.toFixed(4)))

@@ -505,8 +505,9 @@ export function numField (label, value, unit, apply, { hint = '', lo = null, hi 
   i.addEventListener('focus', () => i.select())
   i.addEventListener('change', () => {
     if (i.value.trim() === '') { apply(null); return }
-    let n = Number(i.value)
-    if (!Number.isFinite(n)) return
+    // a decimal comma is a point (it was refused without a word)
+    let n = Number(i.value.trim().replace(',', '.'))
+    if (!Number.isFinite(n)) { say?.(`${label}: ${i.value} is not a number.`); return }
     if (lo !== null && (n < lo || n > hi)) { const c = Math.max(lo, Math.min(hi, n)); say?.(`${label}: ${lo} to ${hi}. Kept at ${c}.`); n = c }
     apply(n)
   })

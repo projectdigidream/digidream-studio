@@ -193,13 +193,20 @@ export function arsenalRows (S, ctx) {
       button('delete pickup', () => { delete a.pickups[name]; ctx.changed() }, 'st-danger')
     ]))
   }
-  rows.push(button('+ pickup', async () => {
-    const raw = await ask('pickup name (letters, digits, underscore)', 'medkit')
+  // BY WHAT IT GIVES: every new pickup healed 25, an ammunition clip too.
+  const pool = Object.keys(a.ammo ?? {})[0]
+  const newPickup = (kind, suggested, fields) => button(withIcon('action.add', `${kind} pickup`), async () => {
+    const raw = await ask('pickup name (letters, digits, underscore)', suggested)
     const n = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_]/g, '')
     if (!n || a.pickups[n]) { if (raw) S.status('that name is empty or taken', 'warn'); return }
-    a.pickups[n] = { heal: 25, ceiling: 'max' }
+    a.pickups[n] = fields
     ctx.changed()
-  }))
+  })
+  rows.push(el('div', { class: 'st-row' }, [
+    newPickup('health', 'medkit', { heal: 25, ceiling: 'max' }),
+    pool ? newPickup('ammunition', `${pool}_box`, { ammo: { [pool]: 10 } }) : null,
+    newPickup('armour', 'armour', { armour: 100 })
+  ].filter(Boolean)))
   rows.push(muted('A pickup is a prop in the level with the same name: walking over it gives this. "Not working yet" keeps one that does nothing so far, and says so when it is walked over.'))
   return rows
 }

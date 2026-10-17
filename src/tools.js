@@ -221,7 +221,13 @@ export function finishRoom (S) {
 function placeRoom (S, corners) {
   S.ensureRoomStyle()
   const before = sideKinds(S.doc)
-  const s = addSector(S.doc, corners, { ...S.style.sector }, { ...S.style.edge })
+  // DRAWN INSIDE A ROOM, it starts as that room is -- floor, ceiling, sky,
+  // light -- not as the last one touched (a pit's floor, a ceiling under no sky).
+  const mx = corners.reduce((a, c) => a + c.x, 0) / corners.length
+  const my = corners.reduce((a, c) => a + c.y, 0) / corners.length
+  const around = sectorAt(S.doc, mx, my)
+  const style = around ? { ...S.style.sector, floor: around.floor, ceil: around.ceil, light: around.light, floorTex: around.floorTex, ceilTex: around.ceilTex } : { ...S.style.sector }
+  const s = addSector(S.doc, corners, style, { ...S.style.edge })
   // A WALL THAT BECAME AN OPENING into this room keeps no middle texture: the
   // one a solid wall carried (or the new room took from the last) bricked the
   // doorway up, on both sides.
@@ -230,8 +236,11 @@ function placeRoom (S, corners) {
     if (kind !== 'neighbor' || before.get(id) === 'neighbor') continue
     for (const sec of Object.values(S.doc.sectors)) for (const v of sec.verts) if (v.edge.id === id) v.edge.middle = null
   }
-  S.select({ kind: 'sector', id: s.id })
+  // selected, but its panel opened only if one was open: it came up over the
+  // spot being drawn, after every rectangle
+  S.select({ kind: 'sector', id: s.id }, { quiet: true })
   S.commit()
+  if (!S.ui.sheetOpen) (S.say ?? S.status)(`Room ${s.id} drawn${around ? ` inside ${around.id}, as high as it` : ''}. Tap it for its heights and textures.`, 'ok')
 }
 
 export function cancelRoom (S) {

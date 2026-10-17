@@ -92,6 +92,10 @@ const STYLE = `
 input.st-val{width:4.5em;flex:0 0 4.5em;min-width:0;box-sizing:border-box;background:transparent;border:1px solid transparent;border-radius:6px;
   color:inherit;font:inherit;padding:2px 4px}
 input.st-val:hover,input.st-val:focus{border-color:var(--dnp-color-line-main);opacity:1;outline:none}
+/* a message over a page, where the status strip is hidden */
+.st-toast{position:fixed;left:calc(50% + var(--rail-w, 0px) / 2);bottom:20px;transform:translateX(-50%);max-width:min(640px,86vw);z-index:90;
+  background:var(--dnp-color-bg-panel);color:var(--dnp-color-text-primary);border:1px solid var(--dnp-color-line-strong);border-radius:10px;padding:10px 14px;font-size:13px}
+.st-toast[data-level="warn"]{border-color:var(--dnp-color-warn)}.st-toast[data-level="error"]{border-color:var(--dnp-color-error)}
 .st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
 /* the picture fills the tile, the kit draws the tile */
 .st-tile{background-position:center;background-size:cover;height:72px;

@@ -752,8 +752,12 @@ class GraphWindow {
     const nodes = this.graph?.nodes ?? []
     if (!nodes.length) return { x: 0, y: 0 }
     const sel = this.picked?.kind === 'node' ? nodes.find((n) => n.id === this.picked.id) : null
-    if (sel) return { x: (sel.pos?.x ?? 0) + NODE_W + 50, y: sel.pos?.y ?? 0 }
-    return { x: Math.min(...nodes.map((n) => n.pos?.x ?? 0)), y: Math.max(...nodes.map((n) => n.pos?.y ?? 0)) + 150 }
+    const at = sel ? { x: (sel.pos?.x ?? 0) + NODE_W + 50, y: sel.pos?.y ?? 0 }
+      : { x: Math.min(...nodes.map((n) => n.pos?.x ?? 0)), y: Math.max(...nodes.map((n) => n.pos?.y ?? 0)) + 150 }
+    // never on another node (beside the picked one is often where the next already is): down a row until clear
+    const ROW = 140
+    for (let i = 0; i < 60 && nodes.some((n) => Math.abs((n.pos?.x ?? 0) - at.x) < NODE_W + 20 && Math.abs((n.pos?.y ?? 0) - at.y) < ROW - 10); i++) at.y += ROW
+    return at
   }
 
   // --- the board ------------------------------------------------------------------
@@ -1656,6 +1660,8 @@ const STYLE = `
 .gw-menu-list{overflow:auto;-webkit-overflow-scrolling:touch;padding:4px 6px 8px}
 .gw-menu-group{font-size:11px;padding:10px 6px 4px;text-transform:none}
 .gw-menu-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;height:auto;min-height:34px;padding:6px 8px;text-align:left}
+/* the skin's button height held each row to one line, and a description ran over the next title */
+.gw-menu .gw-menu-list button.gw-menu-item{height:auto;flex-shrink:0;line-height:1.3}
 
 .gw-menu-label{font-weight:700}
 .gw-menu-in{font-size:10px;color:var(--dnp-color-text-secondary)}

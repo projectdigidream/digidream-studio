@@ -9,15 +9,15 @@
 //
 //   skin           claude | paper | 90s | ps1 | aero  (vendor/uikit/skins/index.json)
 //   skin.mode      auto | one of the skin's modes      (auto follows the system)
-//   skin.pointer   touch | mouse | auto                (touch: the studio is touch-first)
+//   skin.pointer   touch | mouse | auto                (auto: follows the device)
 //
 import { applySkin, colorParts } from '../vendor/uikit/runtime.js'
 
 export const DEFAULT_SKIN = 'claude'
 export const DEFAULT_MODE = 'auto'
-// Touch everywhere by default: mouse sizes (32px controls) would shrink the
-// studio on a desktop. Changing this default is the user's call.
-export const DEFAULT_POINTER = 'touch'
+// Follows the device by default (the playtest of 2026-10-17: a Mac came up
+// finger-sized). Touch and mouse are still a choice on the Style page.
+export const DEFAULT_POINTER = 'auto'
 
 const SKINS = new URL('../vendor/uikit/skins/', import.meta.url)
 

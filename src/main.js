@@ -139,7 +139,22 @@ const S = {
 
 // This device's choices (localStorage, dnp.studio.*): never the module's.
 const PREF = 'dnp.studio.'
-S.prefs = { get: (k) => { try { return localStorage.getItem(PREF + k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(PREF + k, v) } catch {} } }
+// In the apps they are also a file of the app's own: Electron writes
+// localStorage to disk when it gets round to it, and a forced quit lost the
+// style and pointer just chosen. Read back first, so the skin below wears them.
+const PREFS_FILE = 'settings/studio-prefs.json'
+if (hasShell()) {
+  try {
+    const b = await shell.readFile(PREFS_FILE)
+    if (b) for (const [k, v] of Object.entries(JSON.parse(new TextDecoder().decode(b)))) if (typeof v === 'string') localStorage.setItem(PREF + k, v)
+  } catch {}
+}
+const keepPrefs = debounce(() => {
+  const all = {}
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith(PREF)) all[k.slice(PREF.length)] = localStorage.getItem(k) } } catch { return }
+  shell.writeFile(PREFS_FILE, new TextEncoder().encode(JSON.stringify(all))).catch(() => {})
+}, 300)
+S.prefs = { get: (k) => { try { return localStorage.getItem(PREF + k) } catch { return null } }, set: (k, v) => { try { localStorage.setItem(PREF + k, v) } catch {} if (hasShell()) keepPrefs() } }
 
 // --- boot ----------------------------------------------------------------------------
 bootLog(`studio ${STUDIO_VERSION} · ${hasShell() ? 'in the app' : 'in a browser'} · ${navigator.platform || 'unknown platform'} · ${location.origin}`)
@@ -980,9 +995,23 @@ function frameToDoc () {
   if (!pts.length) { S.viewport.lookAt(0, 0); return }
   const xs = pts.map((p) => p.x); const ys = pts.map((p) => p.y)
   const w = Math.max(...xs) - Math.min(...xs); const h = Math.max(...ys) - Math.min(...ys)
-  S.viewport.lookAt((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, 0)
-  S.viewport.viewHeight = Math.min(300, Math.max(8, Math.max(h, w * innerHeight / innerWidth) * 1.3))
+  // THE PART OF THE VIEW ONE CAN SEE: the canvas runs under the rail and the
+  // bars, so a fit to the whole of it hid the map's left under the rail.
+  const box = S.viewport.canvas?.getBoundingClientRect?.() ?? { left: 0, top: 0, width: innerWidth, height: innerHeight }
+  const edge = (sel, side) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r && r.width && r.height ? r[side] : null }
+  const L = Math.max(box.left, edge('.sd-rail', 'right') ?? box.left)
+  const T = Math.max(box.top, edge('.st-top', 'bottom') ?? box.top)
+  const B = Math.min(box.top + box.height, edge('.st-bar', 'top') ?? box.top + box.height)
+  const R = box.left + box.width
+  const visW = Math.max(100, R - L); const visH = Math.max(100, B - T)
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2; const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+  S.viewport.lookAt(cx, cy, 0)
+  S.viewport.viewHeight = Math.min(300, Math.max(8, Math.max(h, w * visH / visW) * 1.3 * (box.height / visH)))
   S.viewport.resize()
+  // then moved so the map's middle is the visible middle
+  const mid = S.viewport.groundPoint(box.left + box.width / 2, box.top + box.height / 2, 0)
+  const seen = S.viewport.groundPoint((L + R) / 2, (T + B) / 2, 0)
+  if (mid && seen) { S.viewport.lookAt(cx + mid.x - seen.x, cy + mid.y - seen.y, 0); S.viewport.resize() }
 }
 
 // --- the shared verbs ------------------------------------------------------------------------
@@ -1149,7 +1178,18 @@ const ctx = {
 }
 
 /** A message the bake that follows does not wipe at once: what was just done, said long enough to read. */
-S.say = (text, level = 'ok') => { S.held = { text, level, until: performance.now() + Math.min(9000, 3000 + text.length * 45) }; S.status(text, level) }
+S.say = (text, level = 'ok') => {
+  const ms = Math.min(9000, 3000 + text.length * 45)
+  S.held = { text, level, until: performance.now() + ms }
+  S.status(text, level)
+  // the status strip is hidden under a page (Home's import, Settings' id): said there too
+  if (mapCovered()) {
+    document.querySelector('body > .st-toast')?.remove()
+    const t = el('div', { class: 'st-toast', role: 'status', 'data-level': level, text })
+    document.body.appendChild(t)
+    setTimeout(() => t.remove(), ms)
+  }
+}
 
 /** What deleting a room took with it, and what still names it. */
 function roomDeleted (id, gone) {

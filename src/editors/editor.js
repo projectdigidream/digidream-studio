@@ -964,7 +964,7 @@ export class NodeEditor {
             // A sheet with no project (imported as pictures) cannot be opened as one: drawing "it" would start a
             // blank project under its name, and saving would replace the art every monster drawn with it uses.
             S.editInPlugin && !(sheet && S.rec?.assets?.[`sources/sprites/${sheet}.tsprite`]) ? button('Draw a sprite of its own…', async () => {
-              const raw = await ask('the new sprite\'s name (capitals and digits)', this.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'SPRITE')
+              const raw = await ask('the new sprite\'s name', this.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'SPRITE')
               const nm = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '')
               if (!nm) return
               if (S.module.sprites?.[nm] || S.rec?.assets?.[`sources/sprites/${nm}.tsprite`]) { this.say(`${nm} is taken: pick another name.`, 'warn'); return }
