@@ -44,7 +44,7 @@ import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
 import { parseAtlas } from '/src/render/atlas.js'
 import { loadMapcBinary, bake as bakeWith } from './bake.js'
-import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP } from './doc.js'
+import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP, removeSector, graphsNaming } from './doc.js'
 import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
@@ -281,9 +281,11 @@ S.preview.onResult = (r) => {
   S.problems = [...(r.problems ?? []), ...(S.doc ? climbProblems(S.doc).map((p) => ({ ...p, level: 'warn' })) : [])]
   const rooms = new Set(S.problems.filter((p) => p.level === 'error').map((p) => p.sector)).size
   const lead = rooms ? `${rooms === 1 ? 'one room is' : `${rooms} rooms are`} wrong (marked in red; tap one to see why)\n` : ''
-  if (!r.ok) S.status(lead + r.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('\n'), 'error')
+  // a map that does not bake is still drawn as it last baked: say so, or what is gone looks kept
+  if (!r.ok) S.status(lead + r.errors.map((e) => (e.line ? `line ${e.line}: ${e.msg}` : e.msg)).join('\n') + '\n(the view shows the map as it last baked)', 'error')
   else if (rooms) S.status(lead + S.problems.filter((p) => p.level === 'error').map((p) => p.msg).join('\n'), 'error')
   else if (r.warnings.length) S.status(r.warnings.map((w) => `${w.sector}: ${w.msg}`).join('\n'), 'warn')
+  else if (S.held && performance.now() < S.held.until) S.status(S.held.text, S.held.level)
   else S.status(`${S.module.id} / ${S.docName}  ·  ${S.doc.order.length} sectors`, 'ok')
   // The neighbours and the seams follow every bake of this map (cheap: each
   // neighbour is baked again only when its own document changed).
@@ -797,6 +799,44 @@ async function openDoc (name, { keepView = false } = {}) {
  * changed is given the new one if it has nothing unsaved, else warned.
  * Returns { ok, rev } or { ok: false, reason, rev? }.
  */
+/**
+ * The open module under a new id: MOVED, record and snapshots and the map it
+ * was on, not copied -- the id field saved the module under each id typed, so
+ * a slip left a module of its own behind. An id another module has is refused.
+ */
+async function renameModule (raw) {
+  const from = S.rec.id
+  const id = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+  if (!id || id === from) return from
+  if (await S.store.load(id)) { S.say(`There is already a module called ${id}: the id stays ${from}.`, 'warn'); return from }
+  await settleSave()
+  S.rec.id = id
+  S.module.id = id
+  await S.store.save(S.rec)
+  await S.store.remove(from)
+  await S.snaps?.move(from, id).catch((e) => console.warn('[studio] snapshots not moved:', e.message))
+  const last = lastMap(from)
+  if (last) rememberMap(id, last)
+  shell.useModule(id).catch(() => {})
+  S.shell?.drawRail()
+  S.say(`The module's id is ${id} now (it was ${from}).`)
+  return id
+}
+S.renameModule = renameModule
+
+/** Another module taken off this device, when asked: the open one is not deleted from under itself. */
+async function deleteModule (id) {
+  if (!id || id === S.rec?.id) return false
+  const rec = await S.store.load(id)
+  if (!rec) return false
+  if (!(await confirmDialog(`Delete the module ${rec.module?.name || id} (${id}) from this device? Its maps go with it; export it first to keep a copy.`))) return false
+  await S.store.remove(id)
+  for (const s of await S.snaps?.list(id).catch(() => []) ?? []) await S.snaps.remove(s.key).catch(() => {})
+  S.say(`Deleted the module ${id}.`)
+  return true
+}
+S.deleteModule = deleteModule
+
 async function writeModule ({ id, baseRev, files, by = 'a plugin' }) {
   if (typeof id !== 'string' || !id) throw new Error('module-write needs { id, baseRev, files }')
   if (!Array.isArray(files)) throw new Error('module-write: files must be [{ path, bytes }]')
@@ -974,7 +1014,8 @@ S.select = (sel, { quiet = false } = {}) => {
 }
 S.refreshSheet = () => { if (S.ui.sheetOpen && S.selection) showInspector() }
 S.pickTexture = (current, onPick) => {
-  const names = [...Object.keys(S.module.textures ?? {}), ...S.textureNames]
+  // once each: the module's own are among the ones the app serves too
+  const names = [...new Set([...Object.keys(S.module.textures ?? {}), ...S.textureNames])]
   S.ui.showSheet('Texture', texturePicker(names, current, (name) => { onPick(name); showInspector() },
     { imageFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, sheetOf: (n) => S.sheetOf(n) }))
 }
@@ -1103,7 +1144,18 @@ const ctx = {
   seamFor: (edgeId) => S.seamFor?.(edgeId) ?? null,
   // a sign's marker: the templates this map's screens offer, and the way to its look
   markerNames: () => markerNames(S.doc?.ui ?? S.module.ui),
-  editMarker: (name) => S.go('screens', `markers/${name}`)
+  editMarker: (name) => S.go('screens', `markers/${name}`),
+  roomDeleted: (id, gone) => roomDeleted(id, gone)
+}
+
+/** A message the bake that follows does not wipe at once: what was just done, said long enough to read. */
+S.say = (text, level = 'ok') => { S.held = { text, level, until: performance.now() + Math.min(9000, 3000 + text.length * 45) }; S.status(text, level) }
+
+/** What deleting a room took with it, and what still names it. */
+function roomDeleted (id, gone) {
+  const graphs = graphsNaming(S.doc, id)
+  S.say(`Deleted room ${id}${gone.length ? `, and ${gone.length === 1 ? 'the trigger' : `the ${gone.length} triggers`} that worked it (${gone.map((t) => t.name || t.id).join(', ')})` : ''}.` +
+    (graphs.length ? ` The graph${graphs.length > 1 ? 's' : ''} ${graphs.join(', ')} still name${graphs.length > 1 ? '' : 's'} it.` : '') + ' Undo brings it back.', graphs.length ? 'warn' : 'ok')
 }
 // The sector effects' keys and defaults, read from the engine by a probe bake
 // (fxlib.js) once the studio is up; the inspector shows them when they land.
@@ -1131,6 +1183,7 @@ function restore (doc) {
   S.doc = doc
   S.moduleHistory?.replace({ module: S.module, docs: S.docs })
   S.selection = null
+  S.held = null
   S.ui.hideSheet()
   S.ui.setHistory(S.history.canUndo, S.history.canRedo)
   save()
@@ -1176,6 +1229,8 @@ function onKey (e) {
   const mod = e.ctrlKey || e.metaKey
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(e.shiftKey ? S.history.redo() : S.history.undo()); return }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); restore(S.history.redo()); return }
+  // ⌘V is not V: a key held with ⌘, Ctrl or Alt is somebody else's shortcut, never the map's letter
+  if (mod || e.altKey) return
   switch (e.key) {
     case 'Escape':
       if (S.draw.corners.length) tools.cancelRoom(S)
@@ -1206,7 +1261,7 @@ function deleteSelection () {
   const sel = S.selection
   if (!sel) return
   const d = S.doc
-  if (sel.kind === 'sector') { delete d.sectors[sel.id]; d.order = d.order.filter((x) => x !== sel.id) } else if (sel.kind === 'entity') d.entities = d.entities.filter((x) => x.id !== sel.id)
+  if (sel.kind === 'sector') { const gone = removeSector(d, sel.id); S.select(null); S.commit(); roomDeleted(sel.id, gone); return } else if (sel.kind === 'entity') d.entities = d.entities.filter((x) => x.id !== sel.id)
   else if (sel.kind === 'spawn') d.spawns = d.spawns.filter((x) => x.id !== sel.id)
   else if (sel.kind === 'light') d.lights = d.lights.filter((x) => x.id !== sel.id)
   else if (sel.kind === 'vertex') {
@@ -1653,12 +1708,31 @@ async function importPack () {
   const prefix = modEntry.path.slice(0, -'module.studio.json'.length)
   const rec = recordFromEntries(entries.filter((e) => e.path.startsWith(prefix)).map((e) => ({ path: e.path.slice(prefix.length), bytes: e.bytes })))
   if (!rec) { S.status('the pack has no maps', 'error'); return }
-  // A pack with the id of a module already here replaces it: that one kept first.
+  // A pack with the id of a module already here replaces it, when asked: that
+  // one kept first. The open module is reloaded in place -- opening it again
+  // saved the one being left, which was this one, back over the pack, and
+  // the import did nothing anybody could see.
+  const isOpen = S.rec?.id === rec.id
+  if (isOpen) await settleSave()
   const old = await S.store.load(rec.id)
-  if (old) await S.snapshot('before a pack was imported over it', { rec: old, force: true })
-  await S.store.save(rec)
-  await openModule(rec.id)
-  S.status(`opened ${rec.id}`, 'ok')
+  const maps = Object.keys(rec.docs)
+  const what = `${maps.length} map${maps.length === 1 ? '' : 's'} (${maps.join(', ')})`
+  if (old) {
+    if (!(await confirmDialog(`Replace ${old.module?.name || rec.id} with the pack? It has ${what}. The module here now is kept in Snapshots first.`))) { S.status('nothing imported', 'ok'); return }
+    await S.snapshot('before a pack was imported over it', { rec: old, force: true })
+    rec.rev = old.rev ?? 0
+    if (old.opened) rec.opened = old.opened
+  }
+  if (isOpen) {
+    migrateModule(rec)
+    migratePlayer(rec.module, rec.docs)
+    await reloadInPlace(rec, 'the pack')
+    await S.store.save(rec)
+  } else {
+    await S.store.save(rec)
+    await openModule(rec.id)
+  }
+  S.say(`Imported ${rec.module.name || rec.id}: ${what}.${old ? ' The module it replaced is in Snapshots.' : ''}`)
 }
 
 

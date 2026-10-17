@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { newDoc, addSector, addSpawn, addEntity, addTrigger, validate } from '../src/doc.js'
+import { newDoc, addSector, addSpawn, addEntity, addTrigger, validate, removeSector, triggersNaming } from '../src/doc.js'
 import { normalize, derive } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { emitMapLua, facingBrad, CAMERA_MOTION } from '../src/lua_emit.js'
@@ -50,7 +50,9 @@ normalize(doc)
 const edgeOf = (s, x0, y0) => s.verts.find((v) => v.x === x0 && v.y === y0).edge.id
 
 const rd = door(doc, doorS.id)
-check(rd.ok && rd.triggers.length === 5, `door: two portals give open/close each plus shut (${rd.triggers.length})`)
+check(rd.ok && rd.triggers.length === 3, `door: two portals give an open each, plus shut (${rd.triggers.length})`)
+check(!rd.triggers.some((t) => /close/.test(t.name)) && rd.triggers.some((t) => t.actions.some((a) => a.a === 'run_after' && a.ticks === 240)),
+  'and pressing an open door does nothing: it shuts by itself, four seconds on')
 const rl = lift(doc, liftS.id)
 check(rl.ok && rl.triggers.length === 4, `lift: raise, lower, two ways in (${rl.triggers.length})`)
 const rs = switchFor(doc, edgeOf(hall, 0, 8), pit.id, { to: 'highest_neighbour_floor' })
@@ -83,7 +85,7 @@ check(!slider(doc, slideEdge, liftS.id, { dx: 0, dy: 0 }).ok, 'CONTROL: a slider
 
 check(rc.ok, 'crusher switch')
 const rNo = door(doc, far.id)
-check(rNo.ok && rNo.triggers.length === 3, `a door with one neighbour opens from one side (${rNo.triggers.length})`)
+check(rNo.ok && rNo.triggers.length === 2, `a door with one neighbour opens from one side (shut, and one open) (${rNo.triggers.length})`)
 const rBad = door(doc, 'nope')
 check(!rBad.ok, 'a door on nothing is refused with a sentence')
 
@@ -238,6 +240,32 @@ if (!existsSync(TRIGGERCHECK)) {
     check(!/crate/.test(out), 'CONTROL: the crate, with no angle, is turned by nothing')
   }
 }
+
+// A ROOM DELETED TAKES ITS TRIGGERS WITH IT: a door's room gone, its cards
+// would name a sector and walls that are not there, and the map would not bake
+// (the views then kept drawing the room). CONTROL: the same delete leaving the
+// triggers behind is exactly what the emitter refuses.
+{
+  const two = newDoc('delete')
+  const a = addSector(two, rect(0, 0, 8, 8))
+  const d = addSector(two, rect(8, 2, 10, 6), { floor: 0, ceil: 4 })
+  const b = addSector(two, rect(10, 0, 18, 8))
+  addSpawn(two, 'start', 2, 4)
+  normalize(two)
+  door(two, d.id)
+  exit(two, b.verts.find((v) => v.x === 18 && v.y === 0).edge.id)
+  const kept = JSON.parse(JSON.stringify(two))
+  const gone = removeSector(two, d.id)
+  check(gone.length === 3 && gone.every((t) => t.name.startsWith('door')) && two.triggers.length === 1 && two.triggers[0].name.startsWith('exit'),
+    `deleting a door's room takes its three triggers and leaves the exit (${gone.map((t) => t.name).join(', ')} | ${two.triggers.map((t) => t.name).join(', ')})`)
+  const after = emitMapLua(two, emitMap(derive(two), two))
+  check(after.problems.length === 0, `and the map still writes, every reference resolved (${after.problems.join(' | ')})`)
+  removeSectorOnly(kept, d.id)
+  const broken = emitMapLua(kept, emitMap(derive(kept), kept))
+  check(broken.problems.length > 0, `CONTROL: the room deleted with its triggers left behind is refused (${broken.problems.length} problems)`)
+  check(a && b && triggersNaming(two, a.id).length === 0, 'and a room no trigger names has none to take')
+}
+function removeSectorOnly (doc, id) { delete doc.sectors[id]; doc.order = doc.order.filter((s) => s !== id) }
 
 console.log(`\nlua_emit: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

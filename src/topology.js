@@ -165,6 +165,13 @@ function parentOf (doc, s, order) {
  * 'neighbor'; `neighbor` is a sector id; `edge` is the document's edge
  * object (a hole rim mirrors the nested sector's edge, textures and all).
  */
+/** Each side's kind by its edge id -- 'wall' (solid), 'neighbor' (an opening into a room) or 'open'. */
+export function sideKinds (doc) {
+  const out = new Map()
+  for (const s of derive(doc).sectors) for (const v of s.verts) out.set(v.edge.id, v.kind)
+  return out
+}
+
 export function derive (doc) {
   const warnings = []
   const order = doc.order.filter((sid) => doc.sectors[sid]?.verts.length >= 3)

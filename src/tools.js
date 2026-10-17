@@ -8,7 +8,7 @@
 // only turns pixels into ground coordinates and back.
 //
 import { addSector, addSpawn, addLight, addEntity, addPathPoint, snap, newId, newEdge } from './doc.js'
-import { sectorAt, snapToMap } from './topology.js'
+import { sectorAt, snapToMap, normalize, sideKinds } from './topology.js'
 
 const HIT_PX = 14
 const CLOSE_PX = 18
@@ -212,9 +212,24 @@ function pathTap (S, info) {
 export function finishRoom (S) {
   const d = S.draw
   if (d.corners.length < 3) { S.status('a room needs at least three corners', 'warn'); return }
-  S.ensureRoomStyle()
-  const s = addSector(S.doc, d.corners, { ...S.style.sector }, { ...S.style.edge })
+  const corners = d.corners
   d.corners = []
+  placeRoom(S, corners)
+}
+
+/** A room drawn, in the room style, selected and committed. */
+function placeRoom (S, corners) {
+  S.ensureRoomStyle()
+  const before = sideKinds(S.doc)
+  const s = addSector(S.doc, corners, { ...S.style.sector }, { ...S.style.edge })
+  // A WALL THAT BECAME AN OPENING into this room keeps no middle texture: the
+  // one a solid wall carried (or the new room took from the last) bricked the
+  // doorway up, on both sides.
+  normalize(S.doc)
+  for (const [id, kind] of sideKinds(S.doc)) {
+    if (kind !== 'neighbor' || before.get(id) === 'neighbor') continue
+    for (const sec of Object.values(S.doc.sectors)) for (const v of sec.verts) if (v.edge.id === id) v.edge.middle = null
+  }
   S.select({ kind: 'sector', id: s.id })
   S.commit()
 }
@@ -234,7 +249,11 @@ function placeTap (S, info) {
   const x = snap(g.x, 1 / 8); const y = snap(g.y, 1 / 8)
   const z = sec ? sec.floor : 0
   let sel = null
-  if (armed.kind === 'spawn') sel = { kind: 'spawn', id: addSpawn(S.doc, armed.name, x, y, z).id }
+  // A spawn the map has already is MOVED here: a second "start" left the
+  // player beginning at the first, off where they were looking.
+  const had = armed.kind === 'spawn' ? S.doc.spawns.find((p) => p.tag === armed.name) : null
+  if (had) { Object.assign(had, { x, y, z }); sel = { kind: 'spawn', id: had.id }; (S.say ?? S.status)(`Moved the spawn "${armed.name}" here: a map has one of each name.`, 'ok') }
+  else if (armed.kind === 'spawn') sel = { kind: 'spawn', id: addSpawn(S.doc, armed.name, x, y, z).id }
   else if (armed.kind === 'light') sel = { kind: 'light', id: addLight(S.doc, x, y, z + 2).id }
   // a sign starts reading "Sign", hung a little over the floor (inspector.js signForm)
   else if (armed.kind === 'sign') sel = { kind: 'entity', id: addEntity(S.doc, 'sign', armed.name, x, y, z, { text: 'Sign', height: 1.5 }).id }
@@ -332,10 +351,7 @@ export function onDragEnd (S, info, cancelled) {
     if (!cancelled && r.x0 !== r.x1 && r.y0 !== r.y1) {
       const x0 = Math.min(r.x0, r.x1); const x1 = Math.max(r.x0, r.x1)
       const y0 = Math.min(r.y0, r.y1); const y1 = Math.max(r.y0, r.y1)
-      S.ensureRoomStyle()
-      const s = addSector(S.doc, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], { ...S.style.sector }, { ...S.style.edge })
-      S.select({ kind: 'sector', id: s.id })
-      S.commit()
+      placeRoom(S, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }])
     } else S.redraw()
     return
   }

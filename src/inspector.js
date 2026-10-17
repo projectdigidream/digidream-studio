@@ -9,6 +9,7 @@
 import { fxRows } from './fxlib.js'
 import { el, row, slider, number, text, toggle, select, button, tiles, chips, card, muted, withIcon, icon } from './ui.js'
 import { EDGE_FLAGS, removeSector, newId, newEdge, newStyle } from './doc.js'
+import { sideKinds } from './topology.js'
 import { findEdge } from './doc.js'
 import { twinEdge } from './presets.js'
 import { climbSides, climbSays } from './climb.js'
@@ -42,8 +43,8 @@ export function titleFor (sel, doc) {
   }
 }
 
-function texButton (label, value, ctx, onPick) {
-  const b = button(value || TEX_NONE, () => ctx.pickTexture(value, (name) => { b.textContent = name || TEX_NONE; onPick(name) }))
+function texButton (label, value, ctx, onPick, shown = null) {
+  const b = button(shown ?? (value || TEX_NONE), () => ctx.pickTexture(value, (name) => { b.textContent = name || TEX_NONE; onPick(name) }))
   b.style.flex = '1 1 auto'
   b.style.textAlign = 'left'
   return row(label, b)
@@ -127,9 +128,17 @@ function sectorForm (s, doc, ctx) {
     }),
     // Every wall of the sector at once, one field at a time. The same three
     // fields a single wall has, so a room is textured without tapping each
-    // side -- and `(none)` clears a field just as it does on one wall.
-    ...['middle', 'upper', 'lower'].map((field) =>
-      texButton(`all ${field}s`, null, ctx, (n) => { for (const v of s.verts) v.edge[field] = n; ctx.commit() })),
+    // side -- and `(none)` clears a field just as it does on one wall. Each
+    // shows what its walls have (it said "(none)" whatever they had), and the
+    // middles are the SOLID walls': on a wall shared with a room, a middle
+    // bricks the opening up.
+    ...['middle', 'upper', 'lower'].map((field) => {
+      const kinds = field === 'middle' ? sideKinds(doc) : null
+      const walls = s.verts.filter((v) => !kinds || kinds.get(v.edge.id) === 'wall')
+      const have = new Set(walls.map((v) => v.edge[field] ?? null))
+      const one = have.size === 1 ? [...have][0] : null
+      return texButton(`all ${field}s`, one, ctx, (n) => { for (const v of walls) v.edge[field] = n; ctx.commit() }, have.size > 1 ? '(mixed)' : null)
+    }),
     muted('Upper and lower are the bands a wall shows only where another room is behind it: above that room\'s ceiling, and below its floor.'),
     select('edges', s.kind, [['auto', 'room: walls (by floor height inside another)'], ['platform', 'floating platform: open edges, fall off'], ['cut', 'cut into the floor of the room around it']],
            (v) => { s.kind = v; ctx.commit() }),
@@ -139,7 +148,7 @@ function sectorForm (s, doc, ctx) {
     number('tag', s.tag, { min: 0, max: 65535, step: 1 }, (v) => { s.tag = Math.round(v); ctx.commit() }),
     el('div', { class: 'st-row' }, [
       button('duplicate', () => { ctx.duplicateSector(s.id) }),
-      button('delete', () => { removeSector(doc, s.id); ctx.select(null); ctx.commit() }, 'st-danger')
+      button('delete', () => { const gone = removeSector(doc, s.id); ctx.select(null); ctx.commit(); ctx.roomDeleted?.(s.id, gone) }, 'st-danger')
     ]),
     muted('Drag a corner to reshape. Tap a wall for its textures and flags. Long-press a corner to remove it.')
   ]

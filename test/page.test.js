@@ -1117,6 +1117,170 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   await page.evaluate(async () => { const S = window.__studio; const { deleteMonster } = await import('/studio/src/brain.js'); deleteMonster(S, 'big_boss'); S.moduleChanged() })
 }
 
+// A PACK IMPORTED OVER ITS OWN MODULE replaces it, when asked, and says so (it
+// once did nothing: opening the module saved the open one back over the pack).
+// RENAMING THE MODULE moves it, an id that is taken is refused, and ANOTHER
+// MODULE can be deleted.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    const was = S.rec.id
+    await S.store.remove('imp-test').catch(() => {}); await S.store.remove('imp-moved').catch(() => {})
+    const made = await S.newFromTemplate('imp-test', 'Imp test')
+    if (!made) return { skip: true }
+    await S.openModule('imp-test')
+    S.docs.second = S.starterDoc('second', { fresh: true }); S.moduleChanged()
+    const r = await S.emitAll()
+    const { writePack } = await import('/studio/src/pack.js')
+    const zip = await writePack(r.files.map((f) => ({ path: `imp-test/${f.path}`, bytes: f.bytes })))
+    delete S.docs.second; S.moduleChanged(); await wait(900)
+    const { shell } = await import('/studio/src/bridge.js')
+    const real = shell.importFile
+    shell.importFile = async () => ({ bytes: zip, name: 'imp-test.zip' })
+    const importing = S.importPack()
+    let asked = null
+    for (let i = 0; i < 100 && !asked; i++) { await wait(50); asked = document.querySelector('dialog[open]')?.textContent ?? null }
+    document.querySelector('dialog[open] button[type=submit]')?.click()
+    await importing
+    shell.importFile = real
+    const out = { asked, maps: Object.keys(S.docs).sort(), stored: Object.keys((await S.store.load('imp-test'))?.docs ?? {}).sort(), status: document.querySelector('.st-status')?.textContent }
+    out.renamed = await S.renameModule('Imp Moved!')
+    out.oldGone = !(await S.store.load('imp-test'))
+    out.newThere = !!(await S.store.load('impmoved'))
+    out.refused = await S.renameModule(was)
+    await S.openModule(was)
+    const del = S.deleteModule('impmoved')
+    for (let i = 0; i < 100 && !document.querySelector('dialog[open]'); i++) await wait(50)
+    document.querySelector('dialog[open] button[type=submit]')?.click()
+    out.deleted = await del
+    out.goneNow = !(await S.store.load('impmoved'))
+    out.back = S.rec.id === was
+    return out
+  })
+  if (r.skip) console.log('  (no starter template: import over a module not tried)')
+  else {
+    check(/Replace Imp test with the pack\? It has 2 maps \(first, second\)/.test(r.asked ?? ''), `importing over a module asks first, naming what comes (${r.asked})`)
+    check(r.maps.join() === 'first,second' && r.stored.join() === 'first,second' && /Imported Imp test: 2 maps/.test(r.status ?? ''), `and brings the pack's maps back, open and kept, saying so (${JSON.stringify(r)})`)
+    check(r.renamed === 'impmoved' && r.oldGone && r.newThere && r.refused === 'impmoved', `renaming the module moves it, and an id another module has is refused (${JSON.stringify(r)})`)
+    check(r.deleted && r.goneNow && r.back, `another module can be deleted (${JSON.stringify(r)})`)
+  }
+}
+
+// THE MAP'S KEYS: ⌘V is not V (it switched the view), and Delete takes a
+// door's room with the triggers that worked it, saying so -- left behind they
+// stopped the map baking and the room stayed drawn.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    await S.go('map'); await wait(500)
+    const mode = S.viewport.mode
+    dispatchEvent(new KeyboardEvent('keydown', { key: 'v', metaKey: true })); await wait(100)
+    const out = { cmdV: S.viewport.mode === mode }
+    const { door } = await import('/studio/src/presets.js')
+    const { newDoc, addSector, addSpawn } = await import('/studio/src/doc.js')
+    const { normalize } = await import('/studio/src/topology.js')
+    const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+    const d = newDoc('keysdel')
+    addSector(d, rect(0, 0, 8, 8)); const dr = addSector(d, rect(8, 2, 10, 6), { floor: 0, ceil: 4 }); addSector(d, rect(10, 0, 18, 8)); addSpawn(d, 'start', 2, 4)
+    normalize(d); door(d, dr.id)
+    S.docs.keysdel = d; S.moduleChanged(); await S.go('map', 'keysdel'); await wait(800)
+    S.select({ kind: 'sector', id: dr.id }); await wait(100)
+    dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' })); await wait(1500)
+    out.gone = !S.doc.sectors[dr.id]
+    out.triggers = S.doc.triggers.length
+    out.status = document.querySelector('.st-status')?.textContent ?? ''
+    out.level = document.querySelector('.st-status')?.dataset.level
+    delete S.docs.keysdel; S.moduleChanged(); await S.go('map', Object.keys(S.docs)[0])
+    return out
+  })
+  check(r.cmdV, '⌘V does not switch the map to the game view')
+  check(r.gone && r.triggers === 0 && /Deleted room .*the 3 triggers that worked it/.test(r.status) && r.level === 'ok', `Delete takes a door's room and its triggers, says so, and the map still bakes (${JSON.stringify(r)})`)
+}
+
+// THE MAP'S FORMS: a height is typed (a slider alone moved a floor by whole
+// metres on a phone), "all middles" says what the walls have and leaves an
+// opening alone, a room drawn against a wall leaves no middle in the doorway
+// (it bricked it up), the texture list has each once with its whole name, and
+// a second start moves the first.
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    const { newDoc, addSector, addSpawn } = await import('/studio/src/doc.js')
+    const { normalize } = await import('/studio/src/topology.js')
+    const rect = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+    const d = newDoc('mapfix')
+    const a = addSector(d, rect(0, 0, 8, 8), { floorTex: 'ROCKFLOOR1', ceilTex: 'ROCKFLOOR1' }, { middle: 'ROCKWALL1' })
+    addSpawn(d, 'start', 2, 4)
+    normalize(d)
+    S.docs.mapfix = d; S.moduleChanged(); await S.go('map', 'mapfix'); await wait(800)
+    const out = {}
+    // a typed height
+    S.select({ kind: 'sector', id: a.id }); await wait(300)
+    const floor = [...document.querySelectorAll('.ui-slider')].find((r) => /^floor/.test(r.querySelector('label')?.textContent ?? ''))
+    const f = floor?.querySelector('input.st-val')
+    if (f) { f.focus(); f.value = '1,3'; f.dispatchEvent(new Event('change')); await wait(300) }
+    out.typed = { field: !!f, floor: S.doc.sectors[a.id].floor }
+    // all middles shows what the walls have
+    const allMid = () => [...document.querySelectorAll('.st-row')].find((r) => /^all middles/.test(r.querySelector('label')?.textContent ?? ''))?.querySelector('button')?.textContent
+    S.select({ kind: 'sector', id: a.id }); await wait(300)
+    out.allMiddles = allMid()
+    // a room drawn against it: the shared wall is an opening, no middle on either side
+    S.style.edge = { middle: 'ROCKWALL1' }
+    S.draw.corners = rect(8, 2, 12, 6)
+    const tools = await import('/studio/src/tools.js')
+    tools.finishRoom(S); await wait(500)
+    const { sideKinds } = await import('/studio/src/topology.js')
+    const kinds = sideKinds(S.doc)
+    const shared = []; const solid = []
+    for (const s of Object.values(S.doc.sectors)) for (const v of s.verts) (kinds.get(v.edge.id) === 'neighbor' ? shared : solid).push(v.edge.middle ?? null)
+    out.shared = shared; out.solidHaveMiddle = solid.every((m) => m === 'ROCKWALL1')
+    // and "all middles" on the first room skips the opening
+    S.select({ kind: 'sector', id: a.id }); await wait(300)
+    out.allMiddlesAfter = allMid()
+    // the texture list: once each
+    let names = null
+    const real = S.ui.showSheet.bind(S.ui)
+    S.ui.showSheet = (title, body) => { if (title === 'Texture') names = [...body[1].querySelectorAll('.st-tile')].map((t) => t.title); return real(title, body) }
+    S.pickTexture(null, () => {}); S.ui.showSheet = real
+    out.dupes = names ? names.length - new Set(names).size : 'no picker'
+    out.titled = names ? names.every((n) => n) : false
+    // a second start moves the first
+    const before = S.doc.spawns.length
+    S.place = { kind: 'spawn', name: 'start' }
+    S.tool = 'place'
+    S.doc.spawns[0].x = 2
+    out.spawns = { before }
+    S.ui.hideSheet()
+    delete S.docs.mapfix; S.moduleChanged(); await S.go('map', Object.keys(S.docs)[0])
+    return out
+  })
+  check(r.typed.field && r.typed.floor === 1.25, `a floor height is typed, a decimal comma read, on the slider's step (${JSON.stringify(r.typed)})`)
+  check(r.allMiddles === 'ROCKWALL1' && r.allMiddlesAfter === 'ROCKWALL1', `"all middles" shows what the walls have, an opening left out (${r.allMiddles}, ${r.allMiddlesAfter})`)
+  check(r.shared.length === 2 && r.shared.every((x) => x === null) && r.solidHaveMiddle, `a room drawn against a wall: the opening has no middle on either side, the walls keep theirs (${JSON.stringify(r.shared)})`)
+  check(r.dupes === 0 && r.titled, `the texture list has each texture once, each with its whole name (${r.dupes} doubled)`)
+  const sp = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    await S.go('map'); await wait(500)
+    const tools = await import('/studio/src/tools.js')
+    const n0 = S.doc.spawns.filter((p) => p.tag === 'start').length
+    const was = { ...S.doc.spawns.find((p) => p.tag === 'start') }
+    const s0 = S.doc.sectors[S.doc.order[0]]
+    const cx = s0.verts.reduce((a, v) => a + v.x, 0) / s0.verts.length, cy = s0.verts.reduce((a, v) => a + v.y, 0) / s0.verts.length
+    S.tool = 'place'; S.place = { kind: 'spawn', name: 'start' }
+    const p = S.viewport.toScreen(cx + 1, cy + 1, s0.floor)
+    tools.onTap(S, { x: p.x, y: p.y }); await wait(300)
+    const after = S.doc.spawns.filter((q) => q.tag === 'start')
+    const out = { n0, n1: after.length, moved: after[0] && (after[0].x !== was.x || after[0].y !== was.y), status: document.querySelector('.st-status')?.textContent }
+    S.undoHere?.(); S.tool = 'select'; S.place = null
+    return out
+  })
+  check(sp.n0 === 1 && sp.n1 === 1 && sp.moved && /Moved the spawn "start"/.test(sp.status ?? ''), `placing a second start moves the first, and says so (${JSON.stringify(sp)})`)
+}
+
 // A STEP IS ADDED from beside the list, on a monster and a weapon: the chooser
 // opens whole (in the column beside the list it was once squeezed to an empty
 // bar), and a step picked from it lands in the state.
@@ -1582,7 +1746,7 @@ const preset = await page.evaluate(async () => {
   S.commit()
   return { ok: r.ok, n: r.triggers.length, problems: S.vocab.validateTriggers(S.doc) }
 })
-check(preset.ok && preset.n === 5 && preset.problems.length === 0, `the door preset writes five clean triggers (${JSON.stringify(preset)})`)
+check(preset.ok && preset.n === 3 && preset.problems.length === 0, `the door preset writes three clean triggers (an open from each side, and shut) (${JSON.stringify(preset)})`)
 await page.waitForFunction(() => window.__studio.preview.busy === false, { timeout: 15000 }).catch(() => {})
 s = await state()
 check(s.ok, `the map with a door bakes (${s.status})`)
@@ -1591,7 +1755,7 @@ check(s.ok, `the map with a door bakes (${s.status})`)
 // with its three marked sections.
 await page.keyboard.press('4')
 const listed = await page.evaluate(() => ({ rows: document.querySelectorAll('.st-trow').length, triggers: window.__studio.doc.triggers.length }))
-check(listed.rows === listed.triggers && listed.rows >= 5, `the trigger sheet lists one row per trigger (${listed.rows} of ${listed.triggers})`)
+check(listed.rows === listed.triggers && listed.rows >= 3, `the trigger sheet lists one row per trigger (${listed.rows} of ${listed.triggers})`)
 const opened = await page.evaluate(() => {
   document.querySelector('.st-trow').click()
   return [...document.querySelectorAll('.st-sheet .st-section-head')].map((h) => h.textContent.trim().slice(0, 12))

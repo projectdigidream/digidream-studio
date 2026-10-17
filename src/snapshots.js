@@ -123,6 +123,16 @@ export class Snapshots {
 
   async remove (key) { return req(this.#store('readwrite').delete(key)) }
 
+  /** A module's snapshots, moved to the id it was renamed to. */
+  async move (from, to) {
+    for (const meta of await this.list(from)) {
+      const snap = await this.get(meta.key)
+      if (!snap) continue
+      await req(this.#store('readwrite').put({ ...snap, key: `${to}@${snap.at}`, module: to }))
+      await this.remove(meta.key)
+    }
+  }
+
   /** When the latest was taken, or 0. */
   async latestAt (moduleId) { return (await this.list(moduleId))[0]?.at ?? 0 }
 }

@@ -83,17 +83,21 @@ const STYLE = `
 /* A slider row: the track across, the unseen range over it to take the finger. */
 .st-slide{position:relative;flex:1 1 auto;min-width:60px;height:44px;display:flex;align-items:center}
 .st-slide .ui-slider__track{width:100%}
-.st-slide-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.st-slide-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;touch-action:pan-y}
 .st-row input[type=number],.st-row input[type=text],.st-row select,.st-row textarea{
   flex:1 1 auto;min-width:0;height:40px;padding:0 10px}
 .st-row textarea{height:auto;min-height:80px;padding:8px}
 .st-val{flex:0 0 4em;text-align:right;opacity:.75;font-variant-numeric:tabular-nums}
+/* a slider's value is typed too: a field that reads as its number until touched */
+input.st-val{width:4.5em;flex:0 0 4.5em;min-width:0;box-sizing:border-box;background:transparent;border:1px solid transparent;border-radius:6px;
+  color:inherit;font:inherit;padding:2px 4px}
+input.st-val:hover,input.st-val:focus{border-color:var(--dnp-color-line-main);opacity:1;outline:none}
 .st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
 /* the picture fills the tile, the kit draws the tile */
 .st-tile{background-position:center;background-size:cover;height:72px;
   display:flex;align-items:flex-end;justify-content:center;cursor:pointer;overflow:hidden;position:relative}
 .st-tile span{font-size:10px;background:color-mix(in srgb,var(--dnp-color-bg-app) 75%,transparent);width:100%;text-align:center;padding:2px 0;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  line-height:1.2;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 .st-chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;cursor:pointer;font-size:12px}
 
@@ -528,8 +532,25 @@ export function slider (label, value, { min, max, step = 0.25 }, onChange) {
   // The kit's slider (track, fill, thumb, value), drawn by the skin; the
   // native range lies over it, unseen, so a finger, a key and a test all
   // move the same input they always did.
-  const val = el('span', { class: 'st-val ui-slider__value', text: String(value) })
+  // THE VALUE IS TYPED TOO. A slider alone could not be set to a number -- on
+  // a phone a nudge moved a floor by whole metres -- and digits typed "into"
+  // it went to the map as its keys. Enter or leaving it commits, a decimal
+  // comma is a point, and it lands on the slider's own step and range.
+  const val = el('input', { class: 'st-val ui-slider__value', type: 'text', inputmode: 'decimal', value: String(value), 'aria-label': label })
   const input = el('input', { class: 'st-slide-input', type: 'range', min, max, step, value })
+  val.addEventListener('focus', () => val.select())
+  val.addEventListener('keydown', (e) => { if (e.key === 'Enter') val.blur() })
+  val.addEventListener('change', () => {
+    const typed = Number(String(val.value).trim().replace(',', '.'))
+    if (!Number.isFinite(typed)) { val.value = input.value; return }
+    const st = Number(step) || 0
+    const on = st > 0 ? Math.round(typed / st) * st : typed
+    const v = Number(Math.max(Number(min), Math.min(Number(max), on)).toFixed(6))
+    input.value = String(v)
+    val.value = String(v)
+    paint()
+    onChange(v, true)
+  })
   const fill = el('span', { class: 'ui-slider__fill' })
   const thumb = el('span', { class: 'ui-slider__thumb' })
   const paint = () => {
@@ -537,7 +558,7 @@ export function slider (label, value, { min, max, step = 0.25 }, onChange) {
     fill.style.width = `${f * 100}%`
     thumb.style.left = `${f * 100}%`
   }
-  input.addEventListener('input', () => { val.textContent = input.value; paint(); onChange(Number(input.value), false) })
+  input.addEventListener('input', () => { val.value = input.value; paint(); onChange(Number(input.value), false) })
   input.addEventListener('change', () => { paint(); onChange(Number(input.value), true) })
   paint()
   const r = row(label, el('span', { class: 'st-slide' }, [el('span', { class: 'ui-slider__track' }, [fill, thumb]), input]), val)
@@ -624,7 +645,7 @@ export function pictureBackground (t, image, sheet = null) {
 /** A grid of picture tiles; `items`: [{ id, label, image?, sheet?, on? }]. */
 export function tiles (items, onPick) {
   return el('div', { class: 'st-grid' }, items.map((it) => {
-    const t = el('div', { class: 'st-tile ui-tile', 'data-on': it.on ? '1' : '0' }, [el('span', { class: 'ui-tile__caption', text: it.label })])
+    const t = el('div', { class: 'st-tile ui-tile', 'data-on': it.on ? '1' : '0', title: it.label }, [el('span', { class: 'ui-tile__caption', text: it.label })])
     if (it.image) pictureBackground(t, it.image, it.sheet)
     t.addEventListener('click', () => onPick(it))
     return t

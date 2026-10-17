@@ -14,7 +14,7 @@ let S = null
 /** The module's own settings: what module.txt says, and the ids its props take. */
 function showSettings () {
   S.ui.showSheet('Module settings', [
-    text('id', S.module.id, (v) => { const id = v.toLowerCase().replace(/[^a-z0-9_-]/g, ''); if (id) { S.module.id = id; S.rec.id = id; S.save(); S.shell.drawRail() } }),
+    text('id', S.module.id, async (v) => { await S.renameModule(v); showSettings() }),
     text('name', S.module.name, (v) => { S.module.name = v; S.shell.moduleName = v || S.module.id; S.save(); S.shell.drawRail() }),
     text('about', S.module.about, (v) => { S.module.about = v; S.save() }, { multiline: true }),
     // Where the game starts (startmap.js): Home's Play, and the Package page's first choice.

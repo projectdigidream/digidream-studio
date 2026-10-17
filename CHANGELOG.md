@@ -11,6 +11,41 @@ anything not released yet is under **Unreleased**.
   the app carries it, and the button took the whole app to an error page it
   could not leave. It is no longer offered, and a link out of the app opens in
   the phone's browser (the engine's Android shell, next engine release).
+- **A deleted room stayed drawn** in the plan and game views, and nothing could
+  select it: its triggers (a door's, say) still named it, the map no longer
+  baked, and the views kept the last map that did. Deleting a room now takes
+  the triggers that worked it, says which, and undo brings them all back. A
+  map that does not bake says the view shows it as it last baked.
+- **The door preset seemed never to open**: pressing E on an open door shut
+  it, so pressing again and again -- what anybody does when nothing seems to
+  happen -- opened it and shut it in the same second. Pressing an open door
+  now does nothing; it shuts by itself four seconds after opening (it was one
+  and a half).
+- **Importing a pack over its own module did nothing visible**: opening it
+  saved the open module back over the pack. It now asks first, naming the
+  pack's maps, brings them back, and says so.
+- **Editing the module's id made a new module for every id typed.** The
+  module is moved to the new id, snapshots and all; an id another module has
+  is refused. Home can delete another module ("delete a module…").
+- **⌘V switched the map to the game view**: a key held with ⌘, Ctrl or Alt is
+  no longer read as the map's letter.
+- **"all middles" bricked up doorways**: a room drawn against a wall gave the
+  new opening a middle texture on both sides, so it was solid in the game. A
+  wall that becomes an opening now has none, and "all middles" textures the
+  room's solid walls only.
+- **The "all middles / uppers / lowers" buttons said "(none)"** whatever the
+  walls had. They show the walls' texture, or "(mixed)".
+- **The texture list showed each of the module's textures twice**, and cut
+  long names short. Each is listed once, its name on two lines if need be.
+- **A second "spawn: start" made a second start**, and the player still
+  began at the first. Placing a spawn the map has moves it.
+- **Renaming a prop broke what used it** (a missile drawn as it lost its
+  look). A missile's or monster's body, what a monster drops, the nearest it
+  looks for, the player and a trigger's spawn_prop follow the new name.
+- **Heights and the other sliders could only be dragged**: on a phone a
+  nudge moved a floor by whole metres, and digits typed at them went to the
+  map as its keys. Each slider's number is typed too (a decimal comma is a
+  point), and a swipe up or down over a slider scrolls the page.
 
 ### Added
 

@@ -21,6 +21,8 @@ import { newArsenal } from '../weapons_emit.js'
 import { WEAPON_RECIPES } from '../editors/recipes.js'
 
 let S = null
+// Home's "delete a module…" open: the other modules each with a delete button.
+let deletingModules = false
 
 /**
  * Make a module: a copy of the starter template -- the starter as this studio
@@ -135,7 +137,12 @@ async function showHome () {
     // The style the studio wears, chosen (or brought in) here as well as in Settings.
     lookCard(S, showHome, { title: 'Style', about: false }),
     list.length > 1 ? el('div', { class: 'st-section-head' }, withIcon('action.swap', 'other modules')) : null,
-    list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: S.moduleBadge?.(r.id)?.text ? `${r.id} · ${S.moduleBadge(r.id).text}` : r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null
+    list.length > 1 ? chips(list.map((r) => ({ id: r.id, label: S.moduleBadge?.(r.id)?.text ? `${r.id} · ${S.moduleBadge(r.id).text}` : r.id, on: r.id === S.rec.id })), async (it) => { if (it.id !== S.rec.id) await S.openModule(it.id) }) : null,
+    // Taking one off the device: each OTHER module, behind a tap that says what it is for.
+    list.length > 1 ? el('div', { class: 'st-row', 'data-delete-modules': '1' }, deletingModules
+      ? [...list.filter((r) => r.id !== S.rec.id).map((r) => button(withIcon('action.delete', `delete ${r.id}`), async () => { if (await S.deleteModule(r.id)) { deletingModules = false; showHome() } }, 'st-danger')),
+          button('done', () => { deletingModules = false; showHome() })]
+      : [button(withIcon('action.delete', 'delete a module…'), () => { deletingModules = true; showHome() })]) : null
   ])
 }
 

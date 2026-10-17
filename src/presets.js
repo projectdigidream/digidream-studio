@@ -47,10 +47,16 @@ const fail = (msg) => ({ ok: false, problems: [msg], triggers: [] })
 
 /**
  * A manual door: the tapped sector's ceiling sits on its floor, and pressing
- * it from either room opens it; it shuts on its own ninety ticks after it has
+ * it from either room opens it; it shuts on its own four seconds after it has
  * finished opening. Every portal side of the door gets the usable flag.
+ *
+ * PRESSING AN OPEN DOOR DOES NOTHING. It once closed it, and a player who
+ * pressed E again and again -- the first thing anybody does when nothing seems
+ * to happen -- opened it and shut it in the same second, and from above a shut
+ * door is drawn see-through: it looked open and would not let them by. And
+ * four seconds, not one and a half: long enough to get through it fumbling.
  */
-export function door (doc, sectorId, { name = 'door', openTicks = 90 } = {}) {
+export function door (doc, sectorId, { name = 'door', openTicks = 240 } = {}) {
   const s = doc.sectors[sectorId]
   if (!s) return fail('no such sector')
   const ports = portals(doc, sectorId).filter((p) => p.facing)
@@ -78,16 +84,6 @@ export function door (doc, sectorId, { name = 'door', openTicks = 90 } = {}) {
         { a: 'sector_move', sector: 'behind', surface: 'ceiling', to: 'lowest_neighbour_ceiling', offset: [-1, 8], speed: SPEED_DOOR },
         { a: 'run_after', trigger: { trigger: shut.id }, after: 'behind', ticks: openTicks }
       ]
-    }))
-    made.push(addTrigger(doc, {
-      name: `${base}: close${ports.length > 1 ? ` from ${p.neighbor.id}` : ''}`,
-      event: 'on_interact',
-      conditions: [
-        { c: 'side_is', side },
-        { c: 'sector_at_rest', sector: 'behind' },
-        { c: 'sector_offset_at_least', sector: 'behind', z: '0.25' }
-      ],
-      actions: [{ a: 'sector_move', sector: 'behind', surface: 'ceiling', to: 'base_ceiling', speed: SPEED_DOOR }]
     }))
   }
   return { ok: true, problems: [], triggers: made }

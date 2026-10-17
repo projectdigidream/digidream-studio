@@ -63,5 +63,23 @@ check(renameProp(module, docs, 'crate', 'spirit') === null, 'CONTROL: renaming o
 check(deleteProp(module, docs, 'crate') === 2, 'deleting removes the placements and says how many')
 check(module.props.length === 1 && docs.first.entities.length === 2 && docs.second.entities.length === 0, 'the body is gone; the monster placements, even one with the same name, stay')
 
+// --- everything that names a prop follows a rename ----------------------------------------
+{
+  const m = { props: [{ id: 1, name: 'bolt' }, { id: 2, name: 'gem' }],
+    mobs: { missiles: { bolt: {}, arrow: { prop: 'bolt' }, other: { prop: 'gem' } },
+      mobs: { grunt: { drops: [{ item: 'gem' }, { choices: [{ item: 'gem' }, { item: 'bolt' }] }], states: { look: { sequence: [{ at: 0, action: 'target_nearest', of: 'prop', prop: 'gem' }] } } } } },
+    player: { prop: 'gem' } }
+  const d = { a: { entities: [], triggers: [{ actions: [{ a: 'spawn_prop', name: 'gem' }, { a: 'spawn_prop', name: 'bolt' }] }] } }
+  renameProp(m, d, 'bolt', 'shot')
+  check(m.mobs.missiles.bolt.prop === 'shot' && m.mobs.missiles.arrow.prop === 'shot' && m.mobs.missiles.other.prop === 'gem',
+    `a missile drawn as the prop, by its own name or by saying so, follows its rename (${JSON.stringify(m.mobs.missiles)})`)
+  renameProp(m, d, 'gem', 'jewel')
+  const g = m.mobs.mobs.grunt
+  check(g.drops[0].item === 'jewel' && g.drops[1].choices[0].item === 'jewel' && g.drops[1].choices[1].item === 'shot' && g.states.look.sequence[0].prop === 'jewel',
+    `so does what a monster drops and the nearest it looks for (${JSON.stringify(g)})`)
+  check(m.player.prop === 'jewel' && d.a.triggers[0].actions[0].name === 'jewel' && d.a.triggers[0].actions[1].name === 'shot', 'and the player, and a trigger that spawns it')
+  check(!('prop' in g), 'CONTROL: a monster whose body is another prop is not given this one')
+}
+
 console.log(`props: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

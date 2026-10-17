@@ -141,9 +141,42 @@ export function addSector (doc, corners, attrs = {}, edge = {}) {
   return s
 }
 
+/**
+ * A room taken out of the map, with the triggers that named it or one of its
+ * walls (a door's preset names both) and those that ran them: left behind,
+ * they point at nothing, and the map no longer bakes -- the views then kept
+ * drawing the room from the last bake, a ghost nothing could select. They are
+ * returned, so whoever deleted it is told; undo brings them all back.
+ */
 export function removeSector (doc, id) {
+  const gone = triggersNaming(doc, id)
   delete doc.sectors[id]
   doc.order = doc.order.filter((s) => s !== id)
+  if (gone.length) doc.triggers = doc.triggers.filter((t) => !gone.includes(t))
+  return gone
+}
+
+/** The triggers that name a room or one of its walls, and those that run them. */
+export function triggersNaming (doc, sectorId) {
+  const s = doc.sectors[sectorId]
+  if (!s) return []
+  const walls = new Set(s.verts.map((v) => v.edge?.id).filter(Boolean))
+  const gone = new Set()
+  const names = (v) => !!v && typeof v === 'object' && !Array.isArray(v) &&
+    (v.sector === sectorId || walls.has(v.edge) || walls.has(v.edgeTwin) || (v.trigger !== undefined && gone.has(v.trigger)))
+  for (let more = true; more;) {
+    more = false
+    for (const t of doc.triggers ?? []) {
+      if (gone.has(t.id) || ![...(t.conditions ?? []), ...(t.actions ?? [])].some((e) => Object.values(e).some(names))) continue
+      gone.add(t.id); more = true
+    }
+  }
+  return (doc.triggers ?? []).filter((t) => gone.has(t.id))
+}
+
+/** The map's graphs that still name a room (a graph is the author's: it is told, not changed). */
+export function graphsNaming (doc, sectorId) {
+  return Object.entries(doc.graphs ?? {}).filter(([, g]) => JSON.stringify(g).includes(`{"sector":"${sectorId}"}`)).map(([n]) => n)
 }
 
 /**

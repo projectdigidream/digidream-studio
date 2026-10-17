@@ -54,6 +54,25 @@ export function renameProp (module, docs, from, raw) {
   if (!p || !to || to === from || module.props.some((x) => x.name === to)) return null
   p.name = to
   for (const { entity } of placementsOf(docs, from)) entity.name = to
+  // EVERYTHING ELSE THAT NAMES IT, so a rename breaks nothing: a missile's or
+  // monster's body (theirs by name when they say none), what a monster drops,
+  // a step or condition about the nearest of it, the player, a trigger's
+  // spawn_prop. (A recipe's missile drawn as a prop of its own lost its look.)
+  const swap = (o, key) => {
+    if (Array.isArray(o)) { for (const x of o) swap(x, key); return }
+    if (!o || typeof o !== 'object') return
+    if (o[key] === from) o[key] = to
+    for (const v of Object.values(o)) if (v && typeof v === 'object') swap(v, key)
+  }
+  for (const [n, m] of Object.entries(module.mobs?.mobs ?? {})) {
+    if ((m.prop ?? n) === from) m.prop = to
+    swap(m.drops, 'item')
+    swap(m.states, 'prop')
+    swap(m.any, 'prop')
+  }
+  for (const [n, m] of Object.entries(module.mobs?.missiles ?? {})) if ((m.prop ?? n) === from) m.prop = to
+  if (module.player?.prop === from) module.player.prop = to
+  for (const doc of Object.values(docs)) for (const t of doc.triggers ?? []) for (const a of t.actions ?? []) if (a.a === 'spawn_prop' && a.name === from) a.name = to
   return to
 }
 
