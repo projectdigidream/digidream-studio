@@ -1066,6 +1066,98 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   await page.evaluate(async () => { const S = window.__studio; const { deleteMonster } = await import('/studio/src/brain.js'); deleteMonster(S, 'big_boss'); S.moduleChanged() })
 }
 
+// MARKERS (docs/MARKERS.md): small UI hung on things in the world. Screens →
+// markers makes their looks, drawn by the client's own MarkerView over a
+// monster; a monster wears one as its bar (and its preview shows it); a sign
+// on a map is one, hung by the level's script; Problems names one nobody made.
+{
+  const tab = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('screens'); await new Promise((r) => setTimeout(r, 400))
+    ;[...document.querySelectorAll('.sc [data-tab]')].find((b) => b.dataset.tab === 'markers').click()
+    await new Promise((r) => setTimeout(r, 500))
+    const rows = [...document.querySelectorAll('.sc [data-marker]')].map((r) => r.dataset.marker)
+    const box = document.querySelector('.sc .dnp-markers > div')
+    return { rows, shown: box?.style.display, w: box?.offsetWidth, own: Object.keys(S.module.ui?.markers ?? {}) }
+  })
+  check(tab.rows.join() === 'health,label,marker,debug_health' && tab.shown === 'block' && tab.w > 20 && !tab.own.length,
+    `Screens → markers lists the four built-ins, draws the first over a monster, and copies none into the module (${JSON.stringify(tab)})`)
+  const made = await page.evaluate(async () => {
+    const S = window.__studio
+    ;[...document.querySelectorAll('.sc button')].find((b) => /new marker/.test(b.textContent)).click()
+    await new Promise((r) => setTimeout(r, 200))
+    const i = document.querySelector('dialog[open] input'); i.value = 'Boss Tag'
+    ;[...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent === 'OK').click()
+    // the close-up is placed once the frame is in the page (a frame later): waited for, not timed
+    for (let i = 0; i < 40 && !document.querySelector('.sc .sc-hit-mark[data-el]'); i++) await new Promise((r) => setTimeout(r, 100))
+    const box = document.querySelector('.sc .dnp-markers > div')
+    const text = box?.querySelector('div div')
+    const r = box && text ? { boxBottom: box.getBoundingClientRect().bottom, textBottom: text.getBoundingClientRect().bottom, textTop: text.getBoundingClientRect().top, boxTop: box.getBoundingClientRect().top } : null
+    return { own: Object.keys(S.module.ui?.markers ?? {}), sel: document.querySelector('.sc [data-marker][data-on="1"]')?.dataset.marker, hits: document.querySelectorAll('.sc .sc-hit-mark[data-el]').length, r }
+  })
+  check(made.own.join() === 'boss_tag' && made.sel === 'boss_tag' && made.hits === 1, `+ new marker makes the module's own, named as a template is, and its element can be picked in the close-up (${JSON.stringify(made)})`)
+  check(made.r && made.r.textBottom <= made.r.boxBottom + 1 && made.r.textTop >= made.r.boxTop - 1, `and its text sits inside its box, on its bottom edge (${JSON.stringify(made.r)})`)
+  const worn = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('monsters'); await new Promise((r) => setTimeout(r, 500))
+    const ed = S.monsterEditor
+    const name = Object.keys(S.module.mobs.mobs)[0]
+    ed.switchTo(name); ed.tab = 'overview'; ed.render(); await new Promise((r) => setTimeout(r, 200))
+    const sel = [...document.querySelectorAll('.me select')].find((x) => x.getAttribute('aria-label') === 'A bar over it')
+    const offered = [...sel.options].map((o) => o.value)
+    sel.value = 'boss_tag'; sel.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 200))
+    ed.tab = 'behaviour'; ed.pvOpen = true; ed.render(); ed.preview.start()
+    const shown = () => document.querySelector('.me .me-stagewrap .dnp-markers > div')?.style.display === 'block'
+    for (let i = 0; i < 40 && !shown(); i++) await new Promise((r) => setTimeout(r, 100))
+    const bar = document.querySelector('.me .me-stagewrap .dnp-markers > div')
+    const { emitMobsLua } = await import('/studio/src/mobs_emit.js')
+    ed.preview.pause()
+    return { name, offered: offered.includes('boss_tag') && offered.includes('health') && offered[0] === '', set: S.module.mobs.mobs[name].health_bar, drawn: bar?.style.display === 'block', lua: /health_bar = "boss_tag"/.test(emitMobsLua(S.module)) }
+  })
+  check(worn.offered && worn.set === 'boss_tag' && worn.lua, `a monster's Overview offers the markers as its bar, and the module's file says so (${JSON.stringify(worn)})`)
+  check(worn.drawn, 'and its preview draws the bar over it')
+  const renamed = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('screens', 'markers/boss_tag'); await new Promise((r) => setTimeout(r, 500))
+    const i = document.querySelector('.sc input[aria-label="Name of this marker"]')
+    i.value = 'big_tag'; i.dispatchEvent(new Event('change'))
+    await new Promise((r) => setTimeout(r, 300))
+    return { own: Object.keys(S.module.ui.markers), worn: Object.values(S.module.mobs.mobs).filter((m) => m.health_bar === 'big_tag').length, used: [...document.querySelectorAll('.sc [data-use]')].map((u) => u.dataset.use) }
+  })
+  check(renamed.own.join() === 'big_tag' && renamed.worn === 1 && renamed.used.join() === 'monster', `renamed, the monster wearing it follows, and the marker says who uses it (${JSON.stringify(renamed)})`)
+  const sign = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map'); await new Promise((r) => setTimeout(r, 400))
+    S.openPalette(); await new Promise((r) => setTimeout(r, 150))
+    const chips = [...document.querySelectorAll('.st-chip')].map((b) => b.textContent.trim()).filter((t) => /^sign: /.test(t))
+    S.ui.hideSheet()
+    const { addEntity } = await import('/studio/src/doc.js')
+    const sp = S.doc.spawns[0]
+    const e = addEntity(S.doc, 'sign', 'big_tag', sp.x + 1, sp.y, sp.z, { text: 'EXIT', height: 1.5 }); S.commit()
+    const { emitMapLua } = await import('/studio/src/lua_emit.js')
+    const { emitMap } = await import('/studio/src/mapfmt.js')
+    const { normalize, derive } = await import('/studio/src/topology.js')
+    normalize(S.doc)
+    const lua = emitMapLua(S.doc, emitMap(derive(S.doc), S.doc, [])).text
+    const { moduleProblems } = await import('/studio/src/app/problems.js')
+    e.name = 'nobody_made'
+    const probs = moduleProblems(S).markers
+    S.doc.entities = S.doc.entities.filter((x) => x.id !== e.id); S.commit()
+    return { chips, hung: /dnp\.mark\(vec3\.new/.test(lua) && /t="big_tag"[^}]*text="EXIT"/.test(lua), probs }
+  })
+  check(sign.chips.includes('sign: big_tag') && sign.chips.includes('sign: label') && !sign.chips.includes('sign: health'), `Place offers signs of the markers that read a text (${sign.chips.join(', ')})`)
+  check(sign.hung, 'a sign placed on the map is hung by the level\'s script with dnp.mark, at its place, reading its text')
+  check(sign.probs.some((p) => /a sign on .*"nobody_made"/.test(p)), `and Problems names a sign hanging a marker nobody made (${sign.probs.join(' | ')})`)
+  await page.evaluate(async () => {
+    const S = window.__studio
+    for (const m of Object.values(S.module.mobs.mobs)) if (m.health_bar === 'big_tag') delete m.health_bar
+    delete S.module.ui.markers.big_tag
+    S.moduleChanged()
+    await S.go('map')
+  })
+}
+
 // Particles: a kind of the module's own, played by the client's own code.
 {
   await page.evaluate(() => window.__studio.showVfx())
@@ -1576,7 +1668,7 @@ await page.keyboard.press('Escape')
     return { hud: !!document.querySelector('.sc .sc-frame .dnp-hud'), hits: document.querySelectorAll('.sc .sc-hit-hud').length, moduleUi: !!S.module.ui,
              tabs: [...document.querySelectorAll('.sc .wk-top .sc-tabs button')].filter((b) => b.offsetParent).length }
   })
-  check(opened.hud && opened.hits >= 1 && opened.tabs === 5, `the Screens window draws the HUD in a device frame, its switches visible (${JSON.stringify(opened)})`)
+  check(opened.hud && opened.hits >= 1 && opened.tabs === 6, `the Screens window draws the HUD in a device frame, its switches visible (${JSON.stringify(opened)})`)
   check(!opened.moduleUi, 'and looking is not choosing: the module has no layout of its own yet')
   const box = await page.evaluate(() => { const r = document.querySelector('.sc .sc-hit-hud').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, id: document.querySelector('.sc .sc-hit-hud').dataset.el } })
   const frameBox = await page.evaluate(() => { const r = document.querySelector('.sc .sc-frame').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height } })

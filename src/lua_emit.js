@@ -141,6 +141,30 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
     L.push(block('entities', body))
   }
 
+  // --- signs ------------------------------------------------------------------
+  // Markers hung on places (docs/MARKERS.md): the map editor's signs, hung as
+  // the level loads -- which is when this script runs, and again whenever it
+  // does (markers are not saved; a level hangs its own).
+  const signs = doc.entities.filter((e) => e.kind === 'sign')
+  if (signs.length) {
+    const u = (v) => Math.round(Number(v) * RES)
+    const Sg = (e) => `{t=${luaString(e.name)}, x=${u(e.x)}, y=${u(e.y)}, z=${u(e.z)}` + (e.text ? `, text=${luaString(String(e.text).slice(0, 128))}` : '') +
+                      (e.height ? `, h=${u(e.height)}` : '') + (e.range ? `, r=${u(e.range)}` : '') + (e.through ? ', w=true' : '') + (e.debug ? ', d=true' : '') + '}'
+    const body = [
+      'if dnp ~= nil and dnp.mark ~= nil and fx ~= nil and vec3 ~= nil then',
+      `  local function du(n) return fx.frac(n, ${RES}) end`,
+      '  for _, s in ipairs({',
+      ...signs.map((e) => `    ${Sg(e)},`),
+      '  }) do',
+      '    dnp.mark(vec3.new(du(s.x), du(s.y), du(s.z)), s.t, { text = s.text },',
+      '      { height = s.h and du(s.h) or nil, range = s.r and du(s.r) or nil, through_walls = s.w, debug = s.d })',
+      '  end',
+      'end'
+    ].join('\n')
+    L.push('')
+    L.push(block('signs', body))
+  }
+
   // --- triggers ---------------------------------------------------------------
   // A panel a graph's `ui_open` opens is the trigger table's too, so a map
   // with such a panel and no cards still writes a (cardless) table.

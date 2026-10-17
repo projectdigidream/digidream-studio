@@ -15,6 +15,8 @@ import { vfxLine } from '../props_emit.js'
 import { BrainSim } from '../brainsim.js'
 import { TPS, secs } from '../phrases.js'
 import { ViewPreview } from '../viewform.js'
+import { MarkerView } from '/src/render/markers.js'
+import { parseLayout } from '/src/render/layout.js'
 
 /** The parsed atlas and picture for a sheet name: the module's, or the served catalogue's. */
 export class Sheets {
@@ -86,6 +88,9 @@ export class Preview {
     // A weapon is seen as it is held: its first-person view model playing the
     // state's picture (viewform.js), with shots and sparks drawn over it.
     this.stage = this.canvas
+    // A monster's bar over it (docs/MARKERS.md): the client's own MarkerView,
+    // over the canvas, hung from the top of its body as the game hangs it.
+    if (this.kind === 'mob') this.stage = el('div', { class: 'me-stagewrap' }, [this.canvas])
     if (this.kind === 'weapon' && host.view?.()) {
       this.vp = new ViewPreview(S)
       this.vp.show(host.view())
@@ -221,6 +226,7 @@ export class Preview {
       if (s.teleported && s.tick - s.teleported < 12) ctx.globalAlpha = (s.tick - s.teleported) / 12
       const drew = this.host.sheets.draw(ctx, sub.prop?.art?.sheet, this.host.animOf(s.state), s.elapsed / TPS, s.behind ? 0.5 : 0, selfX, floor - hover, px, Number(sub.prop?.scale ?? 1))
       ctx.globalAlpha = 1
+      this.drawBar(sub, s, selfX, floor - hover - Number(sub.prop?.height ?? 1) * px, w, h)
       if (!drew) { ctx.fillText('no picture: pick a sprite on Looks', selfX - 20, floor - 30) }
       // what it summoned, drawn small beside it
       let i = 0
@@ -283,6 +289,22 @@ export class Preview {
     const said = [...ammo, ...vars, ...cools].join(' · ') || 'numbers: none set, no cooldown running'
     if (put(this.varsEl, said)) this.varsEl.title = said
     if (this.evAt && performance.now() - this.evAt > 2200) { this.evEl.textContent = ''; this.evAt = 0 }
+  }
+
+  /**
+   * Its bar over it, if it wears one: the template the module's screens give
+   * that name, its health as `value` of `max`, at (x, y) -- the top of its body.
+   * Gone when it dies, as in the game.
+   */
+  drawBar (sub, s, x, y, w, h) {
+    const name = sub.compiled?.health_bar
+    if (!name || s.dead || s.hp <= 0) { if (this.bar) { this.bar.clear(1); this.barKey = null } return }
+    if (!this.bar) this.bar = new MarkerView({ host: this.stage })
+    const key = `${name}:${JSON.stringify(this.S.module.ui?.markers?.[name] ?? null)}`
+    if (this.barKey !== key) { this.bar.setLayout(parseLayout(this.S.module.ui ?? { version: 1 }).layout); this.barKey = key; this.barHp = null }
+    const hp = Math.max(0, Math.round(s.hp))
+    if (this.barHp !== hp) { this.barHp = hp; this.bar.set({ id: 1, template: name, values: { value: hp, max: Math.round(s.maxHp) }, flags: 0, range: 0n }) }
+    this.bar.update({ width: w, height: h, project: () => ({ x, y }), anchorOf: () => ({ x: 0, y: 0, z: 0 }), viewer: null })
   }
 
   /** What it would do now, in words. */

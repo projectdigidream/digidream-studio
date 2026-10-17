@@ -112,6 +112,7 @@ export const CSS = `
 .me-fp{position:relative;width:100%}
 .me-fp .st-view-canvas{display:block;width:100%;max-width:none}
 .me-fp .me-over{position:absolute;inset:0;width:100%;height:100%;background:transparent}
+.me-stagewrap{position:relative;width:100%}
 .me-stage{position:relative;width:100%;height:150px;background:var(--dnp-color-bg-sunken);border-radius:9px;overflow:hidden;display:block}
 .me-now{font-size:12px;color:var(--dnp-color-text-secondary)}
 .me-vars{font-size:12px;color:var(--dnp-color-text-secondary);font-family:var(--dnp-font-mono)}

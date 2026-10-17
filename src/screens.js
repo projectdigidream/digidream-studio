@@ -18,12 +18,15 @@
 // and panels (templates a script's panel can name). Sample data drives the
 // HUD so a low-health bar or a full magazine can be seen without playing.
 //
-import { el, row, number, text, select, toggle, button, muted, withIcon, icon } from './ui.js'
+import { el, row, number, text, select, toggle, button, muted, withIcon, icon, ask, confirmDialog } from './ui.js'
 import { newLayout, anchorFor } from './ui_emit.js'
-import { DEFAULT_LAYOUT, ANCHORS, TOUCH_IDS, CLIENT_BINDINGS, STANDARD_HUD_NAMES, HudView, parseLayout, place, uiScale } from '/src/render/layout.js'
+import { DEFAULT_LAYOUT, DEFAULT_MARKERS, ANCHORS, TOUCH_IDS, CLIENT_BINDINGS, STANDARD_HUD_NAMES, HudView, parseLayout, place, uiScale } from '/src/render/layout.js'
 import { touchLayout } from '/src/render/touchui.js'
 import { UiView } from '/src/render/ui.js'
 import { UI_KIND } from '/src/proto.js'
+import { MarkerView } from '/src/render/markers.js'
+import { markerNames, markerUses, markerBindings, newMarker, renameMarker, cleanMarkerName, BUILTIN_MARKERS, BUILTIN_NOTES } from './markers.js'
+import { Sheets } from './editors/preview.js'
 
 // Screens to try a layout on. Logical CSS pixels, and the safe area a notched
 // phone keeps clear -- the client offsets everything from it, so must this.
@@ -35,6 +38,18 @@ export const DEVICES = {
 }
 
 const TYPES = ['text', 'number', 'bar', 'image', 'group']
+// THE MARKERS' CLOSE-UP: a piece of the screen around a monster, drawn larger
+// so a 36-unit bar can be worked on; the marker is sized as the chosen device
+// would size it. Where its point (the top of the body) sits in the scene.
+const SCENE = { width: 420, height: 260, head: { x: 210, y: 150 }, floor: 232 }
+const MARK_ID = 1
+const MARK_SAMPLE = { value: 60, max: 100, text: 'Sample' }
+const clone = (v) => JSON.parse(JSON.stringify(v))
+/**
+ * A layout to start from: the client's default, without its built-in markers --
+ * those are always there; a layout's `markers` are the ones it adds or replaces.
+ */
+const freshLayout = () => { const L = newLayout(DEFAULT_LAYOUT); L.markers = {}; return L }
 
 /**
  * THE MODULE'S PICTURES IN THE HUD. The client's image element asks for
@@ -69,9 +84,13 @@ function useModuleImages (host, S) {
 const SAMPLE = { hp: 75, map: 'first', 'hud.hp_max': 100, 'hud.weapon': 'pistol', 'hud.ammo_type': 'bullets', 'hud.ammo': 12, 'hud.ammo_max': 50 }
 
 let win = null
-export function openScreens (S) {
+/** `arg` 'markers/<name>' opens on the markers tab with that template (a sign's "its look…"). */
+export function openScreens (S, arg = null) {
   win ??= new Screens(S)
+  const m = /^markers(?:\/(.+))?$/.exec(arg ?? '')
+  if (m) { win.tab = 'markers'; win.mark = m[1] ?? win.mark; win.picked = null }
   win.open()
+  S.screens = win
   return win
 }
 
@@ -82,6 +101,9 @@ class Screens {
     this.device = 'phone, landscape'
     this.picked = null          // the id of the selected element / button / template
     this.sample = { ...SAMPLE }
+    this.markSample = { ...MARK_SAMPLE }
+    this.mark = null            // the marker template being edited, by name
+    this.sheets = new Sheets(S)
     this.root = el('div', { class: 'wk sc' })
     this.root.hidden = true
     document.body.appendChild(this.root)
@@ -97,7 +119,7 @@ class Screens {
     if (this.scope === 'map' && S.doc.ui) return S.doc.ui
     // Looking is not choosing: until something is changed the module has no
     // layout of its own and writes no files, and the game draws its default.
-    return S.module.ui ?? (this.draft ??= newLayout(DEFAULT_LAYOUT))
+    return S.module.ui ?? (this.draft ??= freshLayout())
   }
 
   /** A change: a map's is undoable with the map; the module's re-bakes it. */
@@ -137,7 +159,7 @@ class Screens {
       el('div', { class: 'wk-tabs sc-tabs' }, [['module', 'every map', 'action.scopegame'], ['map', `only ${S.docName}`, 'action.scopemap']].map(([v, l, i]) =>
         el('button', { 'data-on': this.scope === v ? '1' : '0', 'data-scope': v, onclick: () => { S.screensScope = v; this.picked = null; this.render() } }, withIcon(i, l)))),
       select('', this.device, Object.keys(DEVICES), (v) => { this.device = v; this.render() }).lastChild,
-      el('div', { class: 'wk-tabs sc-tabs' }, [['hud', 'HUD'], ['touch', 'touch'], ['panels', 'templates']].map(([v, l]) =>
+      el('div', { class: 'wk-tabs sc-tabs' }, [['hud', 'HUD'], ['touch', 'touch'], ['panels', 'templates'], ['markers', 'markers']].map(([v, l]) =>
         el('button', { text: l, 'data-on': this.tab === v ? '1' : '0', 'data-tab': v, onclick: () => { this.tab = v; this.picked = null; this.render() } }))),
       el('span', { style: 'flex:1' }),
       button(withIcon('action.back', 'back'), () => (this.S.leave ? this.S.leave() : this.close()), 'wk-back')
@@ -146,10 +168,12 @@ class Screens {
     // The frame, scaled to fit beside the controls; the client draws at the
     // device's own logical size inside it.
     const stage = el('div', { class: 'sc-stage' })
-    const frame = el('div', { class: 'sc-frame', style: `width:${dev.width}px;height:${dev.height}px` })
+    const marking = this.tab === 'markers'
+    const box = marking ? SCENE : dev
+    const frame = el('div', { class: 'sc-frame', 'data-scene': marking ? '1' : '0', style: `width:${box.width}px;height:${box.height}px` })
     const safe = el('div', { class: 'sc-safe' })
     Object.assign(safe.style, { left: `${dev.insets.left ?? 0}px`, right: `${dev.insets.right ?? 0}px`, top: `${dev.insets.top ?? 0}px`, bottom: `${dev.insets.bottom ?? 0}px` })
-    frame.appendChild(safe)
+    if (!marking) frame.appendChild(safe)
     stage.appendChild(frame)
     const hits = el('div', { class: 'sc-hits' })
 
@@ -162,12 +186,13 @@ class Screens {
     } else this.hud = null
     if (this.tab === 'touch' || (this.tab === 'hud' && dev.touch)) this.#drawTouch(frame, hits, scheme, dev, this.tab === 'touch')
     if (this.tab === 'panels') this.#drawPanel(frame, dev)
+    if (marking) this.#drawMarker(frame, dev, checked.layout)
     frame.appendChild(hits)
 
     const side = el('div', { class: 'wk-details' })
     if (this.scope === 'map') {
       side.appendChild(toggle(`own screens on ${S.docName}`, !!S.doc.ui, (v) => {
-        if (v) S.doc.ui = newLayout(S.module.ui ?? DEFAULT_LAYOUT)
+        if (v) S.doc.ui = S.module.ui ? newLayout(S.module.ui) : freshLayout()
         else delete S.doc.ui
         S.commit(); this.render()
       }))
@@ -178,6 +203,7 @@ class Screens {
       if (this.tab === 'hud') side.append(...this.#hudRows(hits, frame, dev))
       if (this.tab === 'touch') side.append(...this.#touchRows(scheme))
       if (this.tab === 'panels') side.append(...this.#panelRows())
+      if (marking) side.append(...this.#markerRows(hits))
     }
 
     this.root.replaceChildren(top, stage, side)
@@ -188,14 +214,17 @@ class Screens {
       // Upright the stage is as tall as the scaled frame (the page scrolls);
       // otherwise the frame fits the stage it is given.
       const upright = matchMedia('(max-width:1100px) and (orientation:portrait)').matches
-      const k = upright ? Math.min(1, (r.width - 24) / dev.width) : Math.min(1, (r.width - 24) / dev.width, (r.height - 24) / dev.height)
+      // the markers' close-up is drawn larger, up to three times
+      const most = marking ? 3 : 1
+      const k = upright ? Math.min(most, (r.width - 24) / box.width) : Math.min(most, (r.width - 24) / box.width, (r.height - 24) / box.height)
       this.k = k > 0 ? k : 1
       frame.style.transform = `scale(${this.k})`
       frame.style.transformOrigin = upright ? 'top center' : 'center'
-      if (upright) stage.style.height = `${Math.ceil(dev.height * this.k) + 24}px`
+      if (upright) stage.style.height = `${Math.ceil(box.height * this.k) + 24}px`
       else stage.style.height = ''
       this.hud?.refresh()
       if (this.tab === 'hud') this.#placeHits(hits, frame, dev)
+      if (marking) { this.updateMark(); this.#placeMarkHits(hits, dev) }
     }
     requestAnimationFrame(() => this.fit())
     if (!this.onResize) { this.onResize = () => { if (!this.root.hidden) this.fit?.() }; addEventListener('resize', this.onResize) }
@@ -307,11 +336,10 @@ class Screens {
     return rows
   }
 
-  #elementForm (e, parent, nested) {
+  #elementForm (e, parent, nested, binds = this.#bindings()) {
     const ch = () => this.changed()
     const set = (k) => (v) => { if (v === '' || v === undefined || v === null) delete e[k]; else e[k] = v; ch() }
     const st = (k) => (v) => { e.style ??= {}; if (v === '' || v === undefined) delete e.style[k]; else e.style[k] = v; if (!Object.keys(e.style).length) delete e.style; ch() }
-    const binds = this.#bindings()
     const bindRow = (label, key) => {
       const list = el('datalist', { id: `sc-binds-${key}` }, binds.map((b) => el('option', { value: b })))
       const i = el('input', { type: 'text', value: typeof e[key] === 'string' ? e[key] : '', list: `sc-binds-${key}`, placeholder: 'hp, hud.ammo …' })
@@ -348,7 +376,7 @@ class Screens {
     const vis = e.visible
     rows.push(toggle('shown only when…', !!vis, (v) => { if (v) e.visible = { bind: 'hp', op: 'set' }; else delete e.visible; ch() }))
     if (vis) {
-      const list = el('datalist', { id: 'sc-binds-vis' }, this.#bindings().map((b) => el('option', { value: b })))
+      const list = el('datalist', { id: 'sc-binds-vis' }, binds.map((b) => el('option', { value: b })))
       const i = el('input', { type: 'text', value: vis.bind, list: 'sc-binds-vis' })
       i.addEventListener('change', () => { vis.bind = i.value.trim() || 'hp'; ch() })
       rows.push(row('binding', el('span', {}, [i, list])),
@@ -356,6 +384,226 @@ class Screens {
       if (vis.op !== 'set') rows.push(text('value', vis.value ?? '', (v) => { vis.value = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; ch() }))
     }
     rows.push(button('delete element', () => { parent.splice(parent.indexOf(e), 1); this.picked = null; ch() }, 'st-danger'))
+    return rows
+  }
+
+  // --- markers ------------------------------------------------------------------------
+
+  /** The template being edited: the picked one, else the module's first, else the first built-in. */
+  #markName () {
+    const names = markerNames(this.layout)
+    if (this.mark && names.includes(this.mark)) return this.mark
+    return (this.mark = Object.keys(this.layout.markers ?? {})[0] ?? names[0])
+  }
+
+  /** The look a name has here: the layout's own, else the client's built-in. */
+  #markTemplate (name) { return this.layout.markers?.[name] ?? DEFAULT_MARKERS[name] ?? null }
+  #ownMark (name) { return !!this.layout.markers?.[name] }
+
+  /**
+   * The close-up: a floor, a monster standing on it, and the marker over its
+   * head, placed and drawn by the client's own MarkerView (and the HudView in
+   * it) at the size the chosen device gives it.
+   */
+  #drawMarker (frame, dev, layout) {
+    const name = this.#markName()
+    const cv = el('canvas', { class: 'sc-scene', width: SCENE.width * 2, height: SCENE.height * 2 })
+    Object.assign(cv.style, { position: 'absolute', inset: '0', width: `${SCENE.width}px`, height: `${SCENE.height}px` })
+    frame.appendChild(cv)
+    const ctx = cv.getContext('2d')
+    ctx.scale(2, 2)
+    // the floor: a line in the skin's own line colour
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--dnp-color-line-strong').trim() || 'gray' // content: the skin's line colour
+    ctx.lineWidth = 1.5
+    ctx.beginPath(); ctx.moveTo(16, SCENE.floor + 0.5); ctx.lineTo(SCENE.width - 16, SCENE.floor + 0.5); ctx.stroke()
+    // Who stands under it: a monster that wears this marker, else any with a sprite.
+    const mobs = this.S.module.mobs?.mobs ?? {}
+    const props = this.S.module.props ?? []
+    const wearer = Object.keys(mobs).find((n) => mobs[n].health_bar === name) ?? Object.keys(mobs).find((n) => props.find((p) => p.name === (mobs[n].prop ?? n))?.art?.sheet)
+    const prop = wearer ? props.find((p) => p.name === (mobs[wearer].prop ?? wearer)) : null
+    const px = (SCENE.floor - SCENE.head.y) / Math.max(0.5, Number(prop?.height ?? 1))
+    const drawn = prop?.art?.sheet && this.sheets.draw(ctx, prop.art.sheet, prop.art.states?.[0], 0, 0, SCENE.head.x, SCENE.floor, px, Number(prop.scale ?? 1))
+    if (!drawn) {
+      // a stand-in: a body as tall as the space under the point
+      ctx.strokeStyle = '#8fa3c0' // content: a neutral stand-in figure
+      ctx.lineWidth = 2
+      ctx.strokeRect(SCENE.head.x - 14, SCENE.head.y, 28, SCENE.floor - SCENE.head.y)
+    } else if (!this.redrawn) {
+      // a sheet still loading draws nothing the first time: once more when it is in
+      this.redrawn = true
+      setTimeout(() => { if (!this.root.hidden && this.tab === 'markers') this.render() }, 400)
+    }
+    this.marks = new MarkerView({ host: frame })
+    this.marks.setLayout(layout)
+    this.marks.set({ id: MARK_ID, template: name, values: { ...this.markSample }, flags: 0, range: 0n })
+    this.markDev = dev
+    this.updateMark()
+  }
+
+  /** Place the marker over the head, at the device's scale. */
+  updateMark () {
+    const dev = this.markDev
+    this.marks?.update({ width: dev.width, height: dev.height, project: () => ({ x: SCENE.head.x, y: SCENE.head.y }), anchorOf: () => ({ x: 0, y: 0, z: 0 }), viewer: null })
+    // Measured again once it shows: the close-up's frame is placed in the page
+    // after the marker is first laid out, and text measures nothing before.
+    this.marks?.marks.get(MARK_ID)?.hud?.refresh()
+  }
+
+  /** Tap targets over the marker's box and each element in it, from where the client put them. */
+  #placeMarkHits (hits, dev) {
+    for (const h of [...hits.querySelectorAll('.sc-hit-mark')]) h.remove()
+    const k = this.marks?.marks.get(MARK_ID)
+    if (!k?.box || k.box.style.display === 'none' || !k.hud) return
+    const m = /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(k.box.style.transform)
+    const bx = Number(m?.[1] ?? 0); const by = Number(m?.[2] ?? 0)
+    const bw = k.box.offsetWidth; const bh = k.box.offsetHeight
+    const outline = el('div', { class: 'sc-hit-mark sc-mbox', title: 'the template\'s box: its bottom-centre sits on the point' })
+    Object.assign(outline.style, { left: `${bx}px`, top: `${by}px`, width: `${bw}px`, height: `${bh}px` })
+    hits.appendChild(outline)
+    const point = el('div', { class: 'sc-hit-mark sc-mpoint' })
+    Object.assign(point.style, { left: `${SCENE.head.x - 3}px`, top: `${SCENE.head.y - 3}px` })
+    hits.appendChild(point)
+    const name = this.#markName()
+    if (!this.#ownMark(name)) return                       // a built-in is looked at, not moved
+    const t = this.layout.markers[name]
+    const scale = uiScale(this.layout, dev.width, dev.height)
+    for (const n of k.hud.nodes ?? []) {
+      if (n.dom.style.display === 'none') continue
+      const mine = this.#markFlat(t.elements).find((f) => f.e.id === n.el.id)
+      if (!mine || mine.depth > 0) continue
+      const hit = el('div', { class: 'sc-hit sc-hit-mark', 'data-el': n.el.id, 'data-on': n.el.id === this.picked ? '1' : '0' })
+      const left = bx + parseFloat(n.dom.style.left || 0); const top = by + parseFloat(n.dom.style.top || 0)
+      Object.assign(hit.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(6, n.dom.offsetWidth)}px`, height: `${Math.max(6, n.dom.offsetHeight)}px` })
+      this.#dragInBox(hit, mine.e, { bx, by, bw, bh, scale })
+      hits.appendChild(hit)
+    }
+  }
+
+  /** Drag an element inside the box; it re-anchors to the ninth of the box it lands in. A tap selects. */
+  #dragInBox (hit, item, { bx, by, bw, bh, scale }) {
+    hit.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      hit.setPointerCapture?.(e.pointerId)
+      const start = { x: e.clientX, y: e.clientY, left: parseFloat(hit.style.left), top: parseFloat(hit.style.top) }
+      let moved = false
+      const move = (ev) => {
+        const dx = (ev.clientX - start.x) / this.k; const dy = (ev.clientY - start.y) / this.k
+        if (Math.abs(dx) + Math.abs(dy) > 2) moved = true
+        hit.style.left = `${start.left + dx}px`; hit.style.top = `${start.top + dy}px`
+      }
+      const up = () => {
+        hit.removeEventListener('pointermove', move); hit.removeEventListener('pointerup', up); hit.removeEventListener('pointercancel', up)
+        this.picked = item.id
+        if (!moved) { this.render(); return }
+        const a = anchorFor({ left: parseFloat(hit.style.left) - bx, top: parseFloat(hit.style.top) - by, width: hit.offsetWidth, height: hit.offsetHeight }, bw, bh, scale, {})
+        Object.assign(item, a)
+        this.changed()
+      }
+      hit.addEventListener('pointermove', move); hit.addEventListener('pointerup', up); hit.addEventListener('pointercancel', up)
+    })
+  }
+
+  #markFlat (list, depth = 0, out = []) {
+    for (const e of list ?? []) { out.push({ e, depth, parent: list }); if (e.type === 'group') this.#markFlat(e.children ?? [], depth + 1, out) }
+    return out
+  }
+
+  #markerRows (hits) {
+    const L = this.layout
+    const S = this.S
+    const name = this.#markName()
+    const own = this.#ownMark(name)
+    const uses = markerUses(S.module, S.docs)
+    const rows = [muted('Markers are small UIs hung on things in the world: a bar over a monster, a sign over a door, a pointer over a goal. A monster wears one as its "bar over it", a graph hangs one with its mark node, and a sign placed on a map is one.')]
+    rows.push(el('div', { class: 'st-section-head', text: 'markers' }))
+    for (const n of markerNames(L)) {
+      const mine = this.#ownMark(n)
+      const used = uses.get(n)?.length ?? 0
+      const note = `${mine ? (BUILTIN_MARKERS.includes(n) ? 'replaces the built-in' : 'the module\'s') : 'built in'}${used ? ` · used ${used}×` : ''}`
+      rows.push(el('div', { class: 'st-trow', 'data-marker': n, 'data-on': n === name ? '1' : '0', onclick: () => { this.mark = n; this.picked = null; this.redrawn = false; this.render() } }, [
+        el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: n }), el('div', { class: 'st-muted', text: note })])]))
+    }
+    rows.push(button('+ new marker', async () => {
+      const raw = await ask('the new marker\'s name (a-z, 0-9, _)', 'sign')
+      const n = cleanMarkerName(raw)
+      if (!n) return
+      if (markerNames(L).includes(n) && this.#ownMark(n)) { S.status(`there is a marker called ${n} already`, 'warn'); return }
+      ;(L.markers ??= {})[n] = BUILTIN_MARKERS.includes(n) ? clone(DEFAULT_MARKERS[n]) : newMarker()
+      this.mark = n; this.picked = null
+      this.changed()
+    }))
+    const t = this.#markTemplate(name)
+    if (!t) return rows
+    rows.push(el('div', { class: 'st-section-head', text: name }))
+    if (!own) {
+      rows.push(muted(`Built into the game: ${BUILTIN_NOTES[name] ?? ''}. To change it, change it for this module, or make a new marker from it.`),
+        el('div', { class: 'st-row' }, [
+          button(withIcon('action.edit', 'change it for this module'), () => { (L.markers ??= {})[name] = clone(DEFAULT_MARKERS[name]); this.changed() }),
+          button(withIcon('action.duplicate', 'make a new one from it'), async () => {
+            const raw = await ask('the new marker\'s name (a-z, 0-9, _)', `${name}_2`)
+            const n = cleanMarkerName(raw)
+            if (!n || this.#ownMark(n) || BUILTIN_MARKERS.includes(n)) { if (n) S.status(`${n} is taken`, 'warn'); return }
+            ;(L.markers ??= {})[n] = clone(DEFAULT_MARKERS[name]); this.mark = n; this.changed()
+          })]))
+    } else {
+      const nameIn = el('input', { type: 'text', value: name, 'aria-label': 'Name of this marker' })
+      nameIn.addEventListener('change', () => {
+        const to = cleanMarkerName(nameIn.value)
+        if (!to || to === name) { nameIn.value = name; return }
+        if (this.#ownMark(to)) { S.status(`there is a marker called ${to} already`, 'warn'); nameIn.value = name; return }
+        L.markers[to] = L.markers[name]; delete L.markers[name]
+        renameMarker(S.module, S.docs, name, to)
+        this.mark = to
+        S.status(`renamed to ${to}; the monsters, graphs and signs that hang it follow${uses.get(name)?.some((u) => u.kind === 'script') ? ' (scripts are yours to change)' : ''}`, 'ok')
+        this.changed()
+      })
+      rows.push(row('name', nameIn),
+        number('width', t.w ?? 0, { min: 4, max: 800, step: 1 }, (v) => { t.w = Math.round(v); this.changed() }),
+        number('height', t.h ?? 0, { min: 4, max: 400, step: 1 }, (v) => { t.h = Math.round(v); this.changed() }),
+        muted('In UI units, like the HUD\'s. Its bottom-centre sits on the point it hangs on (the top of a body, or a place).'))
+      t.elements ??= []
+      const flat = this.#markFlat(t.elements)
+      for (const { e, depth } of flat) {
+        rows.push(el('div', { class: 'st-trow', 'data-mel': e.id, 'data-on': e.id === this.picked ? '1' : '0', style: `padding-left:${8 + depth * 16}px`, onclick: () => { this.picked = e.id; this.render() } }, [
+          el('div', { class: 'st-trow-text' }, [el('div', { class: 'st-trow-name', text: e.id }), el('div', { class: 'st-muted', text: `${e.type}${e.bind ? ` · ${e.bind}` : ''}` })])]))
+      }
+      rows.push(select('add', '', [['', '+ element…'], ...TYPES.map((x) => [x, x])], (type) => {
+        if (!type) return
+        const ids = new Set(flat.map((f) => f.e.id))
+        let i = 1
+        while (ids.has(`${type}${i}`)) i++
+        const e = { id: `${type}${i}`, type, anchor: 'c', x: 0, y: 0 }
+        if (type === 'text') Object.assign(e, { text: '{text}', style: { size: 11, align: 'center' } })
+        if (type === 'number') Object.assign(e, { bind: 'value', format: '{value}', style: { size: 11 } })
+        if (type === 'bar') Object.assign(e, { bind: 'value', max: 'max', w: Math.max(8, (t.w ?? 40) - 4), h: 5, fill: '#5fbf6a' })
+        if (type === 'image') Object.assign(e, { w: 16, h: 16 })
+        if (type === 'group') Object.assign(e, { stack: 'row', gap: 2, children: [] })
+        const into = flat.find((f) => f.e.id === this.picked && f.e.type === 'group')?.e
+        ;(into ? (into.children ??= []) : t.elements).push(into ? { ...e, anchor: undefined } : e)
+        this.picked = e.id
+        this.changed()
+      }))
+      const sel = flat.find((f) => f.e.id === this.picked)
+      if (sel) rows.push(...this.#elementForm(sel.e, sel.parent, sel.depth > 0, [...new Set(['value', 'max', 'text', ...markerBindings(t)])]))
+      else rows.push(muted('Tap an element in the close-up or the list; drag it inside the box to move it.'))
+      rows.push(button(BUILTIN_MARKERS.includes(name) ? 'back to the built-in' : 'delete marker', async () => {
+        const n = uses.get(name)?.length ?? 0
+        if (n && !BUILTIN_MARKERS.includes(name) && !await confirmDialog(`Delete ${name}? ${n} thing${n > 1 ? 's' : ''} hang${n > 1 ? '' : 's'} it, and would draw nothing.`)) return
+        delete L.markers[name]; this.picked = null; this.changed()
+      }, 'st-danger'))
+    }
+    // what the close-up shows: the values a monster, a graph or a sign gives it
+    rows.push(el('div', { class: 'st-section-head', text: 'sample values' }))
+    for (const k of [...new Set(['value', 'max', 'text', ...markerBindings(t)])]) {
+      const v = this.markSample[k]
+      const apply = (x) => { this.markSample[k] = x; this.marks?.set({ id: MARK_ID, template: name, values: { ...this.markSample }, flags: 0, range: 0n }); this.updateMark(); this.#placeMarkHits(hits, this.markDev) }
+      rows.push(k === 'text' || typeof v === 'string' ? text(k, v ?? '', apply) : number(k, v ?? 0, { min: 0, max: 99999, step: 1 }, apply))
+    }
+    rows.push(muted('A monster gives `value` (its health) and `max`; a sign gives `text`; a graph or a script gives what it names.'))
+    rows.push(el('div', { class: 'st-section-head', text: 'used by' }))
+    const used = uses.get(name) ?? []
+    rows.push(used.length ? el('div', { class: 'st-col' }, used.map((u) => el('div', { class: 'st-muted', 'data-use': u.kind, text: u.label })))
+      : muted('Nothing hangs it yet. A monster: its Overview, "a bar over it". A sign: Place on a map. A graph: its mark node.'))
     return rows
   }
 
@@ -511,6 +759,8 @@ const STYLE = `
 .sc-btn{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;font:var(--cv-designer-touchbtn-font);font-variant-ligatures:inherit;
   color:var(--dnp-color-text-primary);background:var(--cv-designer-touchbtn-fill);border:2px solid var(--cv-designer-touchbtn);box-sizing:border-box}
 .sc-btn[data-on="1"]{border-color:var(--cv-common-selected)}
+.sc-mbox{position:absolute;outline:1px dashed var(--cv-designer-safe);pointer-events:none}
+.sc-mpoint{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--cv-common-selected);pointer-events:none}
 .sc .wk-top .sc-tabs{display:flex}
 .sc .wk-details>*{flex:0 0 auto}
 .sc .st-trow{padding:4px 10px;min-height:0;gap:4px}

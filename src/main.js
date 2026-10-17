@@ -39,6 +39,7 @@ import { openPanels } from './panelwin.js'
 import { decorIdsOf } from './panels_emit.js'
 import { writeStudioLog, noteStudioLog, showPlayLog, lastPlay, readLogs, failures } from './playlog.js'
 import { graphProblems, graphsOf, liveGraphs, graphFile } from './graphs_emit.js'
+import { markerNames, SIGN } from './markers.js'
 import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
 import { parseAtlas } from '/src/render/atlas.js'
@@ -401,7 +402,7 @@ pageSection('particles', 'Particles', 'section.particles', /^Particles/, (id) =>
 pageSection('textures', 'Textures', 'section.textures', /^Textures$/, (n) => S.showTextures(n))
 pageSection('music', 'Music', 'section.music', /^Soundtrack/, () => S.showMusic())
 pageSection('sounds', 'Sounds', 'section.sounds', /^Sounds$/, () => S.showSounds())
-windowSection('screens', 'Screens', 'section.screens', () => openScreens(S))
+windowSection('screens', 'Screens', 'section.screens', (arg) => openScreens(S, arg))
 windowSection('panels', 'Panels', 'section.panels', (name) => openPanels(S, name))
 pageSection('style', 'Style', 'section.style', /^Style$/, (name) => S.showStyle(name ?? null))
 pageSection('sky', 'Sky', 'section.sky', /^Sky$/, (map) => S.showSky(map ?? null))
@@ -978,7 +979,9 @@ S.pickTexture = (current, onPick) => {
     { imageFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, sheetOf: (n) => S.sheetOf(n) }))
 }
 S.openPalette = () => S.ui.showSheet('Place', placePalette({
-  mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: [...moduleProps(S.module).map((p) => p.name), ...S.catalogue], armed: S.place
+  mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: [...moduleProps(S.module).map((p) => p.name), ...S.catalogue], armed: S.place,
+  // signs read a text: every marker but the two that show a health
+  signs: markerNames(S.doc?.ui ?? S.module.ui).filter((n) => n !== 'health' && n !== 'debug_health')
 }, (armed) => { S.place = armed; S.openPalette(); if (armed) S.status(`tap the floor to place ${armed.name}`, 'ok') }, () => S.showProps()))
 S.duplicateSector = (id) => {
   const s = S.doc.sectors[id]
@@ -1097,7 +1100,10 @@ const ctx = {
   editProp: (name) => { if (S.module.props?.some((p) => p.name === name)) S.showProp(name); else S.status(`${name} is the catalogue's, not this module's`, 'warn') },
   fxSchema: () => S.fxSchema ?? null,
   problems: (sectorId) => (S.problems ?? []).filter((p) => p.sector === sectorId),
-  seamFor: (edgeId) => S.seamFor?.(edgeId) ?? null
+  seamFor: (edgeId) => S.seamFor?.(edgeId) ?? null,
+  // a sign's marker: the templates this map's screens offer, and the way to its look
+  markerNames: () => markerNames(S.doc?.ui ?? S.module.ui),
+  editMarker: (name) => S.go('screens', `markers/${name}`)
 }
 // The sector effects' keys and defaults, read from the engine by a probe bake
 // (fxlib.js) once the studio is up; the inspector shows them when they land.
@@ -1359,7 +1365,11 @@ function redraw () {
   const markers = []
   for (const p of d.spawns) markers.push({ id: p.id, kind: 'spawn', x: p.x, y: p.y, z: p.z, label: p.tag, iconId: 'marker.spawn', ...tint('spawn') })
   for (const l of d.lights) markers.push({ id: l.id, kind: 'light', x: l.x, y: l.y, z: l.z, label: 'light', iconId: 'marker.light', ...tint('light') })
-  for (const e of d.entities) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, ...tint(e.kind === 'mob' ? 'mob' : 'prop'), icon: S.sprites?.iconFor(e.name), heading: e.angle ?? 0 })
+  for (const e of d.entities) {
+    // a sign shows what it reads, at the height it is hung
+    if (e.kind === SIGN) markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z + Number(e.height ?? 0), label: e.text ? `"${e.text}"` : e.name, iconId: 'widget.label', ...tint('spawn') })
+    else markers.push({ id: e.id, kind: 'entity', x: e.x, y: e.y, z: e.z, label: e.name, ...tint(e.kind === 'mob' ? 'mob' : 'prop'), icon: S.sprites?.iconFor(e.name), heading: e.angle ?? 0 })
+  }
   badges.forEach((b, i) => markers.push({ id: `badge${i}`, kind: 'badge', x: b.x, y: b.y, z: b.z + 0.6, label: b.label, iconId: b.iconId, color: b.color }))
   S.viewport.setMarkers(markers)
 }
@@ -1422,6 +1432,15 @@ S.suggest = (arg, owner) => {
   if (arg === 'what' && owner === 'spawn') return [...Object.keys(S.module.mobs?.mobs ?? {}), ...S.propNames()]
   if (arg === 'kind' && (owner === 'when_dies' || owner === 'when_hurt')) return Object.keys(S.module.mobs?.mobs ?? {})
   if (arg === 'prop') return S.propNames()
+  // MARKERS (docs/MARKERS.md): a template is the layout's or a built-in (this
+  // map's own screens when it has them); a marker's name is one a mark node gave.
+  if (arg === 'template' && owner === 'mark') return markerNames(S.doc?.ui ?? S.module.ui)
+  if (arg === 'health_bar') return markerNames(S.module.ui)
+  if (arg === 'marker' && ['mark', 'set_marker', 'remove_marker'].includes(owner)) {
+    const names = new Set()
+    for (const o of [S.module, ...Object.values(S.docs ?? {})]) for (const g of Object.values(o?.graphs ?? {})) for (const n of g?.nodes ?? []) if (n.type === 'mark' && n.marker) names.add(n.marker)
+    return [...names].sort()
+  }
   // Any texture: the module's own, then the app's (a floor, a ceiling, a wall).
   if (arg === 'texture') return S.allTextureNames?.() ?? S.textureNames
   // A sky's picture (the set_sky node): any texture, the module's first.

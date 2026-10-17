@@ -236,6 +236,8 @@ function placeTap (S, info) {
   let sel = null
   if (armed.kind === 'spawn') sel = { kind: 'spawn', id: addSpawn(S.doc, armed.name, x, y, z).id }
   else if (armed.kind === 'light') sel = { kind: 'light', id: addLight(S.doc, x, y, z + 2).id }
+  // a sign starts reading "Sign", hung a little over the floor (inspector.js signForm)
+  else if (armed.kind === 'sign') sel = { kind: 'entity', id: addEntity(S.doc, 'sign', armed.name, x, y, z, { text: 'Sign', height: 1.5 }).id }
   else sel = { kind: 'entity', id: addEntity(S.doc, armed.kind, armed.name, x, y, z).id }
   S.commit()
   S.select(sel, { quiet: true })

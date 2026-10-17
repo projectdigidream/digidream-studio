@@ -148,6 +148,22 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **Markers** (docs/MARKERS.md): small UIs hung on things in the world -- a
+  bar over a monster, a sign over a door, a pointer over a goal.
+  - **Screens → markers** makes their looks: a template is a box of the HUD's
+    own elements, drawn over a monster in a close-up by the game's own marker
+    code, at the size the chosen device gives it. The four built-in markers
+    are shown and can be changed for the module or copied; a template can be
+    renamed (everything that hangs it follows), sized and its elements dragged
+    inside its box, with sample values, and it lists who uses it.
+  - **A monster** wears one as "a bar over it" (Overview), drawn over it in
+    its preview as its health falls.
+  - **A graph's** mark node offers the markers as its template, and the names
+    the graphs' marks gave.
+  - **A sign** placed on a map (Place → "sign: label", …) is a marker with a
+    text, hung on its place as the level loads.
+  - **Problems** names a monster, graph or sign that hangs a marker nobody
+    made.
 - **A wall's texture can be turned and drawn larger**, as a floor's can: "turn
   (°)" and "size" beside its offsets (map version 15; docs/WALL_STYLES.md).
   Written only when they change something, so an older map keeps its hash.

@@ -35,7 +35,7 @@ export function titleFor (sel, doc) {
     case 'sector': return `Sector ${sel.id}`
     case 'edge': return `Wall ${sel.id} of ${sel.sectorId ?? findEdge(doc, sel.id)?.sector.id ?? ''}`
     case 'vertex': return `Corner ${sel.id}`
-    case 'entity': { const e = doc.entities.find((x) => x.id === sel.id); return `${e?.kind === 'mob' ? 'Monster' : 'Prop'} ${e?.name ?? ''}` }
+    case 'entity': { const e = doc.entities.find((x) => x.id === sel.id); return e?.kind === 'sign' ? `Sign ${e.text ? `"${e.text}"` : e.name}` : `${e?.kind === 'mob' ? 'Monster' : 'Prop'} ${e?.name ?? ''}` }
     case 'spawn': return 'Spawn'
     case 'light': return 'Light'
     default: return ''
@@ -228,6 +228,7 @@ function vertexForm (sel, doc, ctx) {
 
 function entityForm (e, doc, ctx) {
   if (!e) return null
+  if (e.kind === 'sign') return signForm(e, doc, ctx)
   return [
     text('name', e.name, (v) => { e.name = v.trim(); ctx.commit() }),
     select('kind', e.kind, [['mob', 'monster'], ['prop', 'prop']], (v) => { e.kind = v; ctx.commit() }),
@@ -243,6 +244,30 @@ function entityForm (e, doc, ctx) {
     e.kind === 'prop' && ctx.editProp ? button('edit this prop…', () => ctx.editProp(e.name)) : null,
     button('delete', () => { doc.entities = doc.entities.filter((x) => x.id !== e.id); ctx.select(null); ctx.commit() }, 'st-danger')
   ]
+}
+
+/**
+ * A SIGN: a marker (docs/MARKERS.md) hung on this place when the level loads
+ * -- a label over a door, a pointer over a goal. Its look is a marker template
+ * (Screens → markers); this says which, what it reads, and where it is seen.
+ */
+function signForm (e, doc, ctx) {
+  const names = ctx.markerNames?.() ?? ['label', 'marker']
+  const opts = names.map((n) => [n, n])
+  if (!names.includes(e.name)) opts.unshift([e.name, `${e.name} (missing)`])
+  const fx = (k) => (v) => { if (!v) delete e[k]; else e[k] = v; ctx.commit() }
+  return [
+    select('marker', e.name, opts, (v) => { e.name = v; ctx.commit() }),
+    text('text', e.text ?? '', (v) => { const t = v.slice(0, 128); if (t) e.text = t; else delete e.text; ctx.commit() }, { placeholder: 'EXIT' }),
+    number('at height', e.z, { min: -32, max: 64, step: 0.25 }, (v) => { e.z = v; ctx.commit() }),
+    number('raised by', e.height ?? 0, { min: 0, max: 32, step: 0.25 }, fx('height')),
+    number('seen within (0: anywhere)', e.range ?? 0, { min: 0, max: 512, step: 1 }, fx('range')),
+    toggle('seen through walls', !!e.through, (v) => { if (v) e.through = true; else delete e.through; ctx.commit() }),
+    toggle('only with the debug overlay', !!e.debug, (v) => { if (v) e.debug = true; else delete e.debug; ctx.commit() }),
+    muted('A marker hung on this place when the level loads: everyone sees it. Its look is the marker\'s, made on Screens → markers; a wall hides it unless it is seen through walls.'),
+    ctx.editMarker ? button(withIcon('action.edit', `the look of ${e.name}…`), () => ctx.editMarker(e.name)) : null,
+    button('delete', () => { doc.entities = doc.entities.filter((x) => x.id !== e.id); ctx.select(null); ctx.commit() }, 'st-danger')
+  ].filter(Boolean)
 }
 
 function spawnForm (p, doc, ctx) {
@@ -296,11 +321,13 @@ export function texturePicker (names, current, onPick, { imageFor, sheetOf = () 
  * a spawn point, a light. Returns the sheet body; `onArm(kind, name)` arms
  * the place tool.
  */
-export function placePalette ({ mobs, props, armed }, onArm, onEditProps = null) {
+export function placePalette ({ mobs, props, armed, signs = [] }, onArm, onEditProps = null) {
   const item = (kind, name, label = name) => ({ id: `${kind}:${name}`, kind, name, label, on: armed && armed.kind === kind && armed.name === name })
   const list = [
     item('spawn', 'start', 'spawn: start'),
     item('light', 'light', 'light'),
+    // a sign: a marker (docs/MARKERS.md) hung on the place as the level loads
+    ...signs.map((t) => item('sign', t, `sign: ${t}`)),
     ...mobs.map((m) => item('mob', m)),
     ...props.map((p) => item('prop', p))
   ]

@@ -23,6 +23,7 @@ import { Preview, Sheets } from './preview.js'
 import { board } from './board.js'
 import { MOB_RECIPES, WEAPON_RECIPES, RECIPE_MISSILE, bindAnims, animName } from './recipes.js'
 import { giveMissileLook, giveWeaponLook } from '../placeholders.js'
+import { markerNames } from '../markers.js'
 // The workshop's forms for what is not behaviour, kept as they were: a brain's
 // own fields, its body states, a swept swing and how it is drawn, a weapon's
 // prediction (brain.js, swing.js, slashform.js, arms.js).
@@ -859,7 +860,11 @@ export class NodeEditor {
       el('div', { class: 'me-ov' }, [
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Toughness' }),
           numField('Health', b.hp, '', (v) => { b.hp = Math.max(1, Math.round(v ?? 1)); set() }, { lo: 1, hi: 100000, say }),
-          numField('Flinches', pct, '% of hits', (v) => { b.pain_chance = Math.max(0, Math.min(256, Math.round((v ?? 0) * 2.56))); set() }, { hint: 'how often a hit makes it flinch (its pain state)', lo: 0, hi: 100, say })]),
+          numField('Flinches', pct, '% of hits', (v) => { b.pain_chance = Math.max(0, Math.min(256, Math.round((v ?? 0) * 2.56))); set() }, { hint: 'how often a hit makes it flinch (its pain state)', lo: 0, hi: 100, say }),
+          // A marker over its head with its health (docs/MARKERS.md): the game keeps value and max current.
+          selectField('A bar over it', b.health_bar ?? '', [['', 'none'], ...markerNames(this.S.module.ui).map((n) => [n, n === 'health' ? 'health (the built-in bar)' : n]),
+            ...(b.health_bar && !markerNames(this.S.module.ui).includes(b.health_bar) ? [[b.health_bar, `${b.health_bar} (missing)`]] : [])],
+          (v) => { if (v) b.health_bar = v; else delete b.health_bar; set() }, 'its health over its head in the game, while it lives. Markers are made on Screens → markers.')]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Speed and senses' }),
           prop ? numField('Runs at', Number(prop.speed ?? 4), 'm/s', (v) => { prop.speed = fxOf(v ?? 4); set() }, { hint: 'how fast it runs at you or backs away: 4 is a walk, 9 a sprint. A phase can be faster.', lo: 0.5, hi: 40, say }) : null,
           numField('Sees', fxNum(b.sight) ?? '', 'm', (v) => { if (v === null) delete b.sight; else b.sight = fxOf(v); set() }, { placeholder: 'engine default' }),

@@ -187,6 +187,7 @@ function problemRows () {
     ...(p.player ?? []).map((m) => ({ go: ['player'], icon: 'section.player', text: `${m}` })),
     ...(p.textures ?? []).map((m) => ({ go: ['textures'], icon: 'section.textures', text: `${m}` })),
     ...(p.controls ?? []).map((m) => ({ go: ['controls'], icon: 'section.controls', text: `${m}` })),
+    ...(p.markers ?? []).map((m) => ({ go: ['screens'], icon: 'section.screens', text: `${m}` })),
     ...p.monsters.map((m) => ({ go: ['monsters'], icon: 'section.monsters', text: `${m}` })),
     ...p.weapons.map((m) => ({ go: ['weapons'], icon: 'section.weapons', text: `${m}` })),
     ...p.sounds.map((m) => ({ go: ['sounds'], icon: 'section.sounds', text: `${m}` }))

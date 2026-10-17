@@ -16,10 +16,11 @@ import { playerProblems } from '../player.js'
 import { climbProblems } from '../climb.js'
 import { sheetProblems } from '../texsheet.js'
 import { compileMobs, compileArsenal } from '../brainc.js'
+import { markerProblems } from '../markers.js'
 
 /** { maps: [{ map, msg }], graphs: [msg], monsters: [msg], weapons: [msg], sounds: [msg], metamap: [msg], sky: [msg], player: [msg], textures: [msg], controls: [msg] } */
 export function moduleProblems (S) {
-  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [], textures: [], controls: [] }
+  const out = { maps: [], graphs: [], monsters: [], weapons: [], sounds: [], metamap: [], sky: [], player: [], textures: [], controls: [], markers: [] }
   const V = S.vocab
   for (const d of Object.values(S.docs)) {
     for (const p of validate(d)) out.maps.push({ map: d.name, msg: (p.sector ? `${p.sector}: ` : '') + p.msg })
@@ -48,6 +49,8 @@ export function moduleProblems (S) {
   if (S.module.mobs) out.monsters.push(...V.validateMobs(compileMobs(S.module.mobs, S.module.props ?? []), { props: S.propNames?.() ?? null }))
   if (S.module.weapons && V.weapon && Object.keys(S.module.weapons.weapons ?? {}).length) out.weapons.push(...V.validateWeapons({ ...S.module, weapons: compileArsenal(S.module.weapons) }))
   out.metamap.push(...metamapProblems(S.module.metamap, Object.keys(S.docs)))
+  // a monster, a graph or a sign hanging a marker the screens do not have (markers.js)
+  out.markers.push(...markerProblems(S.module, S.docs))
   const known = new Set(S.soundNames?.() ?? [])
   for (const [n, where] of S.soundsUsed?.() ?? []) if (!known.has(n)) out.sounds.push(`${n} (${[...where].join(', ')}) is in no pack`)
   return out
