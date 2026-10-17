@@ -11,11 +11,11 @@ Built on engine 0.2.1.
 
 New monster, weapon and missile editors; markers (world-anchored UI) in
 Screens, on monsters, in graphs and as signs on maps; a wall's texture turned
-and scaled; and the fixes three rounds of testers found.
+and scaled; and many fixes.
 
 ### Fixed
 
-- **From a first-person tester on a phone (a Godot developer):**
+- **First person, and on a phone:**
   - **A recipe's shooter never fired in the game**, while its preview showed
     it firing. Its missile had no prop to be drawn as, and the server fires
     no missile whose prop is missing. A recipe's missile, and a new one on the
@@ -96,8 +96,7 @@ and scaled; and the fixes three rounds of testers found.
   chips; the chooser opens on the group last used; and on a desktop a find box
   searches all the groups.
 
-- **Fixes from the first testers of the new editors** (four of them, two on a
-  phone):
+- **Fixes to the new editors:**
   - **Play in a browser said nothing** on Home and the rail: its message went
     to the status strip, which a page hides. It asks in a dialog now, and
     offers to export a pack.
