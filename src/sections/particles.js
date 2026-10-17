@@ -14,6 +14,14 @@ let S = null
 // A burst is entirely the client's, so there is nothing to bake and nothing to
 // ask a server: the preview integrates the very functions the game does.
 const vfxPreview = new VfxPreview()
+// A particle drawn as a picture: the module's own single pictures, then its textures,
+// as the client looks one up (sprites/NAME.png, then textures/NAME.png).
+function particlePictures () {
+  const a = S.rec?.assets ?? {}
+  const pics = Object.keys(a).filter((p) => /^sprites\/[^/]+\.png$/.test(p) && !a[p.replace(/\.png$/, '.json')]).map((p) => p.slice(8, -4))
+  return [...new Set([...pics, ...Object.keys(S.module?.textures ?? {})])].sort()
+}
+vfxPreview.resolveImage = (name) => S?.spriteUrls?.get(name) ?? S?.imageUrls?.get(name) ?? null
 
 function showVfx (openId = null) {
   S.module.vfx ??= []
@@ -51,7 +59,7 @@ function showVfx (openId = null) {
   if (open) {
     side.append(el('div', { class: 'sd-vfx-view' }, [vfxPreview.canvas]))
     form.append(el('div', { class: 'st-section-head', text: `✦ kind ${open.id} · ${open.type === 'tracer' ? 'tracer' : 'particles'}` }),
-      ...vfxRows(open, { changed: () => { S.moduleChanged(); vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 }); showVfx(open.id) } }))
+      ...vfxRows(open, { changed: () => { S.moduleChanged(); vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 }); showVfx(open.id) }, pictures: () => particlePictures() }))
     vfxPreview.show(open, { radius: open.attach ? 0 : 0.4 })
   }
   side.append(kinds)

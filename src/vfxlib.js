@@ -16,6 +16,7 @@ import { colorParts } from '../vendor/uikit/runtime.js'
 import { el, row, number, select, muted, button, text, addHelp } from './ui.js'
 import * as THREE from 'three'
 import { emitBurst, stepParticles, VfxView } from '/src/render/vfx.js'
+import { SHAPES } from './props_emit.js'
 
 // The fields the client's parser reads, with its own defaults. Written here
 // rather than generated, because a vfx record has no vocabulary of its own --
@@ -89,8 +90,20 @@ export function vfxRows (v, ctx) {
   rows.push(muted(v.blend === 'alpha'
     ? 'Alpha is for smoke: fading to black would be soot rather than absence.'
     : 'Under additive blending black IS invisible, so the colour ramp doubles as the fade and a dark `colour_end` is how a spark dies.'))
+  // WHAT EACH PARTICLE IS: the soft dot, a hard shape, or a picture of the
+  // module's -- tinted by the colour ramp, cut by the picture's own alpha.
+  const pics = ctx.pictures?.() ?? []
+  const cur = v.sprite ? `pic:${v.sprite}` : (v.shape ?? 'soft')
+  const opts = [...SHAPES, ...pics.map((n) => [`pic:${n}`, `the picture ${n}`])]
+  if (v.sprite && !pics.includes(v.sprite)) opts.push([cur, `the picture ${v.sprite} (missing)`])
+  rows.push(row('drawn as', select('', cur, opts, (val) => {
+    if (val.startsWith('pic:')) { v.sprite = val.slice(4); delete v.shape } else { delete v.sprite; if (val === 'soft') delete v.shape; else v.shape = val }
+    ctx.changed()
+  }).lastChild))
+  rows.push(muted(pics.length ? 'Each particle is drawn as this, coloured by the ramp: a white picture makes a burst of any colour.' : 'Each particle is drawn as this, coloured by the ramp. A picture of the module\'s (Props or Sprites, "picture") can be one too.'))
   return rows
 }
+
 
 function colourRow (label, value, onChange) {
   const input = el('input', { type: 'color', value: hex(value) })
@@ -200,7 +213,8 @@ export class VfxPreview {
     const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), 0.8, figure.hex, 0.18, 0.1)
     scene.add(arrow)
     this.scene = scene
-    this.view = new VfxView({ THREE, scene, catalogue: { kinds: new Map([[this.def.id ?? 0, this.def]]) }, poolSize: 4 })
+    // a picture of the module's is a blob in the studio, not /sprites/NAME.png
+    this.view = new VfxView({ THREE, scene, catalogue: { kinds: new Map([[this.def.id ?? 0, this.def]]) }, poolSize: 4, resolveImage: (name) => this.resolveImage?.(name) ?? null })
   }
 
   /**

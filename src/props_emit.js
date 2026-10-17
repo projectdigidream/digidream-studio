@@ -33,6 +33,9 @@ const VFX_NUM = [
 const hex6 = (n) => (Number(n) >>> 0).toString(16).padStart(6, '0')
 
 /** One `vfx` record: a burst of particles, or a tracer. */
+/** The shapes a particle can be drawn as (engine 0.2.1.2, render/vfx.js PARTICLE_SHAPES): the soft dot, and four hard ones. */
+export const SHAPES = [['soft', 'a soft dot'], ['disc', 'a hard disc'], ['square', 'a hard square'], ['hexagon', 'a hard hexagon'], ['star', 'a hard star']]
+
 export function vfxLine (v) {
   if (v.type === 'tracer') {
     return `vfx ${v.id} tracer colour ${hex6(v.colour ?? 0xffdd55)} width ${num(v.width ?? 0.04)} life ${num(v.life ?? 0.12)}`
@@ -49,6 +52,10 @@ export function vfxLine (v) {
   out.push(`colour ${hex6(v.colour ?? 0xffaa33)}`)
   out.push(`colour_end ${hex6(v.colourEnd ?? 0x662200)}`)
   if (v.blend === 'alpha') out.push('blend alpha')
+  // what each particle is drawn as (engine 0.2.1.2): a module picture, else a
+  // hard shape; the soft dot every particle had is the default, never written
+  if (v.sprite) out.push(`sprite ${v.sprite}`)
+  else if (v.shape && v.shape !== 'soft') out.push(`shape ${v.shape}`)
   return out.join(' ')
 }
 

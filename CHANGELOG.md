@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **What a particle is drawn as** (engine 0.2.1.2): on the Particles page, "drawn
+  as" a soft dot (as before), a hard disc, square, hexagon or star, or a
+  picture of the module's own -- coloured by the kind's ramp, so one white
+  picture makes a burst of any colour, and previewed by the game's own code.
+
 ## 0.4.0.1 -- 2026-10-17
 
 Built on engine 0.2.1.1.
