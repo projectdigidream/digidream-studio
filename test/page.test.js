@@ -1066,6 +1066,40 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   await page.evaluate(async () => { const S = window.__studio; const { deleteMonster } = await import('/studio/src/brain.js'); deleteMonster(S, 'big_boss'); S.moduleChanged() })
 }
 
+// A STEP IS ADDED from beside the list, on a monster and a weapon: the chooser
+// opens whole (in the column beside the list it was once squeezed to an empty
+// bar), and a step picked from it lands in the state.
+{
+  const added = await page.evaluate(async () => {
+    const S = window.__studio
+    const out = {}
+    for (const kind of ['monsters', 'weapons']) {
+      await S.go(kind); await new Promise((r) => setTimeout(r, 500))
+      const ed = kind === 'monsters' ? S.monsterEditor : S.weaponEditor
+      if (!Object.keys(ed.home ?? {}).length) { out[kind] = 'none to try'; continue }
+      ed.switchTo(Object.keys(ed.home)[0]); ed.tab = 'behaviour'; ed.render()
+      const n = Object.keys(ed.nodes).find((k) => k !== 'death')
+      ed.select(n); await new Promise((r) => setTimeout(r, 200))
+      const before = (ed.nodes[n].sequence ?? []).length
+      ;[...document.querySelectorAll('.me .me-side button')].find((b) => /add a step/.test(b.textContent)).click()
+      await new Promise((r) => setTimeout(r, 200))
+      const ch = document.querySelector('.me .me-side .me-chooser')
+      const h = ch?.offsetHeight ?? 0
+      const opt = ch && [...ch.querySelectorAll('.me-copt')].find((b) => b.offsetParent && b.getBoundingClientRect().height > 10)
+      opt?.click(); await new Promise((r) => setTimeout(r, 200))
+      out[kind] = { h, added: (ed.nodes[n].sequence ?? []).length - before }
+      ed.nodes[n].sequence.splice(ed.step ?? ed.nodes[n].sequence.length - 1, 1); ed.step = null; ed.changed()
+    }
+    await S.go('map')
+    return out
+  })
+  for (const kind of ['monsters', 'weapons']) {
+    const a = added[kind]
+    if (a === 'none to try') continue
+    check(a && a.h > 100 && a.added === 1, `${kind}: "+ add a step" opens the chooser whole beside the list, and a step picked from it is added (${JSON.stringify(a)})`)
+  }
+}
+
 // MARKERS (docs/MARKERS.md): small UI hung on things in the world. Screens →
 // markers makes their looks, drawn by the client's own MarkerView over a
 // monster; a monster wears one as its bar (and its preview shows it); a sign

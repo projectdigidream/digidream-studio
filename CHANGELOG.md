@@ -5,6 +5,16 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.0.1 -- 2026-10-17
+
+Built on engine 0.2.1.
+
+### Fixed
+
+- **A step could not be added to a monster's or a weapon's state** on a
+  desktop: "+ add a step" opened its chooser squeezed to an empty bar in the
+  column beside the list (0.4.0). It opens whole, and the column scrolls.
+
 ## 0.4.0 -- 2026-10-17
 
 Built on engine 0.2.1.

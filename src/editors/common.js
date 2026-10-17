@@ -36,6 +36,9 @@ export const CSS = `
 .me-side[data-gone="1"]{display:none}
 .me-side[data-mini="1"]{flex-basis:56px}
 .me-ins{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px 10px 24px;display:flex;flex-direction:column;gap:8px}
+/* the column scrolls; nothing in it is squeezed to fit (a chooser, which clips
+   what overflows it, was shrunk to an empty bar) */
+.me-ins>*{flex-shrink:0}
 .me-panel{background:var(--dnp-color-bg-panel);border:1px solid var(--dnp-color-line-main);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 .me-h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dnp-color-text-secondary);margin-top:6px}
 .me-h.first{margin-top:0}
