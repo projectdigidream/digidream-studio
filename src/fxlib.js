@@ -47,7 +47,7 @@ export async function fxSchema ({ core, bake }) {
  * @param schema  fxSchema's result, or null while it loads
  */
 export function fxRows (s, schema, ctx) {
-  const rows = [el('div', { class: 'st-section-head', text: '🌦 weather and fog' })]
+  const rows = [el('div', { class: 'st-section-head' }, withIcon('weather.rain', 'weather and fog'))]
   // A change that adds or removes a row redraws the sheet; a value does not.
   const again = () => { ctx.commit(); ctx.refreshSheet?.() }
   s.fx ??= []

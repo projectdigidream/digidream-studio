@@ -9,7 +9,7 @@
 // same sky behind the map (mapeditor/sky.js), on every sky ceiling too.
 //
 import * as THREE from 'three'
-import { el, row, number, select, button, muted, toggle } from '../ui.js'
+import { el, row, number, select, button, muted, toggle, withIcon } from '../ui.js'
 import { skyFromMessage } from '/src/render/sky.js'
 import { KINDS, PICTURES, CUBE_FACES, DOOM_STRIP, newSky, skyMessage, skyProblems, skyWords } from '../sky_emit.js'
 
@@ -162,7 +162,7 @@ function showSky (scope = null) {
     el('div', { class: 'sd-sky-wrap', 'data-sky-preview': '1' }, [view, el('div', { class: 'sd-sky-facing', text: `facing ${facing()} -- drag to look round` })]),
     ...skyRows(scope),
     el('datalist', { id: 'sd-sky-textures' }, textureNames().map((t) => el('option', { value: t }))),
-    el('div', { class: 'st-section-head', text: '☁ sky ceilings' }),
+    el('div', { class: 'st-section-head' }, withIcon('section.sky', 'sky ceilings')),
     muted('A floor or ceiling opens onto the sky when its texture is F_SKY1 -- the room inspector\'s "open to the sky". It draws the sky, lined up with the sky past the walls, and no wall is drawn between two sky ceilings, as in DOOM.')
   ]
   S.ui.showSheet('Sky', rows)

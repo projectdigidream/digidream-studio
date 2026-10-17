@@ -6,7 +6,7 @@
   "suite": ">=0.3.1",
   "description": "Keeps modules in a GitHub repository and brings them to your other devices: each sync is a commit, edits to different maps merge, and a file changed on two devices asks which to keep.",
   "sections": [
-    { "id": "sync", "entry": "index.html", "label": "Sync", "icon": "🔄" }
+    { "id": "sync", "entry": "index.html", "label": "Sync", "icon": "section.sync" }
   ],
   "services": [
     { "id": "sync", "entry": "service.html" }

@@ -197,7 +197,7 @@ function showTextures (open = null) {
       })] : []),
       button('+ import texture (PNG)', () => importTexture())
     ]),
-    el('div', { class: 'st-section-head', text: `🧱 the module's own (${own.length})` }),
+    el('div', { class: 'st-section-head' }, withIcon('section.textures', `the module's own (${own.length})`)),
     own.length ? el('div', { class: 'st-grid' }, own.map((n) => tile(n, true))) : muted('None yet. A PNG imported here is the module\'s, and ships in its pack.')
   ]
   if (open && S.module.textures?.[open]) {
@@ -211,7 +211,7 @@ function showTextures (open = null) {
       // ANIMATED: a sprite sheet, cut and timed by hand.
       el('div', { class: 'st-row', 'data-texture-sheet': open }, [
         pictureBackground(el('div', { class: 'sd-sheet-thumb' }), S.imageUrls.get(open), meta.sheet),
-        el('span', { style: 'flex:1 1 auto', text: meta.sheet ? `🎞 animated: ${meta.sheet.frames} frames ${meta.sheet.layout === 'horizontal' ? 'side by side' : 'stacked'}, ${meta.sheet.fps ?? DEFAULT_FPS} a second` : 'a still picture' }),
+        el('span', { style: 'flex:1 1 auto', text: meta.sheet ? `animated: ${meta.sheet.frames} frames ${meta.sheet.layout === 'horizontal' ? 'side by side' : 'stacked'}, ${meta.sheet.fps ?? DEFAULT_FPS} a second` : 'a still picture' }),
         button(meta.sheet ? 'cut & speed…' : 'animate…', async () => {
           const chosen = await sheetDialog({ name: open, url: S.imageUrls.get(open), w: meta.w, h: meta.h, sheet: meta.sheet ?? guessSheet(meta.w, meta.h) })
           if (!chosen) return

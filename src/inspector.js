@@ -161,7 +161,7 @@ function climbRows (doc, e, edge, twin, ctx) {
   const c = climbSides(doc).find((x) => x.edge === edge && x.sector === e.sector.id) ?? climbSides(doc).find((x) => x.edge === edge)
   if (!c) return []
   const bad = c.kind === 'low' || c.kind === 'down' || c.kind === 'open'
-  const rows = [el('div', { class: bad ? 'st-danger' : 'st-muted', 'data-climb': c.kind, text: `🧗 ${climbSays(c)}` })]
+  const rows = [el('div', { class: bad ? 'st-danger' : 'st-muted', 'data-climb': c.kind }, withIcon('workshop.moves', climbSays(c)))]
   if (c.kind === 'down' && twin) {
     rows.push(button('move climbable to the lower side', () => { edge.flags.climbable = false; twin.flags.climbable = true; ctx.commit(); ctx.refreshSheet?.() }))
   }

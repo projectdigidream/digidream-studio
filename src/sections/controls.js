@@ -70,7 +70,7 @@ function keyCard (k, i, problems) {
     el('div', { class: 'st-row sd-key-line' }, [
       el('span', { class: 'st-entry sd-key-n', text: `${i + 1}` }),
       nameIn, pressBtn, pick,
-      el('span', { class: 'sd-key-tl', text: '👆' }), touchIn,
+      icon('trigger.touch', 'sd-key-tl'), touchIn,
       i > 0 ? button(withIcon('action.up'), () => { [keys[i - 1], keys[i]] = [keys[i], keys[i - 1]]; S.moduleChanged(); showControls() }) : null,
       button(withIcon('action.close'), async () => {
         if (k.name && !await confirmDialog(`delete the key ${k.name}? A graph that answers it will be told it is gone.`)) return
@@ -89,7 +89,7 @@ function showControls () {
     select('how it is played', m.controls ?? 'platformer', [['platformer', 'platformer — third person'], ['fps', 'first person (fps)']],
            (v) => { m.controls = v; S.moduleChanged(); showControls() }),
     el('div', { class: 'st-section-head', text: `⌨ the module's own keys (${m.keys.length} of ${MAX_KEYS})` }),
-    muted('Actions of the module\'s own -- reload, map, inventory. A graph answers one by its name (when button pressed, released, held). Each is a key -- tap ⌨ and press it, or choose it -- and, with a 👆 label, a button on a touch screen. The order is the bit order scripts see. Players cannot rebind them yet: this list is the key map.')
+    muted('Actions of the module\'s own -- reload, map, inventory. A graph answers one by its name (when button pressed, released, held). Each is a key -- tap ⌨ and press it, or choose it -- and, with a touch label, a button on a touch screen. The order is the bit order scripts see. Players cannot rebind them yet: this list is the key map.')
   ]
   m.keys.forEach((k, i) => rows.push(keyCard(k, i, problems)))
   for (const p of problems.filter((x) => x.key === null)) rows.push(el('div', { class: 'st-danger', text: p.msg }))

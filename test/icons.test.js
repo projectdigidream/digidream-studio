@@ -90,5 +90,30 @@ check(left.length === 0, `no string starts with an icon glyph${left.length ? `:\
 // CONTROL: the scan finds a glyph-led label where there is one.
 check(GLYPHS.has([...'▶ play'][0]) && GLYPHS.has([...'🗺 maps'][0]), 'CONTROL: a glyph-led label is seen')
 
+// NO COLOUR EMOJI (the playtest of 2026-10-17: flat glyphs only, in every tool):
+// none in the studio's code outside comments and the list that names them; the
+// plugins' rail icons are catalog ids; and every catalog glyph that is a colour
+// emoji is drawn by the default skin, so it is never shown as a character.
+{
+  const { isColourEmoji } = await import('../src/ui.js').catch(() => ({}))
+  const colour = isColourEmoji ?? ((t) => /[\u{1F000}-\u{1FFFF}]/u.test(t))
+  const found = []
+  for (const f of files) {
+    f.text.split('\n').forEach((line, i) => {
+      const code = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '')
+      if (/EMOJI_BMP = new Set/.test(code)) return
+      if (colour(code)) found.push(`${f.rel}:${i + 1}: ${line.trim().slice(0, 80)}`)
+    })
+  }
+  check(found.length === 0, `no colour emoji in the studio's code${found.length ? `:\n      ${found.slice(0, 8).join('\n      ')}` : ''}`)
+  const plugins = readdirSync(join(HERE, '..', 'plugins')).map((d) => join(HERE, '..', 'plugins', d, 'plugin.json')).filter((p) => { try { statSync(p); return true } catch { return false } })
+  const rail = plugins.flatMap((p) => (JSON.parse(readFileSync(p, 'utf8')).sections ?? []).map((sec) => sec.icon).filter(Boolean))
+  check(rail.length > 0 && rail.every((ic) => IDS.has(ic)), `the plugins' rail icons are catalog ids (${rail.join(', ')})`)
+  const claude = readFileSync(join(HERE, '..', 'vendor', 'uikit', 'skins', 'claude.skin.js'), 'utf8')
+  const urls = JSON.parse(claude.slice(claude.indexOf('{'), claude.lastIndexOf('}') + 1)).icons?.urls ?? {}
+  const undrawn = catalog.groups.filter((g) => g.id !== 'brand').flatMap((g) => g.icons.map((i) => [`${g.id}.${i[0]}`, i[2] ?? ''])).filter(([id, gl]) => colour(gl) && !urls[id]).map(([id, gl]) => `${id} ${gl}`)
+  check(undrawn.length === 0, `every catalog glyph that is a colour emoji is drawn by the default skin (${undrawn.slice(0, 6).join(', ')})`)
+}
+
 console.log(`\nicons: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

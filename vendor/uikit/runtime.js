@@ -34,10 +34,18 @@ export function skinView (compiled, mode, pointer) {
     canvas: (group, name) => canvas[group]?.[name] ?? (warnOnce(`canvas.${group}.${name}`), MISSING),
     palette: (name) => compiled.palettes[key]?.[name] ?? [],
     token: (name) => compiled.tokens[key]?.[name],
-    iconUrl: (id) => compiled.icons?.urls?.[id] ?? null,
+    // on a dark ground, an icon's drawing for one when the skin has it (a white outline, say)
+    iconUrl: (id) => (darkGround(compiled, key) && compiled.icons?.urlsDark?.[id]) || compiled.icons?.urls?.[id] || null,
     iconTinted: (id) => iconTinted(compiled.icons, id),
     compiled,
   };
+}
+
+/** Is this mode's ground dark? Judged by its color.bg.app, as autoMode judges. */
+function darkGround (compiled, key) {
+  const { hex } = colorParts(compiled.tokens?.[key]?.['color.bg.app'] ?? '#fff');
+  const r = (hex >> 16) & 255; const g = (hex >> 8) & 255; const b = hex & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
 }
 
 function pick (compiled, mode, pointer) {

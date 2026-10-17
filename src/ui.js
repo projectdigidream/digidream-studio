@@ -355,7 +355,14 @@ export function useIcons (skin, catalog) {
 }
 
 /** The glyph an id stands for (the catalog's), or the string itself when it is not an id. */
-export function glyphOf (id) { return icons.glyphs.get(id) ?? (String(id).includes('.') ? '' : String(id ?? '')) }
+// A COLOUR EMOJI IS NEVER SHOWN (the playtest of 2026-10-17: flat glyphs only):
+// an astral pictograph, or a symbol shown as one by default, is no glyph at all.
+const EMOJI_BMP = new Set([...'⌚⌛⏩⏪⏫⏬⏰⏳⏱⏭⏻◽◾☔☕♈♉♊♋♌♍♎♏♐♑♒♓♿⚓⚡⚪⚫⚽⚾⛄⛅⛎⛔⛪⛲⛳⛵⛺⛽✅✊✋✨❌❎❓❔❕❗➕➖➗➰➿⬛⬜⭐⭕☠☄❤❄☀☁⚔⚙✂✏✔☝⬇⬡🔄'].map((c) => c.codePointAt(0)))
+export const isColourEmoji = (s) => [...String(s ?? '')].some((c) => c.codePointAt(0) >= 0x1F000 || EMOJI_BMP.has(c.codePointAt(0)) || c === '\uFE0F')
+export function glyphOf (id) {
+  const g = icons.glyphs.get(id) ?? (String(id).includes('.') ? '' : String(id ?? ''))
+  return isColourEmoji(g) ? '' : g
+}
 
 /** The skin's picture for an id, as a URL, and whether it is tinted; null when the skin draws none. */
 export function iconPicture (id) {

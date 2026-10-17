@@ -8,7 +8,7 @@
       ["sounds", "Sounds", "🔊"], ["screens", "Screens", "▣"], ["panels", "Panels", "▢"], ["style", "Style", "🎨"],
       ["sky", "Sky", "🌌"], ["scripts", "Scripts", "📜"], ["graphs", "Graphs", "◇"], ["settings", "Settings", "⚙"],
       ["snapshots", "Snapshots", "🕘"], ["playlog", "Play log", "📋"], ["plugins", "Plugins", "🧩"], ["package", "Package", "📦"],
-      ["metamap", "Metamap", "▦"]
+      ["metamap", "Metamap", "▦"], ["sync", "Sync (a module kept elsewhere)", "⟳"]
     ] },
     { "id": "maptool", "label": "Map tools", "used": "studio map editor bar", "icons": [
       ["select", "Select", "⌖"], ["room", "Room", "▭"], ["place", "Place", "✦"], ["triggers", "Triggers", "⚡"],

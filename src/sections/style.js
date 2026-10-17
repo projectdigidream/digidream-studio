@@ -143,7 +143,7 @@ function showStyle (open = null) {
   for (const p of styleProblems(style, Object.keys(S.rec.assets ?? {}))) rows.push(el('div', { class: 'st-danger', text: p }))
 
   // FONTS
-  rows.push(el('div', { class: 'st-section-head', text: `🔤 fonts (${(style.fonts ?? []).length})` }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('widget.text', `fonts (${(style.fonts ?? []).length})`)))
   for (const f of style.fonts ?? []) {
     rows.push(el('div', { class: 'st-card', 'data-font': f.file }, [
       el('div', { class: 'sd-font-sample', text: 'The quick brown fox -- 0123', style: `font-family:${fontList(f.family)};font-weight:${f.weight ?? 400};font-style:${f.italic ? 'italic' : 'normal'}` }),
@@ -176,7 +176,7 @@ function showStyle (open = null) {
 
   // PICTURES
   const pics = pictures()
-  rows.push(el('div', { class: 'st-section-head', text: `🖼 pictures (${pics.length})` }))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('widget.picture', `pictures (${pics.length})`)))
   rows.push(el('div', { class: 'sd-pics' }, pics.map((p) => el('div', { class: 'sd-pic', 'data-picture': p }, [
     el('img', { src: pictureUrl(p), alt: p }),
     el('span', { class: 'st-muted', text: p.replace(/^skins\//, '') }),
@@ -211,7 +211,7 @@ function showStyle (open = null) {
   }))
 
   // SUBTITLES
-  rows.push(el('div', { class: 'st-section-head', text: '💬 subtitles' }), el('div', { class: 'sd-sub', 'data-subtitles': '1' }, [subtitlePreview(), ...subtitleRows(fams)]))
+  rows.push(el('div', { class: 'st-section-head' }, withIcon('widget.label', 'subtitles')), el('div', { class: 'sd-sub', 'data-subtitles': '1' }, [subtitlePreview(), ...subtitleRows(fams)]))
   S.ui.showSheet('Style', rows)
 }
 

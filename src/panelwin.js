@@ -465,7 +465,7 @@ class PanelWindow {
 
   #palette () {
     const s = el('select', { class: 'pw-palette' }, [el('option', { value: '', text: '+ add…' }),
-      el('optgroup', { label: 'widgets' }, KINDS.map((k) => el('option', { value: `w:${k}`, text: `${glyphOf(ICON_ID(k))} ${k}` }))),
+      el('optgroup', { label: 'widgets' }, KINDS.map((k) => el('option', { value: `w:${k}`, text: k }))),
       el('optgroup', { label: 'decor, behind the widgets' }, [el('option', { value: 'd:text', text: 'T text (may show {hud.name})' }), el('option', { value: 'd:bar' }, withIcon('widget.bar', 'bar (a value, as health is drawn)')), el('option', { value: 'd:image' }, withIcon('section.screens', 'picture'))])])
     s.addEventListener('change', () => {
       const [what, kind] = s.value.split(':')
@@ -756,7 +756,7 @@ class PanelWindow {
     const targets = [...scopeTargets(S.module, 'game', null, GAME_NAME, glyphOf('action.scopegame'), 'the game'),
       ...Object.keys(S.docs).sort().flatMap((m) => scopeTargets(S.docs[m], 'map', m, MAP_GRAPH, glyphOf('action.scopemap'), m))]
     rows.push(select('open it from', '', [['', 'choose a graph…'], ...targets], (g) => { if (g) this.#addNodes(g, 'open') }))
-    rows.push(select('answer', '', [['', 'choose a widget…'], ...p.widgets.filter((w) => w.kind !== 'label').map((w) => [w.name, `${glyphOf(ICON_ID(w.kind))} ${w.name}`])], (wn) => {
+    rows.push(select('answer', '', [['', 'choose a widget…'], ...p.widgets.filter((w) => w.kind !== 'label').map((w) => [w.name, w.name])], (wn) => {
       if (!wn) return
       this.answering = wn
       this.render()

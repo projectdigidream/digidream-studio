@@ -13,7 +13,7 @@
 // without reading. Edits commit (undo step, save, bake) and the view is drawn
 // again from the document, scroll position kept.
 //
-import { el, row, text, toggle, select, button, chips, muted, ask, addHelp, withIcon, icon, glyphOf } from './ui.js'
+import { el, row, text, toggle, select, button, chips, muted, ask, addHelp, withIcon, icon } from './ui.js'
 import { addTrigger, findEdge } from './doc.js'
 import * as presets from './presets.js'
 import { argFields, refLabel } from './argform.js'
@@ -215,7 +215,7 @@ function triggerView (S, t) {
 
   // WHEN
   body.push(section(eventIcon(t.event), 'WHEN', 'when', [
-    addHelp(select('event', t.event ?? '', [['', `${glyphOf('trigger.chained')} only when another trigger runs it`], ...vocab.trigger.events.map((e) => [e.name, `${glyphOf(eventIcon(e.name))} ${e.name} (${(e.params ?? []).join(', ')})`])],
+    addHelp(select('event', t.event ?? '', [['', 'only when another trigger runs it'], ...vocab.trigger.events.map((e) => [e.name, `${e.name} (${(e.params ?? []).join(', ')})`])],
            (v) => { t.event = v || null; done() }), vocab.trigger.events.find((e) => e.name === t.event)?.doc),
     el('div', { class: 'st-row' }, [
       toggle('', !!t.once, (v) => { t.once = v; done() }).lastChild, muted('once: spent after it first does something'),

@@ -6,7 +6,7 @@
 //     "kinds":    [{ "id": "file:tsprite", "label": "sprite", "ext": [".tsprite"] }],
 //     "editors":  [{ "id": "main", "entry": "host.html", "kinds": ["file:tsprite"], "label": "ThreeSprite", "priority": 10 }],
 //     "bakers":   [{ "id": "tsprite", "entry": "bake.js", "version": "1", "kinds": ["file:tsprite"] }],
-//     "sections": [{ "id": "packager", "entry": "index.html", "label": "Package", "icon": "📦" }],
+//     "sections": [{ "id": "packager", "entry": "index.html", "label": "Package", "icon": "section.package" }],
 //     "services": [{ "id": "sync", "entry": "service.html" }],
 //     "permissions": ["module-write", "background", "net:github.com"] }
 //
