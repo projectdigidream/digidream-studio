@@ -60,20 +60,23 @@ export function gunPngs () {
   const [w, h] = GUN_SIZE
   const paint = (flash) => {
     const c = canvas(w, h)
+    // firing: a flash that fills the top, and the gun kicked down a little --
+    // a flash of a few pixels was missed, and nobody could tell it had fired
     const cx = w / 2
+    const k = flash ? 4 : 0
     const dark = [44, 46, 54], mid = [78, 82, 94], light = [128, 134, 150]
-    if (flash) { glow(c, cx, 13, 13, [255, 190, 70], 1.3); glow(c, cx, 13, 6, [255, 250, 225], 1.1) }
+    if (flash) { glow(c, cx, 12, 22, [255, 170, 50], 1.1); glow(c, cx, 12, 13, [255, 220, 120], 1.0); glow(c, cx, 12, 6, [255, 252, 235], 0.9) }
     // the barrel and slide, narrowing upward; a front sight on top
-    rect(c, cx - 6, 18, 12, 30, dark)
-    rect(c, cx - 5, 18, 10, 30, mid)
-    rect(c, cx - 2, 18, 3, 30, light)
-    rect(c, cx - 1, 15, 2, 3, light)
+    rect(c, cx - 6, 18 + k, 12, 30, dark)
+    rect(c, cx - 5, 18 + k, 10, 30, mid)
+    rect(c, cx - 2, 18 + k, 3, 30, light)
+    rect(c, cx - 1, 15 + k, 2, 3, light)
     // the frame, wider, and the hand around the grip
-    rect(c, cx - 11, 46, 22, 12, dark)
-    rect(c, cx - 10, 46, 20, 11, mid)
-    rect(c, cx - 14, 56, 28, 24, [150, 104, 78])
-    rect(c, cx - 12, 56, 24, 4, [176, 128, 98])
-    rect(c, cx - 3, 50, 6, 4, light)
+    rect(c, cx - 11, 46 + k, 22, 12, dark)
+    rect(c, cx - 10, 46 + k, 20, 11, mid)
+    rect(c, cx - 14, 56 + k, 28, 24, [150, 104, 78])
+    rect(c, cx - 12, 56 + k, 24, 4, [176, 128, 98])
+    rect(c, cx - 3, 50 + k, 6, 4, light)
     return png(c)
   }
   return [paint(false), paint(true)]
@@ -148,6 +151,7 @@ export function giveWeaponLook (S, name, { blade = false } = {}) {
   addPicture(S, a, rest)
   const f = freePicture(S, `${name}_${blade ? 'bladef' : 'gunf'}`)
   addPicture(S, f, fire)
-  vm.weapons[name] = { ready: [[a, 4]], fire: [[f, 4], [a, 6]] }
+  // the flash held long enough to be seen
+  vm.weapons[name] = { ready: [[a, 4]], fire: [[f, 7], [a, 6]] }
   return true
 }

@@ -65,7 +65,18 @@ function setUpNewModule (kind) {
       const pool = Object.keys(m.weapons.ammo ?? {})[0]
       m.weapons.weapons.gun = { label: 'Gun', order: 1, initial: 'draw', phases: r.phases(null), ...(pool ? { ammo: pool, per: r.per } : {}) }
       giveWeaponLook(S, 'gun')
+      // the starter's own effects when it has them, plain to see: 20 a muzzle
+      // flash, 21 a tracer, 22 sparks where it hits (the engine's own were
+      // too small to tell a shot had been fired)
+      const has = (id) => (m.vfx ?? []).some((v) => Number(v.id) === id)
+      for (const p of m.weapons.weapons.gun.phases.fire?.sequence ?? []) {
+        if (p.action === 'hitscan') { if (has(21)) p.tracer = 21; if (has(22)) p.hit_vfx = 22 }
+        if (p.action === 'vfx' && has(20)) p.effect = 20
+      }
     }
+    // the keys it says as it starts are a first person's
+    const keys = (m.graphs?.welcome?.nodes ?? []).find((n) => n.id === 'keys' && n.type === 'subtitle')
+    if (keys) keys.text = 'WASD walk   mouse look   click or F fire   SPACE jump   E use'
   }
   S.save()
   S.redraw?.()

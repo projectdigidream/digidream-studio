@@ -31,7 +31,8 @@ export function flight (def, o = {}) {
   const D = o.dist ?? 8
   const H = o.height ?? 1.8
   const eye = H / 2
-  const z0 = fxNum(def.z_offset) ?? 0
+  // no launch height: a monster's leaves from its middle, as the engine's does (engine 0.2.1.3)
+  const z0 = fxNum(def.z_offset) ?? (o.fromPlayer ? 0 : (o.shooterHeight ?? H) / 2)
   const g = fxNum(def.gravity) ?? 0
   let speed = fxNum(def.speed) ?? 0
   const life = def.life === undefined ? 12 * TPS : Number(def.life)

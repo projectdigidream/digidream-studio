@@ -1408,6 +1408,70 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   check(r.warn === null ? false : /no animation called nosuchanim, so the game plays \w+ instead/.test(r.warn), `Looks says when a state plays an animation the sprite has not (${r.warn})`)
 }
 
+// A NEW MODULE FROM THE STARTER (the playtest of 2026-10-17): no debug numbers
+// on screen, its keys said once as it starts, the spirit drawn bigger and the
+// old script gone -- and, first person, a gun whose shot is plain to see: the
+// starter's muzzle flash, tracer and sparks, and a flash held long enough. A
+// new sound pack starts empty under its own name (it opened as the sound
+// tool's starter, gun sounds and "flesh").
+{
+  const r = await page.evaluate(async () => {
+    const S = window.__studio
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms))
+    const until = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = fn(); if (v) return v; await wait(50) } return null }
+    const was = S.rec.id
+    await S.store.remove('fps-new').catch(() => {})
+    await S.go('home'); await wait(400)
+    ;[...document.querySelectorAll('.sd-page button')].find((b) => /new module/.test(b.textContent))?.click()
+    const input = await until(() => document.querySelector('dialog[open] input'))
+    if (!input) return { skip: 'no dialog' }
+    input.value = 'fps-new'
+    document.querySelector('dialog[open] button[type=submit]').click()
+    ;(await until(() => document.querySelector('dialog.sx-choose[open] button[data-answer="fps"]')))?.click()
+    await until(() => S.rec?.id === 'fps-new', 20000)
+    await wait(500)
+    const m = S.module
+    const fire = m.weapons?.weapons?.gun?.phases?.fire?.sequence ?? []
+    const hit = fire.find((p) => p.action === 'hitscan')
+    const { viewmodelsOf } = await import('/studio/src/viewmodel_emit.js')
+    const out = {
+      id: S.rec.id, debug: m.debug, kinds: (m.vfx ?? []).map((v) => v.id).join(),
+      tracer: hit?.tracer, hitVfx: hit?.hit_vfx, muzzle: fire.find((p) => p.action === 'vfx')?.effect,
+      flash: viewmodelsOf(m).weapons?.gun?.fire?.[0]?.[1],
+      keys: m.graphs?.welcome?.nodes?.find((n) => n.id === 'keys')?.text,
+      oldScript: /function on_attack/.test(m.scripts?.['starter.lua'] ?? ''),
+      death: (() => { const g = m.graphs?.death; const n = (t) => g?.nodes?.find((x) => x.type === t); return !!(n('when_dies')?.what === 'players' && n('fade') && n('subtitle') && (g.links ?? []).length === 3) })(),
+      spirit: m.props.find((p) => p.name === 'spirit')?.scale
+    }
+    await S.go('sounds'); await wait(400)
+    const plus = [...document.querySelectorAll('.sd-page button')].find((b) => /new sound pack/.test(b.textContent))
+    if (plus) {
+      // the sound tool itself is not opened here (its own tests are its own): where the studio sends it is noted
+      const go = S.go
+      let opened = null
+      S.go = async (id, arg) => { if (id === 'edit') { opened = arg; return } return go(id, arg) }
+      plus.click()
+      const pin = await until(() => document.querySelector('dialog[open] input'))
+      pin.value = 'Club Sounds'; document.querySelector('dialog[open] button[type=submit]').click()
+      await until(() => opened)
+      S.go = go
+      const pk = S.module.sounds.packs.at(-1)
+      const json = S.packs?.get(pk?.id)
+      out.pack = { name: pk?.name, sounds: json?.sounds?.length, jsonName: json?.name, opened: !!opened && String(opened).includes(pk?.id) }
+    } else out.pack = 'no sound editor here'
+    await S.openModule(was); await S.store.remove('fps-new')
+    return out
+  })
+  if (r.skip) check(false, `a new module from Home (${r.skip})`)
+  else {
+    check(r.id === 'fps-new' && r.debug === false && r.kinds === '20,21,22' && r.spirit === '2' && !r.oldScript, `a new module from the starter: no debug numbers, the starter's effects, the bigger spirit, the new script (${JSON.stringify(r)})`)
+    check(r.tracer === 21 && r.hitVfx === 22 && r.muzzle === 20 && r.flash >= 7, `first person, its gun shows its shot: tracer, sparks, muzzle flash, a flash held 7 ticks (${JSON.stringify({ tracer: r.tracer, hit: r.hitVfx, muzzle: r.muzzle, flash: r.flash })})`)
+    check(/mouse look/.test(r.keys ?? ''), `and the keys it says as it starts are a first person's (${r.keys})`)
+    check(r.death, 'and the player\'s death is shown, on every map: a game graph fades to black, says so, and clears')
+    check(r.pack === 'no sound editor here' || (r.pack.name === 'Club Sounds' && r.pack.jsonName === 'Club Sounds' && r.pack.sounds === 0 && r.pack.opened), `a new sound pack starts empty, under its own name (${JSON.stringify(r.pack)})`)
+  }
+}
+
 // A STEP IS ADDED from beside the list, on a monster and a weapon: the chooser
 // opens whole (in the column beside the list it was once squeezed to an empty
 // bar), and a step picked from it lands in the state.

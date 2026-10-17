@@ -32,5 +32,9 @@ check(straight.end === 'hit' && straight.peak < 0.01, `CONTROL: with no gravity 
 const short = flight({ speed: '16', life: 20, z_offset: '1.4' }, { dist: 8 })
 check(short.end === 'expired' && short.endX < 8, `its life ends it short of the target (${short.end} at ${short.endX.toFixed(2)})`)
 
+// no launch height: a monster's shot leaves from its middle, as the engine's does (engine 0.2.1.3)
+const mid = flight({ speed: '16', life: 120 }, { dist: 8 })
+check(Math.abs(mid.pts[0][1] - 0.9) < 1e-9, `with no launch height a monster's shot starts at its middle, 0.9 m up (${mid.pts[0][1]})`)
+
 console.log(`missileflight: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

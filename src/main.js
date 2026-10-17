@@ -1735,7 +1735,8 @@ async function exportPack () {
   if (!r) return
   const zip = await writePack(r.files.map((f) => ({ path: `${S.module.id}/${f.path}`, bytes: f.bytes })))
   await shell.share(`${S.module.id}.zip`, zip)
-  S.status(`exported ${S.module.id}.zip (${(zip.length / 1024).toFixed(0)} KB). Unzip into modules/ and run --module ${S.module.id}.`, 'ok')
+  // said where it can be seen: from Home (a page) the status strip is hidden, and an export said nothing
+  S.say(`Exported ${S.module.id}.zip (${(zip.length / 1024).toFixed(0)} KB): a pack to open in the studio on another device, or to unzip into modules/.`)
 }
 
 async function importPack () {
@@ -1819,7 +1820,7 @@ function showMapSettings () {
   S.ui.showSheet(`Map ${S.docName}`, [
     text('extra Lua', S.doc.extraLua, (v) => { S.doc.extraLua = v; S.commit() }, { multiline: true, placeholder: '-- hand-written Lua, kept verbatim' }),
     el('div', { class: 'st-row' }, [button(withIcon('maptool.camera', 'camera…'), () => S.showCamera()), button(withIcon('section.graphs', 'graph…'), () => S.go('graph')), button(withIcon('section.music', 'music cues…'), () => S.go('music'))]),
-    el('div', { class: 'st-row' }, [button(`🌌 sky${S.doc.sky ? ' (own)' : S.module.sky ? ' (the module\'s)' : ''}…`, () => S.go('sky', S.docName))]),
+    el('div', { class: 'st-row' }, [button(withIcon('section.sky', `sky${S.doc.sky ? ' (own)' : S.module.sky ? ' (the module\'s)' : ''}…`), () => S.go('sky', S.docName))]),
     el('div', { class: 'st-row' }, [
       button(withIcon('section.player', `player${own.length ? ` (own ${own.join(', ')})` : ''}…`), () => { S.playerScope = 'map'; S.go('player') }),
       button(withIcon('section.screens', `screens${S.doc.ui ? ' (own)' : ''}…`), () => { S.screensScope = 'map'; S.go('screens') })

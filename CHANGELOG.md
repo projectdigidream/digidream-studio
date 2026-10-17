@@ -67,6 +67,8 @@ anything not released yet is under **Unreleased**.
   opened off the window).
 - **A decimal comma in the editors' numbers was refused without a word**; it
   is read as a point.
+- **Export said nothing** when it had saved the pack (on Home the status strip
+  is hidden): it says what it saved.
 - **The presets said nothing** about what they added; they name the triggers
   they wrote, long enough to read.
 - **The pointer started as "touch" on a computer**: it follows the device
@@ -91,6 +93,38 @@ anything not released yet is under **Unreleased**.
   what the game plays instead.
 - The Package page numbers the steps it shows (it skipped from 3 to 5 off
   Android), and says why a desktop build fetches the android kit.
+- **Colour emoji as icons** (the rail in the default style, the trigger
+  events, Missiles, Sync and Package in every style): every style draws them
+  now, each in its own look -- lines, colour pixels, glass -- and nothing in
+  the studio prints one as a character. The trigger events are listed by name
+  first, so typing the first letters finds one.
+- **A new sound pack opened as the sound tool's starter** (gun sounds, one
+  named "flesh") under the name "starter". It starts empty, under its own name.
+- **A missile with no launch height** is drawn leaving the monster's middle,
+  as the engine now launches it (it was its feet).
+
+### Changed
+
+- **The starter** (what a new module is a copy of): the player's death is
+  shown, on every map -- the screen goes dark, "You died. Back to the start!",
+  and clears (a game graph, engine 0.2.2) -- where a player used to die without
+  knowing it; its debug overlay is off, and the keys are said once as the game
+  starts (a graph of its own, to change or delete); the spirit is drawn twice the size, with a body to match, and
+  bites more gently; its script no longer charges a swing twice. It carries a
+  muzzle flash, a tracer and sparks (particle kinds 20 to 22), and a first
+  person module's gun uses them, with a flash in hand held long enough to be
+  seen -- firing showed nothing anyone could see. Its door works as the door
+  preset now does.
+- **Modules made from the old starter** have its script replaced as they open,
+  unless it was changed.
+- **ThreeSprite 0.2.2** bundled: a canvas background, a bones toggle, move
+  arrows that say the screen's direction, "How is it seen?" in New sprite, an
+  Export tab that says the game needs nothing from it, and slow finger strokes
+  no longer taken for a colour pick.
+- **qPainter 0.2.0** bundled: flat tool icons, a palette that stays put, a
+  calmer top bar.
+- **The styles** (uikit): icons for a dark ground -- the 90s and PS1 colour
+  icons outlined in white in their night modes, Aero's glass rimmed in white.
 
 ### Added
 

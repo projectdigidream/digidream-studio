@@ -132,6 +132,14 @@ async function importPacks () {
   showSounds()
 }
 
+/** A sound project with nothing in it yet: the sound tool's buses and reverb, no sounds. */
+const EMPTY_PACK = {
+  version: 1,
+  buses: [{ name: 'world', gainDb: 0, maxInstances: 20, spatial: true, sendReverb: 0.18 }, { name: 'player', gainDb: 0, maxInstances: 6, spatial: false }, { name: 'ui', gainDb: -3, maxInstances: 4, spatial: false }],
+  fx: { reverb: { roomSize: 0.5, damping: 0.6, width: 1.0, wetGain: 0.15, preDelayMs: 10, highPassHz: 250 } },
+  sounds: []
+}
+
 function showSounds () {
   const packs = S.module.sounds?.packs ?? []
   const merged = S.merged ?? { origin: {}, collisions: [], warnings: [] }
@@ -145,6 +153,18 @@ function showSounds () {
       const raw = await ask('the new pack\'s name', 'sounds')
       const id = packId(`${raw ?? ''}.sfxproj`, packs.map((p) => p.id))
       if (!raw || !id) return
+      // AN EMPTY PACK OF ITS OWN NAME, made before the sound tool opens it:
+      // opened on a pack that was not there, the tool showed its own starter
+      // (gun sounds, "flesh") under the name "starter".
+      const json = { ...EMPTY_PACK, name: String(raw).trim() || id }
+      S.module.sounds ??= { packs: [] }
+      S.rec.assets ??= {}
+      S.rec.assets[packPath(id)] = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' })
+      S.module.sounds.packs.push({ id, name: json.name, enabled: true })
+      S.packs ??= new Map()
+      S.packs.set(id, json)
+      remerge()
+      S.moduleChanged()
       S.go('edit', editArg(editor.key, 'file:sfxproj', id))
     }) : null,
     button('+ import sound packs (.sfxproj)', importPacks)
