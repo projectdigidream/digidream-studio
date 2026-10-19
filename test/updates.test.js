@@ -25,7 +25,13 @@ check(whatChanged('## x\n\n### Changes\n\n- a commit').length === 0, 'CONTROL: n
 
 const memory = () => { let v = null; return { get: () => v, set: (x) => { v = x } } }
 let asked = 0
-const github = (tag, status = 200) => async () => { asked++; return { ok: status === 200, status, json: async () => ({ tag_name: tag, html_url: `https://github.com/x/releases/tag/${tag}`, body }) } }
+// GitHub as the check asks it: the release list, then whether main holds a tag (dev: the tags only dev has)
+const github = (tag, status = 200, dev = []) => async (url) => {
+  if (/\/releases\?/.test(url)) asked++
+  const json = /\/compare\//.test(url) ? { status: dev.some((t) => url.endsWith(`...${t}`)) ? 'ahead' : 'behind' }
+    : [...dev, tag].map((t) => ({ tag_name: t, html_url: `https://github.com/x/releases/tag/${t}`, body, draft: false, prerelease: false }))
+  return { ok: status === 200, status, json: async () => json }
+}
 
 {
   const store = memory(); asked = 0
@@ -51,6 +57,13 @@ const github = (tag, status = 200) => async () => { asked++; return { ok: status
   check(off.state === 'newer' && off.error === 'offline', `offline, the last answer still stands, and the error is said (${off.state}, ${off.error})`)
   const limited = await checkForUpdate('0.3.1', { fetchFn: github('x', 403), store: memory(), now: 1 })
   check(limited.state === 'unknown' && /rate limit/.test(limited.error), `refused by GitHub with nothing kept: unknown, and why (${limited.error})`)
+}
+
+{
+  const r = await checkForUpdate('0.3.1', { fetchFn: github('studio-v0.3.2', 200, ['studio-v0.3.5']), store: memory(), now: 1 })
+  check(r.state === 'newer' && r.latest === '0.3.2', `a newer release made on dev only is not offered: main's newest is (${r.latest})`)
+  const none = await checkForUpdate('0.3.1', { fetchFn: github('studio-v0.3.5', 200, ['studio-v0.3.5']), store: memory(), now: 1 })
+  check(none.state === 'unknown', `CONTROL: with no release on main, nothing is offered (${none.state})`)
 }
 
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)

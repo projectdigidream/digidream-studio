@@ -7,6 +7,10 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **"Check for updates" offers only releases on main**: releases are made on
+  the dev branch too now, and a development build is never offered as an
+  update. A release counts when main holds its tag.
+
 - **A monster given a sprite of its own was drawn nowhere** -- its Looks
   preview stayed black (on a phone, where it was tried), and the game had no
   sheet for it: ThreeSprite composes a sheet from a sprite's animations, and a

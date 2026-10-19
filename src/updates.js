@@ -1,7 +1,9 @@
 // IS THERE A NEWER STUDIO? Asked of the studio's GitHub releases.
 //
-// The latest release of projectdigidream/digidream-studio, by GitHub's API
-// (which a page may read from anywhere), compared with this studio's version.
+// The newest release of projectdigidream/digidream-studio ON MAIN, by GitHub's
+// API (which a page may read from anywhere), compared with this studio's
+// version. Releases are made on dev too since 2026-10-19; one whose tag main
+// does not contain is a development build, never offered as an update.
 // Asked at most every few hours: the answer is kept, per device, with when it
 // was asked -- GitHub allows a visitor sixty questions an hour, and a studio
 // opened ten times a day needs one. Never in the way: offline, rate-limited or
@@ -9,7 +11,10 @@
 //
 // Pure apart from `fetchFn` and `store`, which the tests replace.
 
-export const RELEASES_API = 'https://api.github.com/repos/projectdigidream/digidream-studio/releases/latest'
+const REPO_API = 'https://api.github.com/repos/projectdigidream/digidream-studio'
+export const RELEASES_API = `${REPO_API}/releases?per_page=20`
+/** Is the tag on main? GitHub's compare of main with it: 'identical' or 'behind' means main holds it. */
+export const COMPARE_API = (tag) => `${REPO_API}/compare/main...${encodeURIComponent(tag)}`
 export const RELEASES_PAGE = 'https://github.com/projectdigidream/digidream-studio/releases/latest'
 const KEY = 'dnp.studio.update'
 const EVERY_MS = 6 * 3600 * 1000
@@ -65,10 +70,17 @@ export async function checkForUpdate (current, { force = false, fetchFn = (u, o)
   let error = null
   if (!rel) {
     try {
-      const r = await fetchFn(RELEASES_API, { headers: { accept: 'application/vnd.github+json' } })
-      if (!r.ok) throw new Error(r.status === 403 ? 'GitHub is not answering for a while (rate limit)' : `GitHub said ${r.status}`)
-      const j = await r.json()
-      rel = { at: now, tag: j.tag_name, url: j.html_url || RELEASES_PAGE, body: j.body ?? '' }
+      const ask = async (url) => {
+        const r = await fetchFn(url, { headers: { accept: 'application/vnd.github+json' } })
+        if (!r.ok) throw new Error(r.status === 403 ? 'GitHub is not answering for a while (rate limit)' : `GitHub said ${r.status}`)
+        return r.json()
+      }
+      const list = (await ask(RELEASES_API)).filter((j) => !j.draft && !j.prerelease && versionOfTag(j.tag_name))
+        .sort((a, b) => compareVersions(versionOfTag(b.tag_name), versionOfTag(a.tag_name)))
+      // newest first; ponytail: up to 5 compares, then "nothing on main" -- enough while dev runs a few releases ahead
+      let j = null
+      for (const c of list.slice(0, 5)) if (['identical', 'behind'].includes((await ask(COMPARE_API(c.tag_name))).status)) { j = c; break }
+      rel = j ? { at: now, tag: j.tag_name, url: j.html_url || RELEASES_PAGE, body: j.body ?? '' } : { at: now, tag: null, url: RELEASES_PAGE, body: '' }
       store.set(rel)
     } catch (e) {
       error = e.message ?? String(e)
