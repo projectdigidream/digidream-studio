@@ -556,21 +556,9 @@ export function slider (label, value, { min, max, step = 0.25 }, onChange) {
   // a phone a nudge moved a floor by whole metres -- and digits typed "into"
   // it went to the map as its keys. Enter or leaving it commits, a decimal
   // comma is a point, and it lands on the slider's own step and range.
-  const val = el('input', { class: 'st-val ui-slider__value', type: 'text', inputmode: 'decimal', value: String(value), 'aria-label': label })
   const input = el('input', { class: 'st-slide-input', type: 'range', min, max, step, value })
-  val.addEventListener('focus', () => val.select())
-  val.addEventListener('keydown', (e) => { if (e.key === 'Enter') val.blur() })
-  val.addEventListener('change', () => {
-    const typed = Number(String(val.value).trim().replace(',', '.'))
-    if (!Number.isFinite(typed)) { val.value = input.value; return }
-    const st = Number(step) || 0
-    const on = st > 0 ? Math.round(typed / st) * st : typed
-    const v = Number(Math.max(Number(min), Math.min(Number(max), on)).toFixed(6))
-    input.value = String(v)
-    val.value = String(v)
-    paint()
-    onChange(v, true)
-  })
+  const val = typedValue(input, label, value)
+  val.classList.add('ui-slider__value')
   const fill = el('span', { class: 'ui-slider__fill' })
   const thumb = el('span', { class: 'ui-slider__thumb' })
   const paint = () => {
@@ -578,13 +566,39 @@ export function slider (label, value, { min, max, step = 0.25 }, onChange) {
     fill.style.width = `${f * 100}%`
     thumb.style.left = `${f * 100}%`
   }
-  input.addEventListener('input', () => { val.value = input.value; paint(); onChange(Number(input.value), false) })
+  input.addEventListener('input', () => { paint(); onChange(Number(input.value), false) })
   input.addEventListener('change', () => { paint(); onChange(Number(input.value), true) })
   paint()
   const r = row(label, el('span', { class: 'st-slide' }, [el('span', { class: 'ui-slider__track' }, [fill, thumb]), input]), val)
   r.classList.add('ui-slider')
   r.querySelector('label').classList.add('ui-slider__label')
   return r
+}
+
+/**
+ * The number box beside a range input: shows its value, and a value typed in
+ * (Enter or leaving it; a decimal comma is a point) lands on the range's step
+ * and limits and moves it, as a drag would (its input and change events).
+ * Set the range's value from code? Call box.sync().
+ */
+export function typedValue (range, label = range.getAttribute('aria-label') ?? '', shown = range.value) {
+  // `shown`: the true value, which the range may hold only to its step (1.3 on a 0.25 step)
+  const box = el('input', { class: 'st-val', type: 'text', inputmode: 'decimal', value: String(shown), 'aria-label': label })
+  box.sync = () => { if (document.activeElement !== box) box.value = range.value }
+  range.addEventListener('input', box.sync)
+  box.addEventListener('focus', () => box.select())
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') box.blur() })
+  box.addEventListener('change', () => {
+    const typed = Number(String(box.value).trim().replace(',', '.'))
+    if (!Number.isFinite(typed)) { box.value = range.value; return }
+    const min = Number(range.min || 0); const max = Number(range.max || 100); const st = Number(range.step) || 0
+    const on = st > 0 ? min + Math.round((typed - min) / st) * st : typed
+    range.value = String(Number(Math.max(min, Math.min(max, on)).toFixed(6)))
+    box.value = range.value
+    range.dispatchEvent(new Event('input'))
+    range.dispatchEvent(new Event('change'))
+  })
+  return box
 }
 
 export function number (label, value, { min, max, step = 0.25 }, onChange) {

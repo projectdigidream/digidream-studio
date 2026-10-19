@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Every slider takes a typed value**: the missile preview's target distance
+  and the monster preview's health now have the number box the other sliders
+  have, and qPainter's sliders (bundled, at 6b1405e) have one too.
+
 ## 0.4.1.2 -- 2026-10-19
 
 A development release (the dev branch), built on engine 0.2.2 and its dev

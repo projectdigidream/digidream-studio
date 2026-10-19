@@ -28,7 +28,7 @@
     },
     "qpainter": {
       "path": "qpainter",
-      "commit": "dae3b71",
+      "commit": "6b1405e",
       "install": "npm ci --prefer-offline --no-audit --no-fund",
       "build": "npm run build",
       "out": "dist",

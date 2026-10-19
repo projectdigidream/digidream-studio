@@ -6,7 +6,7 @@
 //
 // The simulation is brainsim.js; this only draws it and feeds it input.
 //
-import { el, button, withIcon } from '../ui.js'
+import { el, button, withIcon, typedValue } from '../ui.js'
 import { useStroke, useText } from '../../vendor/uikit/runtime.js'
 import { parseAtlas, frameKey, quadFor } from '/src/render/atlas.js'
 import { rotationFor } from '/src/render/props.js'
@@ -277,7 +277,7 @@ export class Preview {
     put(this.nowEl, this.why())
     put(this.stateEl, s.state ?? '')
     const hp = String(Math.max(0, Math.round(s.hp * 100 / Math.max(1, s.maxHp))))
-    if (this.hpEl && document.activeElement !== this.hpEl && this.hpEl.value !== hp) this.hpEl.value = hp
+    if (this.hpEl && document.activeElement !== this.hpEl && this.hpEl.value !== hp) { this.hpEl.value = hp; this.hpBox?.sync() }
     // a cooldown is said as one, not also as a number
     // the brain's cooldowns: the vars a set_cooldown or a cooldown_ready names
     const coolNames = new Set(Object.keys(s.cools))
@@ -341,7 +341,7 @@ export class Preview {
             el('button', { class: 'me-seen', text: this.sim.seen ? 'in sight' : 'hidden', onclick: (e) => { this.sim.seen = !this.sim.seen; e.currentTarget.textContent = this.sim.seen ? 'in sight' : 'hidden' } }),
             el('button', { text: 'nearer', 'aria-label': 'Target nearer', onclick: () => { this.sim.dist = Math.max(0, Math.round((this.sim.dist - 1) * 10) / 10) } }),
             el('button', { text: 'further', 'aria-label': 'Target further', onclick: () => { this.sim.dist = Math.min(20, Math.round((this.sim.dist + 1) * 10) / 10) } })]),
-          el('label', { class: 'me-ctl me-muted me-hp' }, ['its health ', this.hpEl])])
+          el('label', { class: 'me-ctl me-muted me-hp' }, ['its health ', this.hpEl, (this.hpBox = typedValue(this.hpEl)), '%'])])
       ])
     }
     const hold = el('button', { class: 'me-hold', text: 'Hold to fire' })

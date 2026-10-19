@@ -5,7 +5,7 @@
 // engine's particle kinds bursting where it lands and trailing it on its way;
 // what it does when it hits, runs out, bounces and on its way; and who fires it.
 //
-import { el, button, confirmDialog } from '../ui.js'
+import { el, button, confirmDialog, typedValue } from '../ui.js'
 import { MISSILE_ACTIONS, groupsWithMore, unphrased, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
 import { flight } from '../missileflight.js'
 import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
@@ -144,7 +144,7 @@ export class MissileEditor {
       el('div', { class: 'me-row' }, [el('b', { class: 'me-mono', text: this.name }), el('span', { class: 'me-muted', text: info })]),
       this.svg,
       el('div', { class: 'me-row' }, [button('Fire', () => { this.shot = { t0: performance.now() }; this.parts = [] }),
-        el('label', { class: 'me-muted' }, ['target at ', range, ` ${this.dist} m`]),
+        el('label', { class: 'me-muted' }, ['target at ', range, typedValue(range), ' m']),
         el('label', { class: 'me-muted' }, [(() => { const c = el('input', { type: 'checkbox' }); c.checked = this.fromPlayer; c.addEventListener('change', () => { this.fromPlayer = c.checked; this.render() }); return c })(), ' fired by a player (level, no throw)'])]),
       ...(checks.length ? checks.map((t) => el('span', { class: 'me-warn', icon: 'status.warning', text: ` ${t}` })) : [el('span', { class: 'mi-ok', text: 'nothing to worry about at this distance' })])
     ])
