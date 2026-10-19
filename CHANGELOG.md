@@ -5,6 +5,15 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **A dev build on Android updates itself**: Home's "Studio X is out" card has
+  **update now**, which downloads the release's APK (the one with plugins, or
+  without, as this build is) and installs it over the studio. The first time,
+  Android asks to allow installs from the studio; allow it and press again. A
+  dev build is offered the newest release, dev or main. Main builds are as
+  before: the release page, in the browser.
+
 ## 0.4.1.1 -- 2026-10-19
 
 A development release (the dev branch), built on engine 0.2.2.

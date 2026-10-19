@@ -13,7 +13,7 @@ import { thumbCanvas } from '../thumbs.js'
 import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
 import { startMapOf } from '../startmap.js'
-import { checkForUpdate, skipped, skipVersion } from '../updates.js'
+import { checkForUpdate, skipped, skipVersion, isDevVersion, apkUrl } from '../updates.js'
 import { shell } from '../bridge.js'
 import { choose } from '../plugins/frame.js'
 import { giveWeaponLook } from '../placeholders.js'
@@ -178,10 +178,32 @@ function updateRows () {
     el('div', { class: 'lbl', text: `Studio ${u.latest} is out (you have ${u.current})` }),
     u.notes.length ? el('ul', { class: 'sd-update-notes' }, u.notes.map((n) => el('li', { class: 'st-muted', text: n }))) : null,
     el('div', { class: 'st-row' }, [
+      selfUpdateButton(u),
       button(withIcon('action.export', 'download'), () => shell.openUrl(u.url)),
       button('not now', () => { skipVersion(u.latest); S.router?.remount?.() })
     ])
   ].filter(Boolean))]
+}
+
+// A DEV BUILD ON ANDROID installs the newer APK over itself (the shell's
+// selfUpdate; only dev APKs may). The first time, Android's "install unknown
+// apps" switch opens instead, and the button asks to be pressed again.
+function selfUpdateButton (u) {
+  const n = globalThis.dnp?.studio
+  const url = apkUrl(u, S.bundledPlugins > 0)
+  if (!n?.selfUpdate || !isDevVersion(u.current) || !url) return null
+  const b = button(withIcon('action.export', 'update now'), async () => {
+    b.disabled = true
+    b.textContent = 'downloading…'
+    globalThis.__dnpSelfUpdateFailed = (msg) => { b.disabled = false; b.textContent = `update failed: ${msg} (try again)` }
+    try {
+      const r = await n.selfUpdate(url)
+      b.disabled = r === 'installing'
+      b.textContent = r === 'settings' ? 'allow installs, then press again' : 'installing…'
+    } catch (e) { globalThis.__dnpSelfUpdateFailed(e?.message ?? String(e)) }
+  })
+  b.dataset.action = 'self-update'
+  return b
 }
 
 // The button beside the version: ask GitHub now, and say what it answered.

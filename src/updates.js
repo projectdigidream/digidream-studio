@@ -3,7 +3,9 @@
 // The newest release of projectdigidream/digidream-studio ON MAIN, by GitHub's
 // API (which a page may read from anywhere), compared with this studio's
 // version. Releases are made on dev too since 2026-10-19; one whose tag main
-// does not contain is a development build, never offered as an update.
+// does not contain is a development build, never offered to a main build. A
+// development build (four parts) is offered the newest of either, and on
+// Android installs it in place (home.js, the shell's selfUpdate).
 // Asked at most every few hours: the answer is kept, per device, with when it
 // was asked -- GitHub allows a visitor sixty questions an hour, and a studio
 // opened ten times a day needs one. Never in the way: offline, rate-limited or
@@ -23,6 +25,15 @@ const EVERY_MS = 6 * 3600 * 1000
 export function versionOfTag (tag) {
   const m = /^(?:studio-)?v?(\d+(?:\.\d+){1,3})$/.exec(String(tag ?? '').trim())
   return m ? m[1] : null
+}
+
+/** A development build (the dev branch): four parts, 0.4.1.1. Only these update themselves in place. */
+export const isDevVersion = (v) => String(v ?? '').split('.').length === 4
+
+/** The release's Android APK for this build (with or without bundled plugins); null if it has none. */
+export function apkUrl (u, withPlugins) {
+  const name = `digidream-studio-${withPlugins ? '' : 'noplugins-'}${u?.latest}-android.apk`
+  return u?.assets?.[name] ?? null
 }
 
 /** -1, 0 or 1, part by part; a missing part is 0 (0.3 == 0.3.0, and 0.1.1.1 > 0.1.1). */
@@ -75,12 +86,16 @@ export async function checkForUpdate (current, { force = false, fetchFn = (u, o)
         if (!r.ok) throw new Error(r.status === 403 ? 'GitHub is not answering for a while (rate limit)' : `GitHub said ${r.status}`)
         return r.json()
       }
-      const list = (await ask(RELEASES_API)).filter((j) => !j.draft && !j.prerelease && versionOfTag(j.tag_name))
+      const dev = isDevVersion(current)
+      const list = (await ask(RELEASES_API)).filter((j) => !j.draft && (dev || !j.prerelease) && versionOfTag(j.tag_name))
         .sort((a, b) => compareVersions(versionOfTag(b.tag_name), versionOfTag(a.tag_name)))
-      // newest first; ponytail: up to 5 compares, then "nothing on main" -- enough while dev runs a few releases ahead
-      let j = null
-      for (const c of list.slice(0, 5)) if (['identical', 'behind'].includes((await ask(COMPARE_API(c.tag_name))).status)) { j = c; break }
-      rel = j ? { at: now, tag: j.tag_name, url: j.html_url || RELEASES_PAGE, body: j.body ?? '' } : { at: now, tag: null, url: RELEASES_PAGE, body: '' }
+      // newest first. A dev build takes the newest of any; a main build only one main holds.
+      // ponytail: up to 5 compares, then "nothing on main" -- enough while dev runs a few releases ahead
+      let j = dev ? list[0] ?? null : null
+      if (!dev) for (const c of list.slice(0, 5)) if (['identical', 'behind'].includes((await ask(COMPARE_API(c.tag_name))).status)) { j = c; break }
+      rel = j
+        ? { at: now, tag: j.tag_name, url: j.html_url || RELEASES_PAGE, body: j.body ?? '', assets: Object.fromEntries((j.assets ?? []).map((a) => [a.name, a.browser_download_url])) }
+        : { at: now, tag: null, url: RELEASES_PAGE, body: '' }
       store.set(rel)
     } catch (e) {
       error = e.message ?? String(e)
@@ -88,7 +103,7 @@ export async function checkForUpdate (current, { force = false, fetchFn = (u, o)
     }
   }
   const latest = versionOfTag(rel?.tag)
-  const base = { current, latest, url: rel?.url ?? RELEASES_PAGE, notes: whatChanged(rel?.body), at: rel?.at ?? null, error }
+  const base = { current, latest, url: rel?.url ?? RELEASES_PAGE, notes: whatChanged(rel?.body), at: rel?.at ?? null, error, assets: rel?.assets ?? {} }
   if (!latest) return { ...base, state: 'unknown' }
   return { ...base, state: compareVersions(latest, current) > 0 ? 'newer' : 'current' }
 }

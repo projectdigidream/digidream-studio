@@ -184,7 +184,8 @@ S.plugins = new PluginRegistry({
   knownKinds: SUITE_KINDS,
   prefs: S.prefs
 })
-bootStep(`${await loadBundled(S.plugins, { base: PLUGINS, fetchJson: (u) => fetchJson(u) })} bundled plugin(s)`)
+S.bundledPlugins = await loadBundled(S.plugins, { base: PLUGINS, fetchJson: (u) => fetchJson(u) })
+bootStep(`${S.bundledPlugins} bundled plugin(s)`)
 // Plugins installed later (plugins/install.js) are served by the studio's
 // service worker; where there is none, there are only the bundled ones.
 S.canInstall = await ensureServiceWorker(BASE)

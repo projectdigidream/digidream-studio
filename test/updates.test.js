@@ -6,7 +6,7 @@
 //
 // House style: standalone, prints ok/FAIL, ends with a count.
 
-import { versionOfTag, compareVersions, whatChanged, checkForUpdate } from '../src/updates.js'
+import { versionOfTag, compareVersions, whatChanged, checkForUpdate, isDevVersion, apkUrl } from '../src/updates.js'
 
 const name = 'updates'
 let checks = 0
@@ -29,7 +29,8 @@ let asked = 0
 const github = (tag, status = 200, dev = []) => async (url) => {
   if (/\/releases\?/.test(url)) asked++
   const json = /\/compare\//.test(url) ? { status: dev.some((t) => url.endsWith(`...${t}`)) ? 'ahead' : 'behind' }
-    : [...dev, tag].map((t) => ({ tag_name: t, html_url: `https://github.com/x/releases/tag/${t}`, body, draft: false, prerelease: false }))
+    : [...dev, tag].map((t) => ({ tag_name: t, html_url: `https://github.com/x/releases/tag/${t}`, body, draft: false, prerelease: dev.includes(t),
+        assets: ['', 'noplugins-'].map((n) => ({ name: `digidream-studio-${n}${versionOfTag(t)}-android.apk`, browser_download_url: `https://github.com/x/${n}${t}.apk` })) }))
   return { ok: status === 200, status, json: async () => json }
 }
 
@@ -64,6 +65,17 @@ const github = (tag, status = 200, dev = []) => async (url) => {
   check(r.state === 'newer' && r.latest === '0.3.2', `a newer release made on dev only is not offered: main's newest is (${r.latest})`)
   const none = await checkForUpdate('0.3.1', { fetchFn: github('studio-v0.3.5', 200, ['studio-v0.3.5']), store: memory(), now: 1 })
   check(none.state === 'unknown', `CONTROL: with no release on main, nothing is offered (${none.state})`)
+}
+
+{
+  check(isDevVersion('0.4.1.1') && !isDevVersion('0.4.1'), 'four parts is a dev build, three is main')
+  const r = await checkForUpdate('0.4.1.1', { fetchFn: github('studio-v0.4.1', 200, ['studio-v0.4.1.2']), store: memory(), now: 1 })
+  check(r.state === 'newer' && r.latest === '0.4.1.2', `a dev build is offered the newest dev release (${r.latest})`)
+  check(apkUrl(r, true) === 'https://github.com/x/studio-v0.4.1.2.apk' && apkUrl(r, false) === 'https://github.com/x/noplugins-studio-v0.4.1.2.apk', 'with the APK of its own kind (plugins or none)')
+  const m = await checkForUpdate('0.4.1.2', { fetchFn: github('studio-v0.4.2', 200, ['studio-v0.4.1.2']), store: memory(), now: 1 })
+  check(m.state === 'newer' && m.latest === '0.4.2', `a dev build takes a later main release too (${m.latest})`)
+  const main = await checkForUpdate('0.4.1', { fetchFn: github('studio-v0.4.1', 200, ['studio-v0.4.1.2']), store: memory(), now: 1 })
+  check(main.state === 'current', `CONTROL: a main build is still not offered the dev release (${main.state} ${main.latest})`)
 }
 
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
