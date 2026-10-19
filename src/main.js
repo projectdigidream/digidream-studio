@@ -1256,6 +1256,8 @@ function chooseTool (id) {
   S.tool = id
   S.ui.setTool(id)
   S.pick = null
+  // The room tool shows every room's corners (redraw), from the moment it is chosen, not from its first tap.
+  redraw()
   if (id === 'place') S.openPalette()
   else if (id === 'trigger') { S.triggerOpen = null; S.ui.showSheet('Triggers', triggersSheet(S), () => S.setHighlights([])) }
   else if (id === 'camera') S.showCamera()
@@ -1332,6 +1334,8 @@ function redraw () {
       if (S.drag?.kind === 'vertex' && oid === S.drag.s.id) continue
       const o = d.sectors[oid]
       for (const v of o.verts) handles.push({ id: v.id, x: v.x, y: v.y, z: o.floor, ...tint('corner') })
+      // While drawing, every room's walls too: what a new room meets or snaps to.
+      if (S.tool === 'room') lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor })), closed: true, ...tint('corner'), width: 2 })
     }
   }
   if (s) {

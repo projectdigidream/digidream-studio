@@ -5,6 +5,15 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **The map's corners and labels follow the zoom**: they kept the size of the
+  moment they were drawn, so zoomed in "start" covered the room and zoomed out
+  the corners shrank out of sight. They now grow and shrink with the map, within
+  bounds (half to 1.6 times their size), every time the zoom moves.
+- **The room tool shows every room's corners and walls from the moment it is
+  chosen**, not from the first tap.
+
 ### Added
 
 - **A dev build on Android updates itself**: Home's "Studio X is out" card has

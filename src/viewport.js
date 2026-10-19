@@ -30,6 +30,11 @@ import { iconPicture, glyphOf } from './ui.js'
 const FOV = 50
 const MIN_VIEW = 4
 const MAX_VIEW = 300
+// CORNERS AND BADGES SCALE WITH THE ZOOM, gently and within bounds: at the
+// opening zoom (40) as the skin draws them; zoomed in, up to 1.6x on screen;
+// zoomed out, down to half -- so "start" never covers the room it is in, and
+// a corner never shrinks out of sight. The world size of one at view height v.
+const furnitureScale = (v) => v * Math.min(1.6, Math.max(0.5, Math.sqrt(40 / v)))
 
 // The furniture's colours, as three.js numbers, from the skin (docs/STUDIO_SKINS.md):
 // wearSkin() fills them from S.skin.canvas, and again on every change of skin
@@ -245,6 +250,7 @@ export class Viewport {
     // shows of a monster's size is what the game will show.
     const squash = this.mode === 'iso' ? Math.cos(this.elevation) : 1
     for (const m of this.markers.children) if (m.userData.h) m.scale.y = m.userData.h * squash
+    this.#keepFurnitureSize()
     if (this.fx && this.view) {
       const o = this.view.root.position
       this.fx.setOrigin(o.x, o.y, o.z)
@@ -344,10 +350,32 @@ export class Viewport {
     return a && b ? Math.hypot(b.x - a.x, b.y - a.y) / 10 : this.viewHeight / innerHeight
   }
 
+  // Corners and badges are sized when set (setHandles, setMarkers), and a wheel
+  // or a pinch moves the zoom without setting them again: resized here, every
+  // frame the zoom has moved, by furnitureScale.
+  #keepFurnitureSize () {
+    if (this.viewHeight === this.furnitureAt) return
+    this.furnitureAt = this.viewHeight
+    const v = furnitureScale(this.viewHeight)
+    for (const m of this.handles.children) {
+      const k = v / m.userData.at
+      m.scale.setScalar(k)
+      m.position.y = m.userData.y0 + (m.userData.size * k) / 2
+    }
+    for (const m of this.markers.children) {
+      const k = v / (m.userData.at ?? v)
+      if (m.userData.kind === 'heading') { m.scale.set(k, 1, k); m.position.set(m.userData.fx * (1 - k), 0, m.userData.fz * (1 - k)); continue }
+      if (!m.userData.badgeH) continue
+      const h = m.userData.badgeH * k
+      m.scale.set(h * 3, h, 1)
+      m.position.y = m.userData.y0 + h / 2
+    }
+  }
+
   /** Corner handles: [{ id, x, y, z, hot, color }] -- the selected sector's, and while drawing, everyone else's to snap to. */
   setHandles (points) {
     this.handles.clear()
-    const size = this.viewHeight / 90
+    const size = furnitureScale(this.viewHeight) / 90
     for (const p of points) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size),
                                new THREE.MeshBasicMaterial({ color: p.color ?? (p.hot ? COLORS.handleHot : COLORS.handle), depthTest: false, ...opacity(p.alpha) }))
@@ -355,7 +383,7 @@ export class Viewport {
       m.renderOrder = 10
       // A handle says what it belongs to: a sector's corner and a camera
       // path's point are both boxes on the floor and are not the same thing.
-      m.userData = { kind: p.kind ?? 'vertex', id: p.id }
+      m.userData = { kind: p.kind ?? 'vertex', id: p.id, y0: toThreeY(p.z), size, at: furnitureScale(this.viewHeight) }
       this.handles.add(m)
     }
     this.dirty = true
@@ -450,7 +478,7 @@ export class Viewport {
   setMarkers (list) {
     for (const m of this.markers.children) if (m.userData.own) m.material.dispose()
     this.markers.clear()
-    const h = this.viewHeight / 22
+    const h = furnitureScale(this.viewHeight) / 22
     for (const m of list) {
       let sprite
       if (m.icon) {
@@ -463,7 +491,7 @@ export class Viewport {
         sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.#label(m.label, m.color, m.iconId), depthTest: false, transparent: true, opacity: m.alpha ?? 1 }))
         sprite.scale.set(h * 3, h, 1)
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + h / 2, toThreeZ(m.y))
-        sprite.userData = { kind: m.kind, id: m.id, own: true, label: m.label }
+        sprite.userData = { kind: m.kind, id: m.id, own: true, label: m.label, badgeH: h, y0: toThreeY(m.z), at: furnitureScale(this.viewHeight) }
       }
       sprite.renderOrder = 11
       this.markers.add(sprite)
@@ -478,7 +506,8 @@ export class Viewport {
         const pts = [m, tip, tip, side(0.5), tip, side(-0.5)].map((p) => new THREE.Vector3(toThreeX(p.x), toThreeY(m.z) + 0.05, toThreeZ(p.y)))
         const arrow = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: m.color, depthTest: false, transparent: true, opacity: m.alpha ?? 1 }))
         arrow.renderOrder = 12
-        arrow.userData = { kind: 'heading', own: true }
+        // scaled about its foot (#keepFurnitureSize): fx, fz are the foot
+        arrow.userData = { kind: 'heading', own: true, fx: toThreeX(m.x), fz: toThreeZ(m.y), at: furnitureScale(this.viewHeight) }
         this.markers.add(arrow)
       }
     }
