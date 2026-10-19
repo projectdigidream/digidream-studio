@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.1.2 -- 2026-10-19
+
+A development release (the dev branch), built on engine 0.2.2 and its dev
+Android shell (the self update).
+
 ### Fixed
 
 - **The map's corners and labels follow the zoom**: they kept the size of the
