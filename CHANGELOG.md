@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.1.1 -- 2026-10-19
+
+A development release (the dev branch), built on engine 0.2.2.
+
 ### Fixed
 
 - **"Check for updates" offers only releases on main**: releases are made on
