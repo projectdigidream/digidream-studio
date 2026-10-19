@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.1.3 -- 2026-10-19
+
+A development release (the dev branch), built on engine 0.2.2.
+
 ### Added
 
 - **Every slider takes a typed value**: the missile preview's target distance
