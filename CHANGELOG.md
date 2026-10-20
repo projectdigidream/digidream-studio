@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Aim assist per weapon**: the weapon panel has "Aim assist" (the default, on,
+  off) and "Aim assist reach" in degrees (the engine's `autoaim` and
+  `autoaim_cone`, engine 43efccd); a reach over 180 is flagged.
+
 ## 0.4.1.4 -- 2026-10-20
 
 A development release (the dev branch), built on engine 0.2.2.1, with

@@ -9,6 +9,9 @@
 //
 import { el, row, toggle, select, button, muted, addHelp, withIcon, icon, glyphOf } from './ui.js'
 
+// Yes/no fields whose absence means something of its own (see 'bool' below).
+const TRI_STATE = new Set(['autoaim'])
+
 /** "0.25" -> "0.25", "-4/48" -> [-4, 48], "2" -> 2. Null when unreadable. */
 export function parseFx (s) {
   const t = String(s).trim()
@@ -240,6 +243,13 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         }, { placeholder: 'red, green, blue' })
         break
       case 'bool':
+        // A yes/no whose ABSENCE is a third answer (a weapon's aim assist: the
+        // game's rule, which is on for some bodies and off for others) is a
+        // choice of three, so "the default" can be gone back to.
+        if (TRI_STATE.has(a.name)) {
+          rows.push(select(label, cur === true ? 'on' : cur === false ? 'off' : '', [['', '(the default)'], ['on', 'on'], ['off', 'off']], (v) => set(v === 'on' ? true : v === 'off' ? false : undefined)))
+          return
+        }
         rows.push(toggle(label, !!cur, (v) => set(v)))
         return
       case 'enum':

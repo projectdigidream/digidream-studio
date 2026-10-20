@@ -64,7 +64,7 @@ function propOf (S, name, brain) {
 
 // Advanced's fields in plain words (the vocabulary's names are the file's).
 const MOB_WORDS = { hp: 'Health', sight: 'Notices a target within (m)', pain_chance: 'Flinch chance (of 256)', pain_time: 'Flinch length', turn_speed: 'Turns a second', jump_height: 'Hops up (m)', flying: 'Flies', hover_z: 'Hovers above the target (m)', infighting: 'Fights back at monsters', blood: 'Blood (particle kind)', corpse: 'Leaves a corpse', mass: 'Weight' }
-const WEAPON_WORDS = { label: 'Name', order: 'Selection order', ammo: 'Uses ammunition', per: 'A shot costs (ammo)', initial: 'Starts in', icon: 'Icon on the panel', aim_snap: 'Aim directions (0 = free)' }
+const WEAPON_WORDS = { label: 'Name', order: 'Selection order', ammo: 'Uses ammunition', per: 'A shot costs (ammo)', initial: 'Starts in', icon: 'Icon on the panel', aim_snap: 'Aim directions (0 = free)', autoaim: 'Aim assist', autoaim_cone: 'Aim assist reach (°, 0 = the game\'s)' }
 
 export class NodeEditor {
   constructor (S, kind) {

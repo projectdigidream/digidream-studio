@@ -150,6 +150,8 @@ export class Vocab {
       checkArgs(V.weapon_fields, w, where, problems, ctx)
       if (!Object.keys(phases).length) problems.push(`${where}: needs at least one phase`)
       if (w.initial !== undefined && !(w.initial in phases)) problems.push(`${where}: \`initial\` names no phase`)
+      // the engine's bound (weapon_vocab: 1 to 180, 0 the game's own)
+      if (w.autoaim_cone !== undefined && !(w.autoaim_cone >= 0 && w.autoaim_cone <= 180)) problems.push(`${where}: \`autoaim_cone\` is degrees either side, 0 to 180 (${w.autoaim_cone})`)
       if (w.swing) checkArgs(V.swing_fields, w.swing, `${where}, swing`, problems, ctx)
       for (const [pname, p] of Object.entries(phases)) {
         const pw = `${where}, phase "${pname}"`
