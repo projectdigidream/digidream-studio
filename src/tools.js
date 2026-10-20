@@ -10,9 +10,12 @@
 import { addSector, addSpawn, addLight, addEntity, addPathPoint, snap, newId, newEdge } from './doc.js'
 import { sectorAt, snapToMap, normalize, sideKinds } from './topology.js'
 
+// A finger covers more than a mouse pointer: on a touch screen closing a room
+// on its first corner, and snapping onto a corner, reach further.
+const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
 const HIT_PX = 14
-const CLOSE_PX = 18
-const SNAP_PX = 16
+const CLOSE_PX = COARSE ? 30 : 18
+const SNAP_PX = COARSE ? 26 : 16
 
 /**
  * Where a corner goes: onto another room's corner or wall when one is within

@@ -313,7 +313,7 @@ S.preview.onResult = (r) => {
 installTapGuard()
 S.ui = new Ui({
   tool: (id) => chooseTool(id),
-  undo: () => restore(S.history.undo()),
+  undo: () => mapUndo(),
   redo: () => restore(S.history.redo()),
   view: () => { S.viewport.setMode(S.viewport.mode === 'plan' ? 'iso' : 'plan'); S.ui.setView(S.viewport.mode) },
   rotate: (dir) => S.viewport.rotate(dir * Math.PI / 4),
@@ -1265,12 +1265,24 @@ function chooseTool (id) {
   else S.ui.hideSheet()
 }
 
+// UNDO WHILE A ROOM IS BEING DRAWN takes back its last corner, not the change
+// before it: the corners are not in the map's history until the room is made.
+function mapUndo () {
+  if (S.tool === 'room' && S.draw.corners.length) {
+    S.draw.corners.pop()
+    S.status(S.draw.corners.length ? `corner taken back: ${S.draw.corners.length} left` : 'corner taken back', 'ok')
+    redraw()
+    return
+  }
+  restore(S.history.undo())
+}
+
 function onKey (e) {
   // The map editor's keys, only while it is the section showing.
   if (S.route() !== 'map') return
   if (e.target?.tagName === 'INPUT' || e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'SELECT') return
   const mod = e.ctrlKey || e.metaKey
-  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); restore(e.shiftKey ? S.history.redo() : S.history.undo()); return }
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) restore(S.history.redo()); else mapUndo(); return }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); restore(S.history.redo()); return }
   // ⌘V is not V: a key held with ⌘, Ctrl or Alt is somebody else's shortcut, never the map's letter
   if (mod || e.altKey) return

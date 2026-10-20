@@ -35,6 +35,11 @@ const MAX_VIEW = 300
 // zoomed out, down to half -- so "start" never covers the room it is in, and
 // a corner never shrinks out of sight. The world size of one at view height v.
 const furnitureScale = (v) => v * Math.min(1.6, Math.max(0.5, Math.sqrt(40 / v)))
+// A FINGER IS NOT A MOUSE: on a touch screen the corners are drawn twice the
+// size, and a tap within a finger's width of one is on it (pickFurniture).
+const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+const HANDLE = COARSE ? 2 : 1
+const CORNER_PX = COARSE ? 30 : 12
 
 // The furniture's colours, as three.js numbers, from the skin (docs/STUDIO_SKINS.md):
 // wearSkin() fills them from S.skin.canvas, and again on every change of skin
@@ -277,6 +282,15 @@ export class Viewport {
     this.#place()
     const ndc = new THREE.Vector2((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1)
     this.raycaster.setFromCamera(ndc, this.camera)
+    // The nearest corner within reach on screen, before anything a ray hits:
+    // a corner drawn ten pixels wide was all but impossible to tap on a phone.
+    let best = null; let bestD = CORNER_PX
+    for (const h of this.handles.children) {
+      const p = h.position.clone().project(this.camera)
+      const d = Math.hypot((p.x + 1) / 2 * innerWidth - clientX, (1 - p.y) / 2 * innerHeight - clientY)
+      if (d < bestD) { bestD = d; best = h }
+    }
+    if (best) return best.userData
     const hits = this.raycaster.intersectObjects([...this.handles.children, ...this.markers.children.filter((m) => m.userData.kind !== 'badge' && m.userData.kind !== 'heading')], false)
     return hits.length ? hits[0].object.userData : null
   }
@@ -375,7 +389,7 @@ export class Viewport {
   /** Corner handles: [{ id, x, y, z, hot, color }] -- the selected sector's, and while drawing, everyone else's to snap to. */
   setHandles (points) {
     this.handles.clear()
-    const size = furnitureScale(this.viewHeight) / 90
+    const size = furnitureScale(this.viewHeight) / 90 * HANDLE
     for (const p of points) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size),
                                new THREE.MeshBasicMaterial({ color: p.color ?? (p.hot ? COLORS.handleHot : COLORS.handle), depthTest: false, ...opacity(p.alpha) }))

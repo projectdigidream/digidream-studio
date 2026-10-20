@@ -5,6 +5,19 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **Corners were hard to hit on a phone**: on a touch screen they are drawn
+  twice the size, a tap within a finger's width of one selects it, and closing
+  a room on its first corner or snapping onto a corner reaches further.
+- **Undo while drawing a room took back the change before it**: it now takes
+  back the last corner tapped, one at a time.
+
+### Added
+
+- **A corner leads to its walls**: its panel has "wall to corner …" for each of
+  the two walls that meet at it.
+
 ## 0.4.1.3 -- 2026-10-19
 
 A development release (the dev branch), built on engine 0.2.2.

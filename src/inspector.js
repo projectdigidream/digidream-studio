@@ -231,7 +231,15 @@ function vertexForm (sel, doc, ctx) {
         ctx.select({ kind: 'sector', id: s.id }); ctx.commit()
       }, 'st-danger'),
       button('select sector', () => ctx.select({ kind: 'sector', id: s.id }))
-    ])
+    ]),
+    // The two walls that meet at it, one tap away: on a phone a wall beside a
+    // corner is the hard thing to land on.
+    el('div', { class: 'st-row' }, (() => {
+      const i = s.verts.indexOf(v); const n = s.verts.length
+      const prev = s.verts[(i - 1 + n) % n]; const next = s.verts[(i + 1) % n]
+      return [button(`wall to corner ${prev.id}`, () => ctx.select({ kind: 'edge', id: prev.edge.id, sectorId: s.id })),
+              button(`wall to corner ${next.id}`, () => ctx.select({ kind: 'edge', id: v.edge.id, sectorId: s.id }))]
+    })())
   ]
 }
 
