@@ -75,7 +75,10 @@ function vertexLine (v, sectorIndex, indent) {
   if (e.yoff) w.push(`yoff ${num(e.yoff)}`)
   // turned and scaled like a flat (map version 15, docs/WALL_STYLES.md)
   if (e.angle) w.push(`angle ${num(e.angle)}`)
-  if (e.scale !== undefined && e.scale !== 1 && e.scale > 0) w.push(`scale ${num(e.scale)}`)
+  // up the wall on its own (`yscale`, map version 16): written only when it differs from along it
+  const sx = e.scale > 0 ? e.scale : 1
+  if (e.yscale > 0 && e.yscale !== sx) w.push(`xscale ${num(sx)} yscale ${num(e.yscale)}`)
+  else if (sx !== 1) w.push(`scale ${num(sx)}`)
   if (e.unpegUpper) w.push('unpeg-upper')
   if (e.unpegLower) w.push('unpeg-lower')
   // A GRATE. 255 is the solid sheet, and writing it would be saying nothing at

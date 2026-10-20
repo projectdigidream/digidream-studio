@@ -114,5 +114,28 @@ if (baked.ok) {
   }
 }
 
+// A WALL'S TEXTURE SIZED ALONG AND UP ON ITS OWN (map version 16): `yscale`
+// is written beside `xscale` only when they differ, and the bake keeps both.
+{
+  const d2 = newDoc('stretch')
+  addSector(d2, rect(0, 0, 8, 8), { tag: 1 }, { middle: 'WALL' })
+  normalize(d2)
+  const s = d2.sectors[d2.order[0]]
+  const [a, b, c] = s.verts
+  a.edge.scale = 2; a.edge.yscale = 0.5   // stretched
+  b.edge.scale = 2                       // uniform
+  c.edge.scale = 2; c.edge.yscale = 2     // CONTROL: the same both ways is plain `scale`
+  const em = emitMap(derive(d2), d2)
+  check(/xscale 2 yscale 0\.5/.test(em.text) && (em.text.match(/ scale 2\b/g) ?? []).length === 2, `a stretched wall is xscale/yscale, the others plain scale (${em.text.match(/(x|y)?scale [\d.]+/g)})`)
+  const bk = bakeNative(em.text)
+  check(bk.ok, `the stretched map bakes (${bk.stderr})`)
+  if (bk.ok) {
+    const { data } = await readBaked(bk.dnpm)
+    const sa = data.sides[em.sideIndex.get(a.edge.id)]; const sb = data.sides[em.sideIndex.get(b.edge.id)]
+    check(sa.scale === 2 && sa.scaleY === 0.5, `the bake keeps both (${sa.scale} x ${sa.scaleY})`)
+    check(sb.scale === 2 && sb.scaleY === 2, `CONTROL: a uniform wall is the same both ways (${sb.scale} x ${sb.scaleY})`)
+  }
+}
+
 console.log(`\nmapfmt: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

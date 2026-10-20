@@ -197,7 +197,9 @@ function edgeForm (sel, doc, ctx) {
     number('y offset', edge.yoff, { min: -64, max: 64, step: 0.125 }, (v) => { edge.yoff = v; ctx.commit() }),
     // turned and drawn larger, as a floor's picture is: one style for the side's three fields
     slider('turn (°)', edge.angle ?? 0, { min: 0, max: 360, step: 5 }, (v, done) => { edge.angle = v % 360; done ? ctx.commit() : ctx.preview() }),
-    slider('size', edge.scale ?? 1, { min: 0.125, max: 8, step: 0.125 }, (v, done) => { edge.scale = v > 0 ? v : 1; done ? ctx.commit() : ctx.preview() }),
+    slider('size along', edge.scale ?? 1, { min: 0.125, max: 8, step: 0.125 }, (v, done) => { edge.scale = v > 0 ? v : 1; done ? ctx.commit() : ctx.preview() }),
+    // up the wall on its own (map version 16); the same as along it until set
+    slider('size up', edge.yscale ?? edge.scale ?? 1, { min: 0.125, max: 8, step: 0.125 }, (v, done) => { if (v > 0 && v !== (edge.scale ?? 1)) edge.yscale = v; else delete edge.yscale; done ? ctx.commit() : ctx.preview() }),
     toggle('unpeg upper', edge.unpegUpper, (v) => { edge.unpegUpper = v; ctx.commit() }),
     toggle('unpeg lower', edge.unpegLower, (v) => { edge.unpegLower = v; ctx.commit() }),
     el('div', { class: 'st-row' }, [

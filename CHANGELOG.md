@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **A wall's texture sized along it and up it on its own**: the wall's panel has
+  "size along" and "size up" (the engine's `xscale` / `yscale`, engine
+  d630c99). Written as `xscale`/`yscale` only when the two differ, so every
+  other map is exactly as before.
+
 ### Fixed
 
 - **qPainter in the studio on a phone could not export or import** (a palette, a
