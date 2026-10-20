@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.1.5 -- 2026-10-20
+
+A development release (the dev branch), built on engine 0.2.2.2.
+
 ### Added
 
 - **Aim assist per weapon**: the weapon panel has "Aim assist" (the default, on,
