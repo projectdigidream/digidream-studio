@@ -55,6 +55,23 @@
     document.head.appendChild(css)
   }
 
+  // Files and the module, through the studio (ThreeSprite's window.threespriteHost):
+  // a frame's own file input and download link do nothing in a phone's
+  // WebView, and the module's textures and palette come with no file at all.
+  let connected
+  const suiteReady = new Promise((resolve) => { connected = resolve })
+  const ask = async (what, arg, timeout = 15000) => (await suiteReady).query(what, arg, { timeout })
+  const LONG = 30 * 60 * 1000 // a person choosing a file
+  window.threespriteHost = {
+    open: (exts) => ask('import-file', { accept: exts.map((e) => `.${e}`).join(',') }, LONG),
+    save: async (name, bytes) => !!(await ask('share', { name, bytes }, LONG)),
+    library: {
+      textures: async () => (await ask('list', 'file:texture')).map((t) => t.key),
+      texture: async (key) => { const p = await ask('read', { kind: 'file:texture', key }); return p instanceof Uint8Array ? p : new TextEncoder().encode(String(p ?? '')) },
+      palette: async () => { const p = await ask('palette'); return p ? JSON.stringify(p) : null }
+    }
+  }
+
   // What ThreeSprite says to "VS Code".
   window.acquireVsCodeApi = () => ({
     getState: () => null,
@@ -100,6 +117,7 @@
       // The studio's skin over the tool's own colours (suite-skin.js): its variables, given the skin's tokens.
       onSkin: async (bundle, mode, pointer) => (await import(new URL('suite-skin.js', here).href)).wearSkin(bundle, mode, pointer, { vars: { '--bg': 'color.bg.app', '--bg-2': 'color.bg.panel', '--bg-3': 'color.bg.raised', '--bg-4': 'color.bg.hover', '--fg': 'color.text.primary', '--fg-dim': 'color.text.secondary', '--accent': 'color.accent', '--accent-2': 'color.info', '--danger': 'color.error', '--border': 'color.line.main', '--radius': 'radius.control' } })
     })
+    connected(suite)
   })
 
   // Then ThreeSprite itself: the vendored build's page, its styles and its script.
