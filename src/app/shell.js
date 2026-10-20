@@ -39,7 +39,7 @@ const STYLE = `
 .sd-rail .ico{font-size:17px;width:22px;text-align:center;flex:0 0 auto;--icon-size:20px}
 .sd-rail .sd-mod{font-weight:700;min-height:48px}
 .sd-rail .sd-gap{flex:1 1 auto;min-height:8px}
-.sd-rail .sd-group{flex:0 0 auto;margin:8px 4px 2px;padding:6px 6px 0;border-top:1px solid var(--dnp-color-line-main,#333);font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;white-space:nowrap;overflow:hidden}
+.sd-rail .sd-group{flex:0 0 auto;margin:8px 4px 2px;padding:6px 6px 0;border-top:1px solid var(--dnp-color-line-main);font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;white-space:nowrap;overflow:hidden}
 @media (max-width:1100px){.sd-rail .sd-group{margin:5px 6px 3px;padding:0;height:0;font-size:0}}
 .sd-rail .sd-badge{margin-left:auto;padding:0 6px;font-size:11px}
 @media (max-width:1100px){.sd-rail .lbl,.sd-rail .sd-badge{display:none}.sd-rail.ui-rail .ui-rail__item{justify-content:center;padding:0}}
