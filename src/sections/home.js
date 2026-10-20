@@ -13,7 +13,7 @@ import { thumbCanvas } from '../thumbs.js'
 import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
 import { startMapOf } from '../startmap.js'
-import { checkForUpdate, skipped, skipVersion, isDevVersion, apkUrl } from '../updates.js'
+import { checkForUpdate, skipped, skipVersion, apkUrl } from '../updates.js'
 import { shell } from '../bridge.js'
 import { choose } from '../plugins/frame.js'
 import { giveWeaponLook } from '../placeholders.js'
@@ -185,13 +185,15 @@ function updateRows () {
   ].filter(Boolean))]
 }
 
-// A DEV BUILD ON ANDROID installs the newer APK over itself (the shell's
-// selfUpdate; only dev APKs may). The first time, Android's "install unknown
-// apps" switch opens instead, and the button asks to be pressed again.
+// ON ANDROID the newer APK installs over the studio (the shell's selfUpdate).
+// Which newer one is updates.js's: a stable build is only ever offered a
+// stable release, a dev build the newest of either. The first time, Android's
+// "install unknown apps" switch opens instead, and the button asks to be
+// pressed again.
 function selfUpdateButton (u) {
   const n = globalThis.dnp?.studio
   const url = apkUrl(u, S.bundledPlugins > 0)
-  if (!n?.selfUpdate || !isDevVersion(u.current) || !url) return null
+  if (!n?.selfUpdate || !url) return null
   const b = button(withIcon('action.export', 'update now'), async () => {
     b.disabled = true
     b.textContent = 'downloading…'

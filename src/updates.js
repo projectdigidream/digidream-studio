@@ -4,8 +4,9 @@
 // API (which a page may read from anywhere), compared with this studio's
 // version. Releases are made on dev too since 2026-10-19; one whose tag main
 // does not contain is a development build, never offered to a main build. A
-// development build (four parts) is offered the newest of either, and on
-// Android installs it in place (home.js, the shell's selfUpdate).
+// development build (four parts) is offered the newest of either. On Android
+// either kind installs what it is offered in place (home.js, the shell's
+// selfUpdate) -- so a stable build only ever installs a stable release.
 // Asked at most every few hours: the answer is kept, per device, with when it
 // was asked -- GitHub allows a visitor sixty questions an hour, and a studio
 // opened ten times a day needs one. Never in the way: offline, rate-limited or
@@ -27,7 +28,7 @@ export function versionOfTag (tag) {
   return m ? m[1] : null
 }
 
-/** A development build (the dev branch): four parts, 0.4.1.1. Only these update themselves in place. */
+/** A development build (the dev branch): four parts, 0.4.1.1. It is offered dev releases too. */
 export const isDevVersion = (v) => String(v ?? '').split('.').length === 4
 
 /** The release's Android APK for this build (with or without bundled plugins); null if it has none. */

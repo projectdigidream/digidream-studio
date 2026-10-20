@@ -76,6 +76,8 @@ const github = (tag, status = 200, dev = []) => async (url) => {
   check(m.state === 'newer' && m.latest === '0.4.2', `a dev build takes a later main release too (${m.latest})`)
   const main = await checkForUpdate('0.4.1', { fetchFn: github('studio-v0.4.1', 200, ['studio-v0.4.1.2']), store: memory(), now: 1 })
   check(main.state === 'current', `CONTROL: a main build is still not offered the dev release (${main.state} ${main.latest})`)
+  const st = await checkForUpdate('0.4.1', { fetchFn: github('studio-v0.4.2', 200, ['studio-v0.4.2.1']), store: memory(), now: 1 })
+  check(st.latest === '0.4.2' && apkUrl(st, true) === 'https://github.com/x/studio-v0.4.2.apk', `a stable build installs the stable release's APK, never the newer dev one (${st.latest})`)
 }
 
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)

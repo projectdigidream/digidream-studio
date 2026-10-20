@@ -5,11 +5,52 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2 -- 2026-10-20
+
+Everything since 0.4.1, built on engine 0.2.2.2, with ThreeSprite 0.2.2.1 and
+qPainter 0.2.0.1 bundled. (The development releases 0.4.1.1 to 0.4.1.5 below
+had it piece by piece.)
+
+### Added
+
+- **The studio updates itself on Android**: when a newer stable studio is out,
+  Home's card has **update now**, which downloads it and installs it over this
+  one. The first time, Android asks to allow installs from the studio: allow it
+  and press again. A stable studio is only ever offered another stable one.
+- **qPainter and ThreeSprite work with the module directly**: both take the
+  module's textures and its palette, and both can set the module's palette, so
+  the two keep one palette. A texture bigger than a sprite comes in shrunk to
+  fit.
+- **Aim assist per weapon**: "Aim assist" (the default, on, off) and its reach
+  in degrees, on the weapon's panel.
+- **A wall's texture sized along it and up it on its own**: "size along" and
+  "size up" on the wall's panel.
+- **Every slider takes a typed value**, in the studio and in qPainter.
+- **A corner leads to its walls**: its panel has a button for each of the two
+  walls that meet at it.
+
 ### Changed
 
 - **The sidebar is in groups**: World, Gameplay, Art, Sound, Interface, Logic
   and Module, each under a small heading (a line where the sidebar is icons
   only). Sky now sits with Maps; a plugin's section goes under Module.
+
+### Fixed
+
+- **qPainter and ThreeSprite on a phone could not export or import** (a palette,
+  a PNG, an image): their files go through the studio's own save and file
+  picker now.
+- **A minus sign could not be typed on Android** in the number boxes.
+- **Corners were hard to hit on a phone**: they are bigger on a touch screen,
+  and a tap within a finger's width of one selects it.
+- **The map's corners and labels follow the zoom**, within bounds: zoomed in,
+  "start" no longer covers its room; zoomed out, corners no longer vanish.
+- **The room tool shows every room's corners and walls** from the moment it is
+  chosen, and **undo while drawing a room** takes back the last corner.
+- **A monster given a new sprite of its own was drawn nowhere**: it shows as a
+  still picture until the sprite has animations.
+- **Whether a plugin editor's changes were kept was unclear**: its bar says
+  "changed · saved when you go back".
 
 ## 0.4.1.5 -- 2026-10-20
 
