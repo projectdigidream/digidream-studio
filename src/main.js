@@ -443,7 +443,8 @@ installPluginSections(S)
 
 /**
  * What a plugin may ask about the module (an editor's `query`): read-only,
- * and nothing the author could not see on a page. docs/PLUGINS.md, Queries.
+ * and nothing the author could not see on a page -- but for the module's
+ * palette (set-palette) and the sync's module-write. docs/PLUGINS.md, Queries.
  */
 S.pluginQuery = async (what, arg, ctx = {}) => {
   switch (what) {
@@ -477,6 +478,24 @@ S.pluginQuery = async (what, arg, ctx = {}) => {
     case 'palette': {
       const b = S.rec.assets?.['sources/palette.json']
       return b ? JSON.parse(await b.text()) : null
+    }
+    // THE MODULE'S PALETTE, set by a plugin (qPainter, ThreeSprite): one
+    // palette both read ('palette') and write, so the two stay in step. A
+    // digidream-palette object (INTEGRATION.md C2); keys the plugin did not
+    // send are kept from the file. One undo step.
+    case 'set-palette': {
+      if (arg?.format !== 'digidream-palette' || !Array.isArray(arg.colors) || !arg.colors.every((c) => /^#[0-9a-f]{6}$/i.test(c))) throw new Error("set-palette needs a digidream-palette: { format: 'digidream-palette', version: 1, colors: ['#rrggbb', ...] }")
+      const was = S.rec.assets?.['sources/palette.json']
+      const old = was ? await was.text().then((t) => { try { return JSON.parse(t) } catch { return {} } }) : {}
+      S.rec.assets ??= {}
+      S.rec.assets['sources/palette.json'] = new Blob([JSON.stringify({ ...old, ...arg }, null, 2) + '\n'], { type: 'application/json' })
+      S.moduleChanged()
+      return true
+    }
+    // A texture's picture as the game draws it (PNG bytes), where 'read' gives its qPainter project. Null if none.
+    case 'texture-png': {
+      const b = S.rec.assets?.[`textures/${String(arg?.name ?? '')}.png`]
+      return b ? new Uint8Array(await b.arrayBuffer()) : null
     }
     // The one question that is not read-only: give the user a file a plugin
     // made (the packager's APK or app). It goes where the studio's own Export

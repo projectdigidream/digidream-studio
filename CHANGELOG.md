@@ -7,6 +7,10 @@ anything not released yet is under **Unreleased**.
 
 ### Added
 
+- **Plugins share the module's palette and pictures**: 'set-palette' writes the
+  module's palette (sources/palette.json, one undo step) that 'palette' reads,
+  so qPainter and ThreeSprite can keep one palette; 'texture-png' gives a
+  texture's picture.
 - **A wall's texture sized along it and up it on its own**: the wall's panel has
   "size along" and "size up" (the engine's `xscale` / `yscale`, engine
   d630c99). Written as `xscale`/`yscale` only when the two differ, so every
