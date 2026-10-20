@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.1.4 -- 2026-10-20
+
+A development release (the dev branch), built on engine 0.2.2.1, with
+ThreeSprite 0.2.2.1 and qPainter 0.2.0.1 bundled.
+
 ### Added
 
 - **Plugins share the module's palette and pictures**: 'set-palette' writes the
