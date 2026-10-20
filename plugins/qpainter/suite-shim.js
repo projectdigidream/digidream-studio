@@ -26,6 +26,11 @@
     const suite = await connectSuite({
       async onInit ({ name, payload }) {
         const q = await embed()
+        // Its exports and palettes, through the studio's own save (the system's
+        // dialog in the apps): a download from a frame goes nowhere on a phone.
+        q.onSave?.(async (bytes, name) => !!(await suite.query('share', { name, bytes }, { timeout: 30 * 60 * 1000 })))
+        // And what it opens, through the studio's file picker: a file input in a frame opens nothing on a phone.
+        q.onOpen?.((accept) => suite.query('import-file', { accept }, { timeout: 30 * 60 * 1000 }))
         await q.load(payload instanceof Uint8Array ? payload : new TextEncoder().encode(payload ?? ''), name)
         q.onChange(() => {
           suite.dirty(true)

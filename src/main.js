@@ -487,6 +487,13 @@ S.pluginQuery = async (what, arg, ctx = {}) => {
       if (typeof arg?.name !== 'string' || !(arg.bytes instanceof Uint8Array)) throw new Error('share needs { name, bytes }')
       return !!(await shell.share(arg.name.replace(/[\\/]/g, '_'), arg.bytes))
     }
+    // The other way: a file the user picks, for a plugin -- the system's picker
+    // in the apps, a file input in a browser; a frame's own picker opens
+    // nothing on a phone. { name, bytes }, or null when cancelled.
+    case 'import-file': {
+      const f = await shell.importFile(String(arg?.accept ?? ''))
+      return f ? { name: f.name, bytes: f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes) } : null
+    }
     // A web page in the system's browser (where to make a token, a repository):
     // a link in a plugin's frame goes nowhere in the apps. https only. In a
     // browser it answers false and opens nothing: a tab opened from here, after

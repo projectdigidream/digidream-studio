@@ -7,6 +7,13 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **qPainter in the studio on a phone could not export or import** (a palette, a
+  PNG, an image): its files now go through the studio's own save and file
+  picker. A plugin can ask for a file with the new 'import-file' question, as it
+  gives one with 'share'. qPainter bundled at d3cf52e.
+
+### Fixed
+
 - **Corners were hard to hit on a phone**: on a touch screen they are drawn
   twice the size, a tap within a finger's width of one selects it, and closing
   a room on its first corner or snapping onto a corner reaches further.
