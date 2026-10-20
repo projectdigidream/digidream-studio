@@ -68,7 +68,12 @@
     library: {
       textures: async () => (await ask('list', 'file:texture')).map((t) => t.key),
       texture: async (key) => { const p = await ask('read', { kind: 'file:texture', key }); return p instanceof Uint8Array ? p : new TextEncoder().encode(String(p ?? '')) },
-      palette: async () => { const p = await ask('palette'); return p ? JSON.stringify(p) : null }
+      palette: async () => { const p = await ask('palette'); return p ? JSON.stringify(p) : null },
+      // the module palette (digidream-palette): opaque #rrggbb, no duplicates
+      setPalette: async (name, colors) => {
+        const hex = [...new Set(colors.map((c) => '#' + c.slice(0, 3).map((v) => v.toString(16).padStart(2, '0')).join('')))]
+        return !!(await ask('set-palette', { format: 'digidream-palette', version: 1, name, colors: hex }))
+      }
     }
   }
 
