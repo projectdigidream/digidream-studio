@@ -7,8 +7,8 @@ anything not released yet is under **Unreleased**.
 
 ## 0.4.2 -- 2026-10-20
 
-Everything since 0.4.1, built on engine 0.2.2.2, with ThreeSprite 0.2.2.1 and
-qPainter 0.2.0.1 bundled. (The development releases 0.4.1.1 to 0.4.1.5 below
+Everything since 0.4.1, built on engine 0.2.3, with ThreeSprite 0.2.3 and
+qPainter 0.2.1 bundled. (The development releases 0.4.1.1 to 0.4.1.5 below
 had it piece by piece.)
 
 ### Added
