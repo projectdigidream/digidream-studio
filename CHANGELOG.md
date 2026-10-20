@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Changed
+
+- **The sidebar is in groups**: World, Gameplay, Art, Sound, Interface, Logic
+  and Module, each under a small heading (a line where the sidebar is icons
+  only). Sky now sits with Maps; a plugin's section goes under Module.
+
 ## 0.4.1.5 -- 2026-10-20
 
 A development release (the dev branch), built on engine 0.2.2.2.

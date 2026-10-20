@@ -14,6 +14,17 @@
 //
 import { el, icon, withIcon } from '../ui.js'
 
+// The rail's groups, in order; the last takes any section no group names.
+const RAIL_GROUPS = [
+  { id: 'world', label: 'World', ids: ['maps', 'sky'] },
+  { id: 'gameplay', label: 'Gameplay', ids: ['monsters', 'player', 'controls', 'weapons', 'missiles', 'props'] },
+  { id: 'art', label: 'Art', ids: ['sprites', 'particles', 'textures'] },
+  { id: 'sound', label: 'Sound', ids: ['music', 'sounds'] },
+  { id: 'interface', label: 'Interface', ids: ['screens', 'panels', 'style'] },
+  { id: 'logic', label: 'Logic', ids: ['scripts', 'graphs'] },
+  { id: 'module', label: 'Module', ids: ['settings'] }
+]
+
 const STYLE = `
 :root{--rail-w:212px}
 @media (max-width:1100px){:root{--rail-w:68px}}
@@ -28,6 +39,8 @@ const STYLE = `
 .sd-rail .ico{font-size:17px;width:22px;text-align:center;flex:0 0 auto;--icon-size:20px}
 .sd-rail .sd-mod{font-weight:700;min-height:48px}
 .sd-rail .sd-gap{flex:1 1 auto;min-height:8px}
+.sd-rail .sd-group{flex:0 0 auto;margin:8px 4px 2px;padding:6px 6px 0;border-top:1px solid var(--dnp-color-line-main,#333);font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;white-space:nowrap;overflow:hidden}
+@media (max-width:1100px){.sd-rail .sd-group{margin:5px 6px 3px;padding:0;height:0;font-size:0}}
 .sd-rail .sd-badge{margin-left:auto;padding:0 6px;font-size:11px}
 @media (max-width:1100px){.sd-rail .lbl,.sd-rail .sd-badge{display:none}.sd-rail.ui-rail .ui-rail__item{justify-content:center;padding:0}}
 .sd-page{position:fixed;left:var(--rail-w);right:0;top:0;bottom:0;z-index:65;background:var(--dnp-color-bg-app);color:var(--dnp-color-text-primary);display:flex;flex-direction:column;
@@ -176,8 +189,14 @@ export class Shell {
       onclick: () => this.router.go('home') }, [el('span', { class: 'ico' }, withIcon('section.home')), el('span', { class: 'lbl ui-rail__label', text: this.moduleName }),
       // A plugin's word on the open module (a sync's state): a dot, its text on hover.
       this.moduleStatus?.text ? el('span', { class: `sd-modstatus ui-dot${this.moduleStatus.level && this.moduleStatus.level !== 'info' ? ` ui-dot--${this.moduleStatus.level}` : ''}`, title: this.moduleStatus.text, 'data-status-level': this.moduleStatus.level ?? 'info' }) : null].filter(Boolean))]
-    for (const s of this.router.rail) {
-      if (s.id === 'home') continue
+    // IN GROUPS, each under a small heading (a line where the rail is icons
+    // only): what an editor is for, not the order it registered in. A
+    // section no group names (a plugin's) goes with the module's own.
+    const gi = (s) => { const i = RAIL_GROUPS.findIndex((g) => g.ids.includes(s.id)); return i < 0 ? RAIL_GROUPS.length - 1 : i }
+    const sections = this.router.rail.filter((s) => s.id !== 'home').map((s, n) => ({ s, n, g: gi(s) })).sort((a, b) => a.g - b.g || a.n - b.n)
+    let group = -1
+    for (const { s, g } of sections) {
+      if (g !== group) { group = g; items.push(el('div', { class: 'sd-group', role: 'separator', 'data-group': RAIL_GROUPS[g].id, text: RAIL_GROUPS[g].label })) }
       const n = this.badges.get(s.id) ?? 0
       items.push(el('button', { class: 'ui-rail__item', title: s.label, 'data-section': s.id, 'data-on': lit === s.id ? '1' : '0', onclick: () => (this.router.current?.id === s.id && !this.router.current.arg ? this.router.remount() : this.router.go(s.id)) },
         [icon(s.icon, 'ico'), el('span', { class: 'lbl ui-rail__label', text: s.label }), n ? el('span', { class: 'sd-badge ui-rail__badge ui-badge ui-badge--error', text: String(n) }) : null].filter(Boolean)))
