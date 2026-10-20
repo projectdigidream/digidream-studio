@@ -5,7 +5,7 @@
 // engine's particle kinds bursting where it lands and trailing it on its way;
 // what it does when it hits, runs out, bounces and on its way; and who fires it.
 //
-import { el, button, confirmDialog, typedValue } from '../ui.js'
+import { el, button, confirmDialog, typedValue, NUM_KEYS } from '../ui.js'
 import { MISSILE_ACTIONS, groupsWithMore, unphrased, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
 import { flight } from '../missileflight.js'
 import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
@@ -225,7 +225,7 @@ export class MissileEditor {
       soundField: this.S.soundField, changed: () => this.changed(), actSpec: (n) => this.S.vocab?.mobActions?.get(n)
     }
     const rows = list.map((p, i) => el('div', { class: 'me-crow' }, [
-      key === 'sequence' ? (() => { const at = el('input', { type: 'text', inputmode: 'decimal', value: String(secs(p.at ?? 0)), 'aria-label': 'at, in seconds of flight', style: 'width:56px' }); at.addEventListener('change', () => { const t = ticksOf(at.value); if (t !== undefined) { p.at = t; this.changed() } }); return el('span', { class: 'me-numw' }, [el('span', { class: 'me-muted', text: 'at' }), at, el('span', { class: 'me-muted', text: 's' })]) })() : null,
+      key === 'sequence' ? (() => { const at = el('input', { ...NUM_KEYS, value: String(secs(p.at ?? 0)), 'aria-label': 'at, in seconds of flight', style: 'width:56px' }); at.addEventListener('change', () => { const t = ticksOf(at.value); if (t !== undefined) { p.at = t; this.changed() } }); return el('span', { class: 'me-numw' }, [el('span', { class: 'me-muted', text: 'at' }), at, el('span', { class: 'me-muted', text: 's' })]) })() : null,
       sentenceEl(MISSILE_ACTIONS, p, ctx),
       el('button', { class: 'me-x', 'aria-label': 'Remove', icon: 'action.close', onclick: () => { list.splice(i, 1); if (!list.length) delete m[key]; this.changed() } })
     ]))

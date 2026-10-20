@@ -7,7 +7,7 @@
 // re-renders. The words come from phrases.js; anything the phrasebook lacks is
 // edited with argform.js, so no part of the vocabulary is out of reach.
 //
-import { el, button, select, muted, withIcon } from '../ui.js'
+import { el, button, select, muted, withIcon, NUM_KEYS } from '../ui.js'
 import { shown, store, sentence, groupsOf, groupsWithMore, condKey, actKey, newCond, newAct, secs, ticksOf, shortOf } from '../phrases.js'
 import { argFields } from '../argform.js'
 
@@ -263,7 +263,7 @@ export function sentenceEl (table, obj, ctx, key = null) {
     const set = (v) => { store(part, obj, v); ctx.changed() }
     const v = shown(part, obj)
     if (kind === 'n') {
-      const i = el('input', { type: 'text', inputmode: 'decimal', value: v ?? '', 'aria-label': arg })
+      const i = el('input', { ...NUM_KEYS, value: v ?? '', 'aria-label': arg })
       i.addEventListener('change', () => { if (i.value.trim() !== '' && Number.isFinite(Number(i.value))) set(Number(i.value)) })
       i.addEventListener('focus', () => i.select())
       const unit = part[2] === 'mps' ? 'm/s' : part[2] === 's' ? 's' : part[2] === 'm' ? 'm' : part[2] === 'n+1' ? '' : part[2] === 'turn' ? '°' : part[2]
@@ -454,7 +454,7 @@ const kindOf = (table, p) => table[actKey(table, p)]?.k ?? 'turn'
 
 function stepEditor (seq, i, table, ctx, o) {
   const p = seq[i]
-  const at = el('input', { type: 'text', inputmode: 'decimal', value: String(secs(p.at)), 'aria-label': 'at, in seconds' })
+  const at = el('input', { ...NUM_KEYS, value: String(secs(p.at)), 'aria-label': 'at, in seconds' })
   at.addEventListener('change', () => { const t = ticksOf(at.value); if (t !== undefined) { p.at = t; seq.splice(seq.indexOf(p), 1); insertByTime(seq, p); o.setSel(seq.indexOf(p)); ctx.changed() } })
   const mis = p.kind ?? p.missile
   return el('div', { class: 'me-step' }, [
@@ -501,7 +501,7 @@ function declaredSwing (p, table, ctx, o) {
 
 /** A labelled number field kept in range; out of range says so and keeps the nearest. */
 export function numField (label, value, unit, apply, { hint = '', lo = null, hi = null, placeholder = '', say = null } = {}) {
-  const i = el('input', { type: 'text', inputmode: 'decimal', value: value ?? '', placeholder, 'aria-label': label })
+  const i = el('input', { ...NUM_KEYS, value: value ?? '', placeholder, 'aria-label': label })
   i.addEventListener('focus', () => i.select())
   i.addEventListener('change', () => {
     if (i.value.trim() === '') { apply(null); return }

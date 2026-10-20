@@ -581,9 +581,16 @@ export function slider (label, value, { min, max, step = 0.25 }, onChange) {
  * and limits and moves it, as a drag would (its input and change events).
  * Set the range's value from code? Call box.sync().
  */
+// A TYPED NUMBER'S KEYBOARD. inputmode "decimal" brings Android's decimal pad,
+// which has no minus key: an offset or a height below zero could not be typed.
+// A number field brings the number pad, which has one; on a desktop, where the
+// keyboard is the keyboard, a plain text box (no spinner arrows).
+const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+export const NUM_KEYS = COARSE ? { type: 'number', step: 'any' } : { type: 'text', inputmode: 'decimal' }
+
 export function typedValue (range, label = range.getAttribute('aria-label') ?? '', shown = range.value) {
   // `shown`: the true value, which the range may hold only to its step (1.3 on a 0.25 step)
-  const box = el('input', { class: 'st-val', type: 'text', inputmode: 'decimal', value: String(shown), 'aria-label': label })
+  const box = el('input', { class: 'st-val', ...NUM_KEYS, value: String(shown), 'aria-label': label })
   box.sync = () => { if (document.activeElement !== box) box.value = range.value }
   range.addEventListener('input', box.sync)
   box.addEventListener('focus', () => box.select())

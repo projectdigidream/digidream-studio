@@ -12,7 +12,7 @@
 // or as a graph, beside an editor of the one picked and the preview), Attacks,
 // Looks, Advanced.
 //
-import { el, button, ask, confirmDialog } from '../ui.js'
+import { el, button, ask, confirmDialog, NUM_KEYS } from '../ui.js'
 import { MOB_CONDITIONS, MOB_ACTIONS, WEAPON_CONDITIONS, WEAPON_ACTIONS, sentence, shortOf, secs, ticksOf, fxNum, fxOf, condKey, unphrased } from '../phrases.js'
 import { compileMob, compileWeapon } from '../brainc.js'
 import { nextPropId } from '../props_emit.js'
@@ -467,7 +467,7 @@ export class NodeEditor {
   phaseHead (p, n, open = null) {
     const name = el('input', { class: 'me-phname', value: p.name, 'aria-label': 'Name of this phase' })
     name.addEventListener('change', () => { p.name = name.value.trim() || p.name; this.changed() })
-    const sp = el('input', { type: 'text', inputmode: 'decimal', value: p.speed ?? '', placeholder: String(this.prop?.speed ?? 4), 'aria-label': 'How fast it runs in this phase', style: 'width:56px' })
+    const sp = el('input', { ...NUM_KEYS, value: p.speed ?? '', placeholder: String(this.prop?.speed ?? 4), 'aria-label': 'How fast it runs in this phase', style: 'width:56px' })
     sp.addEventListener('change', () => { const v = sp.value.trim() === '' ? undefined : Number(sp.value); if (v === undefined || Number.isFinite(v)) { if (v === undefined) delete p.speed; else p.speed = v; this.changed() } })
     // when it starts: the rule for any state that goes into one of its states
     const door = (this.thing.any ?? []).find((r) => r.to && this.nodes[r.to]?.phase === p.id)
@@ -1035,7 +1035,7 @@ export class NodeEditor {
     return [el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its numbers' }),
       el('span', { class: 'me-muted', text: 'Numbers it remembers, like which phase it is in or a cooldown. One exists as soon as a step sets it or a rule checks it: add a "set the number" step to make one.' }),
       ...(names.length ? names.map((v) => {
-        const start = el('input', { type: 'text', inputmode: 'numeric', value: String(this.thing.vars?.[v] ?? 0), 'aria-label': `${v} starts at`, style: 'width:56px' })
+        const start = el('input', { ...NUM_KEYS, value: String(this.thing.vars?.[v] ?? 0), 'aria-label': `${v} starts at`, style: 'width:56px' })
         start.addEventListener('change', () => { const n = Math.round(Number(start.value)); if (Number.isFinite(n)) { (this.thing.vars ??= {})[v] = n; this.changed() } })
         return el('div', { class: 'me-frow inline' }, [el('span', { class: 'me-mono', text: v }), el('span', { class: 'me-muted', text: [...vars[v]].filter((t) => !/^starts at/.test(t)).join('; ') }), el('label', { class: 'me-muted' }, ['starts at ', start])])
       }) : [el('span', { class: 'me-muted', text: 'none yet' })])]), ...more.filter(Boolean)]
