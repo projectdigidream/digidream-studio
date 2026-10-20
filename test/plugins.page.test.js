@@ -188,6 +188,19 @@ if (await page.evaluate(() => window.__studio.plugins.plugins.has('threesprite')
   // Until the studio's document arrives, ThreeSprite shows a blank project of its own: wait for the file.
   await ts.waitForFunction(() => window.__editorStore?.getState().source.path === 'SPIRIT.tsprite', { timeout: 60000 })
   check(await ts.evaluate(() => getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)'), 'ThreeSprite comes up styled (its stylesheet is served as CSS)')
+  // The module, straight into ThreeSprite (its window.threespriteHost, set by the shim): no files in between.
+  {
+    const names = await ts.evaluate(() => window.threespriteHost.library.textures())
+    const studioNames = await page.evaluate(() => Object.keys(window.__studio.module.textures ?? {}).sort())
+    check(JSON.stringify(names) === JSON.stringify(studioNames), `ThreeSprite lists the module's textures (${names.length})`)
+    if (names.length) check(await ts.evaluate(async (n) => (await window.threespriteHost.library.texture(n)).length > 0, names[0]), `and reads one (${names[0]})`)
+    await page.evaluate(() => { window.__palBefore = window.__studio.rec.assets['sources/palette.json'] ?? null })
+    check(await ts.evaluate(() => window.threespriteHost.library.setPalette('From ThreeSprite', [[1, 2, 3, 255], [4, 5, 6, 255], [1, 2, 3, 255]])), 'ThreeSprite writes the module palette')
+    const written = await page.evaluate(async () => JSON.parse(await window.__studio.rec.assets['sources/palette.json'].text()))
+    check(written.format === 'digidream-palette' && JSON.stringify(written.colors) === '["#010203","#040506"]', `as a digidream-palette, duplicates dropped (${JSON.stringify(written.colors)})`)
+    check(/"#010203"/.test(await ts.evaluate(() => window.threespriteHost.library.palette())), 'and reads it back')
+    await page.evaluate(() => { const S = window.__studio, b = window.__palBefore; if (b) S.rec.assets['sources/palette.json'] = b; else delete S.rec.assets['sources/palette.json'] })
+  }
   await ts.evaluate(() => window.__editorStore.getState().commit('suite test', (d) => { d.animations[d.animationOrder[0]].name = 'suite_edit' }))
   await page.waitForFunction(() => /^changed/.test(document.querySelector('.sx-status')?.textContent ?? ''), { timeout: 10000 })
   await page.click('[data-action="editor-back"]')
