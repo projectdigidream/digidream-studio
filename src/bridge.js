@@ -4,7 +4,7 @@
 // A native shell (Electron, Android, iOS) publishes `window.dnp.studio`: a
 // handful of Promise-returning calls that write the game tree, restart the
 // server on it, and hand files in and out through the platform's own
-// picker and share sheet. A plain browser has none of that; it can edit and
+// picker and save dialog. A plain browser has none of that; it can edit and
 // export a pack, and says so where Play would be.
 //
 // Every shell implements the same seven names. The studio never asks which
