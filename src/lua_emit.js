@@ -26,6 +26,13 @@ import { toLua, luaString, block } from './lua.js'
 
 const ENTITIES_HEADER = `-- Placed props and monsters. Positions are eighths of a unit, which is the
 -- studio's grid, so fx.frac(n, 8) is exact.`
+const ENTITIES_HEADER_FINE = `-- Placed props and monsters. Positions are 64ths of a unit (the studio's
+-- grid, switched off), so fx.frac(n, 64) is exact.`
+
+// Positions are written in eighths, as they always were, unless one of them
+// needs the finer 64ths (placed with the grid off): a map whose things all
+// sit on the 8th writes exactly what it wrote before.
+const denominator = (vals) => (vals.every((v) => Number.isInteger(Math.round(Number(v ?? 0) * RES) / (RES / 8))) ? 8 : RES)
 
 /**
  * @param doc       the document
@@ -107,12 +114,13 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   const mobs = doc.entities.filter((e) => e.kind === 'mob')
   if (props.length || mobs.length) {
     // a: the start facing in brads (a full turn is 2^32; 0 is +x), when set.
-    const P = (e) => `{name=${luaString(e.name)}, x=${Math.round(e.x * RES)}, y=${Math.round(e.y * RES)}, z=${Math.round(e.z * RES)}` +
+    const D = denominator([...props, ...mobs].flatMap((e) => [e.x, e.y, e.z]))
+    const P = (e) => `{name=${luaString(e.name)}, x=${Math.round(e.x * D)}, y=${Math.round(e.y * D)}, z=${Math.round(e.z * D)}` +
                      (e.angle ? `, a=${facingBrad(e.angle)}` : '') + (e.dormant ? ', dormant=true}' : '}')
     const body = [
-      ENTITIES_HEADER,
+      D === 8 ? ENTITIES_HEADER : ENTITIES_HEADER_FINE,
       'if dnp ~= nil and fx ~= nil and vec3 ~= nil then',
-      `  local function du(n) return fx.frac(n, ${RES}) end`,
+      `  local function du(n) return fx.frac(n, ${D}) end`,
       '  -- props',
       '  for _, p in ipairs({',
       ...props.map((e) => `    ${P(e)},`),
@@ -147,12 +155,13 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   // does (markers are not saved; a level hangs its own).
   const signs = doc.entities.filter((e) => e.kind === 'sign')
   if (signs.length) {
-    const u = (v) => Math.round(Number(v) * RES)
+    const D = denominator(signs.flatMap((e) => [e.x, e.y, e.z, e.height, e.range]))
+    const u = (v) => Math.round(Number(v) * D)
     const Sg = (e) => `{t=${luaString(e.name)}, x=${u(e.x)}, y=${u(e.y)}, z=${u(e.z)}` + (e.text ? `, text=${luaString(String(e.text).slice(0, 128))}` : '') +
                       (e.height ? `, h=${u(e.height)}` : '') + (e.range ? `, r=${u(e.range)}` : '') + (e.through ? ', w=true' : '') + (e.debug ? ', d=true' : '') + '}'
     const body = [
       'if dnp ~= nil and dnp.mark ~= nil and fx ~= nil and vec3 ~= nil then',
-      `  local function du(n) return fx.frac(n, ${RES}) end`,
+      `  local function du(n) return fx.frac(n, ${D}) end`,
       '  for _, s in ipairs({',
       ...signs.map((e) => `    ${Sg(e)},`),
       '  }) do',

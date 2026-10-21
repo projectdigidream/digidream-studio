@@ -57,7 +57,7 @@ import { Preview } from './preview.js'
 import { TextureCache } from './textures.js'
 import { SpriteLibrary } from './sprites.js'
 import { Gestures } from './gestures.js'
-import { History } from './history.js'
+import { History, keepHistories, takeHistories, restoreSteps } from './history.js'
 import { Store, debounce, importSuite } from './store.js'
 import { Snapshots, EVERY_MS, ON_OPEN_MS } from './snapshots.js'
 import { STUDIO_VERSION } from './version.js'
@@ -1331,6 +1331,7 @@ function onKey (e) {
     case 'q': S.viewport.rotate(-Math.PI / 4); break
     case 'e': S.viewport.rotate(Math.PI / 4); break
     case 'v': S.ui.on.view(); break
+    case 'g': S.toggleFreePlace(); break
     case 'ArrowLeft': S.viewport.panBy(40, 0); break
     case 'ArrowRight': S.viewport.panBy(-40, 0); break
     case 'ArrowUp': S.viewport.panBy(0, 40); break
@@ -1730,6 +1731,8 @@ async function play ({ start = null } = {}) {
   S.status('starting the game…', 'ok')
   await screen.step('start', 'the game server, then the game')
   rememberReturn()
+  // and what undo can take back, which the page coming back would not know
+  await keepHistories(S.module.id, S.docName, S.history, S.moduleHistory).catch((e) => console.warn('[studio] undo not kept over Play:', e))
   try {
     // The shell starts the server, then loads the game in this window: the
     // screen stays until the page is replaced.
@@ -1839,9 +1842,18 @@ function scriptBudget () {
 }
 
 /** The map editor's ⋯: what is about this map, not the module. */
+// SNAP TO THE GRID, or not (tools.js step): per device, remembered.
+try { S.freePlace = localStorage.getItem('dnp.studio.freePlace') === '1' } catch {}
+S.toggleFreePlace = () => {
+  S.freePlace = !S.freePlace
+  try { localStorage.setItem('dnp.studio.freePlace', S.freePlace ? '1' : '0') } catch {}
+  S.status(S.freePlace ? 'grid off: things go exactly where you put them (a corner still joins a corner or wall it lands on)' : `grid on: things snap to the map's grid (${S.doc.grid})`, 'ok')
+}
+
 function showMenu () {
   S.ui.showMenu([
     ['Map settings…', showMapSettings],
+    [S.freePlace ? 'Snap to grid: off (turn on)' : 'Snap to grid: on (turn off)', () => S.toggleFreePlace()],
     ['Play log…', () => S.go('playlog')],
     ['Camera…', () => S.showCamera()],
     ['Import texture (PNG)', () => S.importTexture()],
@@ -1852,7 +1864,7 @@ function showMenu () {
       muted('Place: monsters, props, spawns and lights, on the floor you tap.'),
       muted('Triggers: doors, lifts, switches, teleports, ambushes and exits in one tap, then change any detail on the card.'),
       muted('Graph: node scripting for this map. The module\'s monsters, player, weapons and everything else are in the rail on the left (or ‹ on a phone).'),
-      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Q/E rotate · V plan/game view · +/- zoom · arrows pan.')
+      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Q/E rotate · V plan/game view · G snap to grid on/off · +/- zoom · arrows pan.')
     ])]
   ])
 }
@@ -1893,6 +1905,14 @@ async function finishBoot () {
         if (v.viewHeight) S.viewport.viewHeight = v.viewHeight
         if (typeof v.yaw === 'number') S.viewport.yaw = v.yaw
         S.viewport.resize()
+      }
+      // Undo as it was before Play (history.js keepHistories).
+      const kept = await takeHistories().catch(() => null)
+      if (kept && kept.module === S.module.id) {
+        restoreSteps(S.moduleHistory, kept.module_)
+        if (kept.map === S.docName) restoreSteps(S.history, kept.map_)
+        S.ui.setHistory(S.history.canUndo, S.history.canRedo)
+        S.syncHistory?.()
       }
       S.status(`back from playing ${back.map}`, 'ok')
       // What the play-test logged that looks wrong, said on the way back.

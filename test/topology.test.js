@@ -9,7 +9,7 @@
 // and a body walking through the half that borders the second room would hit
 // a wall the author never drew.
 //
-import { newDoc, addSector, addSpawn, validate } from '../src/doc.js'
+import { newDoc, addSector, addSpawn, validate, RES } from '../src/doc.js'
 import { normalize, derive, sectorAt, snapToMap, nearestEdgePoint } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { requireOracles, bakeNative, readBaked, sideBetween } from './oracle.js'
@@ -238,7 +238,7 @@ async function bake (doc, opts) {
   let p = snapToMap(doc, 8.3, 7.8, { tolerance: tol })
   check(p.kind === 'corner' && p.x === 8 && p.y === 8, `near a corner lands on it (${JSON.stringify(p)})`)
   p = snapToMap(doc, 8.4, 3.1, { tolerance: tol })
-  check(p.kind === 'edge' && p.x === 8 && p.y === 3.125, `near a wall lands exactly on it, at the finest grid (${JSON.stringify(p)})`)
+  check(p.kind === 'edge' && p.x === 8 && p.y === Math.round(3.1 * RES) / RES, `near a wall lands exactly on it, at the finest grid (${JSON.stringify(p)})`)
   // The diagonal from (20,8) to (14,12) runs 6 across and 4 up: in eighths, 48
   // and 32, gcd 16, so exactly-on-it points are every (3,2)/8 -- and the
   // nearest one is what is offered.

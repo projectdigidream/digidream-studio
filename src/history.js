@@ -48,3 +48,48 @@ export class History {
     return structuredClone(this.current)
   }
 }
+
+// UNDO SURVIVES PLAY. Play gives the window to the game, and coming back is a
+// fresh page: the histories, which live in memory, were gone. Kept here for
+// the one trip (IndexedDB, since the module's holds pictures) and taken back
+// at the boot that returns (main.js finishBoot).
+const KEEP_DB = 'dnp.studio.undo'
+const keepDb = () => new Promise((resolve, reject) => {
+  const req = indexedDB.open(KEEP_DB, 1)
+  req.onupgradeneeded = () => req.result.createObjectStore('h')
+  req.onsuccess = () => resolve(req.result)
+  req.onerror = () => reject(req.error)
+})
+const steps = (h) => (h ? { past: h.past, future: h.future } : null)
+
+/** Keep the map's and the module's histories over a trip to the game. */
+export async function keepHistories (module, map, mapHistory, moduleHistory) {
+  const db = await keepDb()
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('h', 'readwrite')
+    tx.objectStore('h').put({ module, map, at: Date.now(), map_: steps(mapHistory), module_: steps(moduleHistory) }, 'play')
+    tx.oncomplete = resolve; tx.onerror = () => reject(tx.error)
+  })
+  db.close()
+}
+
+/** What keepHistories kept (once: it is gone after), or null. */
+export async function takeHistories () {
+  const db = await keepDb()
+  const got = await new Promise((resolve, reject) => {
+    const tx = db.transaction('h', 'readwrite')
+    const st = tx.objectStore('h')
+    const r = st.get('play')
+    r.onsuccess = () => { st.delete('play'); resolve(r.result ?? null) }
+    tx.onerror = () => reject(tx.error)
+  })
+  db.close()
+  return got
+}
+
+/** A history given back its steps, around the present it has now. */
+export function restoreSteps (h, kept) {
+  if (!h || !kept) return
+  h.past = kept.past ?? []
+  h.future = kept.future ?? []
+}

@@ -5,6 +5,19 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Snap to the grid, or not**: the map's ⋯ menu (or G) switches the grid off,
+  and corners, rooms, things and points go exactly where they are put, to a
+  64th of a unit; a corner still joins another room's corner or wall it lands
+  on. Remembered per device. The map's finest step is a 64th now (an 8th
+  before); existing maps are unchanged.
+
+### Fixed
+
+- **Undo did not survive Play**: coming back from the game, the map's and the
+  module's undo started empty. They are kept over the trip.
+
 ## 0.4.2 -- 2026-10-20
 
 Everything since 0.4.1, built on engine 0.2.3, with ThreeSprite 0.2.3 and

@@ -17,6 +17,12 @@ const HIT_PX = 14
 const CLOSE_PX = COARSE ? 30 : 18
 const SNAP_PX = COARSE ? 26 : 16
 
+// THE GRID SWITCHED OFF (S.freePlace, the map menu or G): things land where
+// they are put, to a 64th of a unit -- what the map format keeps exactly. A
+// corner still joins another room's corner or wall it lands on.
+const FINE = 1 / 64 // doc.js MIN_GRID
+const step = (S, coarse) => (S.freePlace ? FINE : coarse)
+
 /**
  * Where a corner goes: onto another room's corner or wall when one is within
  * SNAP_PX on screen (so rooms connect and walls are shared), else onto the
@@ -24,7 +30,7 @@ const SNAP_PX = COARSE ? 26 : 16
  */
 export function snapAt (S, x, y, z = 0, except = null) {
   // at most half a unit, however far out the view: zoomed out, a corner meant to leave a gap jumped onto the wall
-  return snapToMap(S.doc, x, y, { tolerance: Math.min(SNAP_PX * S.viewport.worldPerPixel(z), 0.5), except })
+  return snapToMap(S.doc, x, y, { tolerance: Math.min(SNAP_PX * S.viewport.worldPerPixel(z), 0.5), except, grid: step(S, S.doc.grid) })
 }
 
 export function groundAt (S, info, z) {
@@ -120,8 +126,8 @@ export function onTap (S, info) {
       const room = g0 ? sectorAt(S.doc, g0.x, g0.y) : null
       const g = room ? groundAt(S, info, room.floor) ?? g0 : g0
       if (g) {
-        const step = S.doc.grid || 0.25
-        const snapTo = (v) => Math.round(v / step) * step
+        const st = step(S, S.doc.grid || 0.25)
+        const snapTo = (v) => Math.round(v / st) * st
         const p = S.pick; S.pick = null; S.redraw()
         p.resolve({ kind: 'point', x: snapTo(g.x), y: snapTo(g.y), z: room?.floor ?? 0, sectorId: room?.id ?? null })
         return
@@ -208,7 +214,7 @@ function pathTap (S, info) {
   const z = sel ? sel.z : (p.points.length ? p.points[p.points.length - 1].z : S.workZ())
   const g = groundAt(S, info, z)
   if (!g) return
-  const pt = addPathPoint(S.doc, p, snap(g.x, 1 / 8), snap(g.y, 1 / 8), z)
+  const pt = addPathPoint(S.doc, p, snap(g.x, step(S, 1 / 8)), snap(g.y, step(S, 1 / 8)), z)
   S.selectPathPoint(pt.id, { quiet: true })
   S.commit()
 }
@@ -259,7 +265,7 @@ function placeTap (S, info) {
   const g = groundAt(S, info, 0)
   if (!g) return
   const sec = sectorAt(S.doc, g.x, g.y)
-  const x = snap(g.x, 1 / 8); const y = snap(g.y, 1 / 8)
+  const x = snap(g.x, step(S, 1 / 8)); const y = snap(g.y, step(S, 1 / 8))
   const z = sec ? sec.floor : 0
   let sel = null
   // A spawn the map has already is MOVED here: a second "start" left the
@@ -344,12 +350,12 @@ export function onDrag (S, info) {
     const p = snapAt(S, d.start.x + dx, d.start.y + dy, d.s.floor, d.s.id)
     d.v.x = p.x; d.v.y = p.y
   } else if (d.kind === 'sector') {
-    const sx = snap(dx, S.doc.grid); const sy = snap(dy, S.doc.grid)
+    const sx = snap(dx, step(S, S.doc.grid)); const sy = snap(dy, step(S, S.doc.grid))
     d.s.verts.forEach((v, i) => { v.x = d.start[i].x + sx; v.y = d.start[i].y + sy })
   } else if (d.kind === 'thing') {
-    d.e.x = snap(d.start.x + dx, 1 / 8); d.e.y = snap(d.start.y + dy, 1 / 8)
+    d.e.x = snap(d.start.x + dx, step(S, 1 / 8)); d.e.y = snap(d.start.y + dy, step(S, 1 / 8))
   } else if (d.kind === 'pathpoint') {
-    d.pt.x = snap(d.start.x + dx, 1 / 8); d.pt.y = snap(d.start.y + dy, 1 / 8)
+    d.pt.x = snap(d.start.x + dx, step(S, 1 / 8)); d.pt.y = snap(d.start.y + dy, step(S, 1 / 8))
   }
   S.redraw()
   // Reshape the one sector on the loaded map; a bake only when that cannot
@@ -415,7 +421,7 @@ export function onLongPress (S, info) {
     const i = s.verts.findIndex((v) => v.edge.id === hit.id)
     const a = s.verts[i]; const b = s.verts[(i + 1) % s.verts.length]
     const { id: _cut, ...attrs } = a.edge
-    const v = { id: newId(S.doc, 'v'), x: snap((a.x + b.x) / 2, S.doc.grid), y: snap((a.y + b.y) / 2, S.doc.grid),
+    const v = { id: newId(S.doc, 'v'), x: snap((a.x + b.x) / 2, step(S, S.doc.grid)), y: snap((a.y + b.y) / 2, step(S, S.doc.grid)),
                 edge: newEdge(S.doc, { ...attrs, flags: { ...a.edge.flags } }) }
     s.verts.splice(i + 1, 0, v)
     S.select({ kind: 'vertex', id: v.id, sectorId: s.id })
