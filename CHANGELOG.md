@@ -7,7 +7,7 @@ anything not released yet is under **Unreleased**.
 
 ## 0.4.2.1 -- 2026-10-21
 
-A development release (the dev branch), built on engine 0.2.3.
+A development release (the dev branch), built on engine 0.2.3.1.
 
 ### Added
 
