@@ -862,6 +862,7 @@ const STYLE = `
 .pw-safe{position:absolute;border:1px dashed var(--cv-designer-safe);pointer-events:none}
 .pw-hits{position:absolute;inset:0}
 .pw-behind{opacity:.45}
+.pw-empty[hidden]{display:none}
 .pw-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dnp-color-text-secondary);font-weight:600;font-size:14px;font-family:var(--dnp-font-ui)}
 .pw-hits{z-index:60}
 .pw-box{position:absolute;box-sizing:border-box;touch-action:none;cursor:grab}

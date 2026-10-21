@@ -277,14 +277,17 @@ export class Viewport {
     return { x: hit.x, y: -hit.z }
   }
 
-  /** Editor furniture under a screen point: the nearest handle or marker, with its id. Badges are not things. */
-  pickFurniture (clientX, clientY) {
+  /**
+   * Editor furniture under a screen point: the nearest handle or marker, with its id. Badges are not things.
+   * `reach` narrows how far from a corner still counts (px): a small room's own corners must not cover it.
+   */
+  pickFurniture (clientX, clientY, reach = CORNER_PX) {
     this.#place()
     const ndc = new THREE.Vector2((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1)
     this.raycaster.setFromCamera(ndc, this.camera)
     // The nearest corner within reach on screen, before anything a ray hits:
     // a corner drawn ten pixels wide was all but impossible to tap on a phone.
-    let best = null; let bestD = CORNER_PX
+    let best = null; let bestD = Math.min(reach, CORNER_PX)
     for (const h of this.handles.children) {
       const p = h.position.clone().project(this.camera)
       const d = Math.hypot((p.x + 1) / 2 * innerWidth - clientX, (1 - p.y) / 2 * innerHeight - clientY)

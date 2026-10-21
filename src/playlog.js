@@ -20,6 +20,7 @@
 import { shell, hasShell } from './bridge.js'
 import { el, button, muted, withIcon, icon } from './ui.js'
 import { STUDIO_VERSION } from './version.js'
+import { execRoots, graphsOf } from './graphs_emit.js'
 
 export const LOG_DIR = 'logs'
 export const FILES = [
@@ -76,6 +77,8 @@ export async function writeStudioLog (S, r, { map }) {
   L.push(`[studio] wrote ${r.files.length} files (${Math.round(bytes / 1024)} KB) under modules/${S.module.id}`)
   L.push('[studio] launching the game')
   S.playLogLines = L
+  // What the last one said on the graph boards is old news now.
+  S.playFailures = null
   await saveStudioLog(L)
   try { localStorage.setItem(LAST_KEY, JSON.stringify({ at: now.getTime(), module: S.module.id, map })) } catch {}
 }
@@ -132,6 +135,66 @@ export function failures (logs) {
   }
   return out
 }
+
+// THE GRAPH THAT FAILED, ON ITS BOARD. The graph runtime names a graph and
+// often a node (`[graphs] main: node 'say' (subtitle) acted on no player --
+// ...`), and a graph that would not load is named by its file. An action that
+// raised stops the hook that ran it (`[lua] on_touch error (tick 979): entity 1
+// is a player; a script cannot remove it`): no graph is named, so it is the
+// graph's whose starts that hook feeds, at the node that removes something
+// when that is what failed.
+const HOOK_STARTS = { on_touch: ['when_prop_touched'], on_prop_use: ['when_prop_used'], on_interact: ['when_wall_used'] }
+const GRAPH_LINE = /\[graphs\] ([^\s:]+): (.*)$/
+const HOOK_ERROR = /\] (on_\w+) error(?: \(tick \d+\))?: (.+)$/
+
+/**
+ * What the last play-test's failures say about one graph: [{ node, text, times }],
+ * `node` null for the graph as a whole.
+ * @param bad    failures(logs)
+ * @param name   the graph's name, as the runtime says it
+ * @param file   its file (graphs_emit graphFile / gameGraphFile), as a load says it
+ */
+export function graphFailures (bad, { name, file, graph }) {
+  // The same thing said at another tick is one line, counted.
+  const said = new Map()
+  const out = { push: (f) => { const k = `${f.node}\n${f.text}`; if (said.has(k)) said.get(k).times += f.times; else said.set(k, { ...f }) } }
+  const ids = new Set((graph?.nodes ?? []).map((n) => n.id))
+  const roots = execRoots(graph ?? {})
+  for (const b of bad ?? []) {
+    const line = tidy(b.line)
+    const g = GRAPH_LINE.exec(line)
+    if (g && (g[1] === name || g[1] === file)) {
+      const id = /node '([^']+)'/.exec(g[2])?.[1]
+      out.push({ node: id && ids.has(id) ? id : null, text: g[2], times: b.times })
+      continue
+    }
+    const h = HOOK_ERROR.exec(line)
+    if (!h || !graph) continue
+    const starts = (graph.nodes ?? []).filter((n) => (n.type === 'event' && n.event === h[1]) || (HOOK_STARTS[h[1]] ?? []).includes(n.type))
+    if (!starts.length) continue
+    const fed = (n) => (roots.get(n.id) ?? []).some((s) => starts.includes(s))
+    const removers = /cannot remove/.test(h[2]) ? (graph.nodes ?? []).filter((n) => fed(n) && ((n.type === 'action' && n.a === 'despawn') || n.type === 'remove')) : []
+    if (removers.length) for (const n of removers) out.push({ node: n.id, text: `${h[1]} stopped here: ${h[2]}`, times: b.times })
+    else out.push({ node: null, text: `${h[1]} stopped: ${h[2]}`, times: b.times })
+  }
+  return [...said.values()]
+}
+
+/**
+ * The graphs as they were played, by the board's key (`map:<map>:<name>`,
+ * `game::<name>`), taken when the logs are read back: a line about a node
+ * stands until that node is changed, and one about the graph until the graph is.
+ */
+export function playedGraphs (S) {
+  const out = new Map()
+  for (const [n, g] of graphsOf(S.module)) out.set(`game::${n}`, structuredClone(g))
+  for (const [doc, d] of Object.entries(S.docs ?? {})) for (const [n, g] of graphsOf(d)) out.set(`map:${doc}:${n}`, structuredClone(g))
+  return out
+}
+
+/** A node, or a graph, as it runs: where it sits on the board left out. */
+export const asRun = (x) => JSON.stringify(x?.nodes ? { nodes: x.nodes.map(asRunNode), links: x.links ?? [], vars: x.vars ?? {} } : asRunNode(x))
+const asRunNode = (n) => { if (!n) return null; const { pos, show, ...rest } = n; return rest }
 
 /** All of it as one text, for sharing. */
 export function asText (logs) {

@@ -45,7 +45,29 @@ async function loadPacks () {
   remerge()
 }
 
+// THE NAMES, CURRENT WHEREVER THEY ARE ASKED FOR. A sound field (a graph's
+// play_sound, a monster's) asks for the module's names; they were the ones
+// merged when the packs last changed, and a module whose packs had not been
+// read and merged since (it showed "(none)" until the Sounds page was opened)
+// offered nothing. So the asking checks: packs not read yet are read from the
+// record, a merge older than the module's list of packs is made again.
+const packsKey = () => JSON.stringify((S.module?.sounds?.packs ?? []).map((p) => [p.id, p.enabled !== false, S.packs?.get(p.id) ? 1 : 0]))
+let mergedFrom = null
+let reading = null
+const tried = new WeakSet()
+function freshSounds () {
+  const unread = (S.module?.sounds?.packs ?? []).filter((p) => !S.packs?.get(p.id))
+    .map((p) => S.rec?.assets?.[packPath(p.id)]).filter((b) => b && !tried.has(b))
+  if (unread.length && !reading) {
+    // Once per picture of a pack: one that will not parse is not read again and again.
+    for (const b of unread) tried.add(b)
+    reading = loadPacks().finally(() => { reading = null; S.window?.render?.() })
+  }
+  if (packsKey() !== mergedFrom) remerge()
+}
+
 function remerge () {
+  mergedFrom = packsKey()
   S.merged = mergeBanks((S.module.sounds?.packs ?? []).map((p) => ({ ...p, json: S.packs?.get(p.id) })))
   S.moduleSounds = bankNames(S.merged.bank)
   if (S.mergedUrl) URL.revokeObjectURL(S.mergedUrl)
@@ -221,12 +243,14 @@ export function install (s) {
   S = s
   S.hear = hear
   S.loadPacks = loadPacks
+  S.freshSounds = freshSounds
   // For the plugins (plugins/kinds.js): a pack an editor hands back is checked
   // by the engine's own loader and merged like an imported one.
   S.remergePacks = remerge
   S.engineAcceptsBank = engineAccepts
   S.soundsUsed = soundsUsed
   S.soundsByPack = () => {
+    freshSounds()
     const merged = S.merged ?? { origin: {} }
     const out = new Map()
     for (const n of (S.moduleSounds?.length ? S.moduleSounds : (S.servedSounds ?? []))) {

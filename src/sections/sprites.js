@@ -35,7 +35,7 @@ async function showSprites (open = null, anim = null) {
         if (S.module.sprites?.[n] || sourceOf(n)) { S.status(`${n} is taken`, 'warn'); return }
         S.editInPlugin('file:tsprite', n)
       }) : null,
-      button('+ import a sprite (.tsprite, or an atlas)', async () => { const n = await importSheet(); if (n) showSprites(n) })
+      button('+ import a sprite (.tsprite, an atlas, or one PNG picture)', async () => { const n = await importSheet(); if (n) showSprites(n) })
     ].filter(Boolean)),
     editors.length ? null : muted('No sprite editor here: projects can be imported, and are baked, but not edited. A studio with the ThreeSprite plugin edits them in place.')
   ].filter(Boolean)

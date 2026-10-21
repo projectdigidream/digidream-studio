@@ -179,6 +179,76 @@ export const ACTS_ON_EVENT_ENTITY = new Map([
   ['music', null], ['ui_open', null], ['ui_close', null], ['teleport', null], ['set_hp', null], ['set_solid', null],
   ['set_animation', null], ['despawn', null], ['add_effect', null], ['change_map', null]
 ])
+
+// WHERE A RUN COMES FROM. Every node's exec input is called `in`
+// (graph_vocab), so a link into `X.in` is an exec link and the chains can be
+// followed without the vocabulary -- which the file's writer does not have.
+/** For each node, the start nodes whose runs reach it: Map id -> [node]. */
+export function execRoots (graph) {
+  const nodes = graph?.nodes ?? []
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const next = new Map()
+  const fed = new Set()
+  for (const [f, t] of graph?.links ?? []) {
+    const [fid] = split(f); const [tid, tpin] = split(t)
+    if (tpin !== 'in' || !byId.has(fid) || !byId.has(tid)) continue
+    fed.add(tid)
+    ;(next.get(fid) ?? next.set(fid, []).get(fid)).push(tid)
+  }
+  const out = new Map()
+  for (const s of nodes) {
+    if (fed.has(s.id)) continue
+    const seen = new Set([s.id]); const todo = [s.id]
+    while (todo.length) {
+      for (const nid of next.get(todo.pop()) ?? []) {
+        if (seen.has(nid)) continue
+        seen.add(nid); todo.push(nid)
+        ;(out.get(nid) ?? out.set(nid, []).get(nid)).push(s)
+      }
+    }
+  }
+  return out
+}
+
+// THE PROP A RUN IS ABOUT. A touch or a use carries two handles: the one who
+// did it (`entity`, a player) and the prop (`target`). A trigger action takes
+// the first unless told `who: target` -- so "when prop touched -> despawn"
+// meant "remove the player", which the engine refuses, and the run stopped
+// there. In a run that only ever starts from a prop, the prop is what is
+// meant; the file is written so.
+/** The pin a start node gives its prop on, or null when its runs carry none. */
+export function propPinOf (n) {
+  if (n?.type === 'when_prop_touched' || n?.type === 'when_prop_used') return 'prop'
+  if (n?.type === 'event' && ['on_touch', 'on_prop_use'].includes(n.event)) return 'target'
+  return null
+}
+
+/** Every run reaching this node starts from a prop: [start nodes], or null. */
+export function propRunsOf (graph, id, roots = execRoots(graph)) {
+  const from = roots.get(id) ?? []
+  return from.length && from.every((s) => propPinOf(s)) ? from : null
+}
+
+/** Is this a despawn left at "the one who did it" in a prop's run -- written as `who: target`? */
+export function despawnsTheProp (graph, n, roots) {
+  if (n?.type !== 'action' || n.a !== 'despawn' || (n.who !== undefined && n.who !== '')) return false
+  if ((graph?.links ?? []).some(([, t]) => t === `${n.id}.who`)) return false
+  return !!propRunsOf(graph, n.id, roots)
+}
+
+// Starts whose `entity` is a player, unless told otherwise (graphs.lua
+// who_ok: "players" is the default; the rest only ever have a player).
+const PLAYER_STARTS = new Set(['when_prop_used', 'when_wall_used', 'when_player_arrives', 'when_player_leaves'])
+const WHO_STARTS = new Set(['when_prop_touched', 'when_sector_entered', 'when_sector_left', 'when_floor_touched', 'when_near'])
+const PLAYER_EVENTS = new Set(['on_interact', 'on_cross', 'on_touch', 'on_prop_use', 'on_ui_event', 'on_player_enter', 'on_player_leave'])
+const startsWithPlayer = (s) => PLAYER_STARTS.has(s.type) || (WHO_STARTS.has(s.type) && (s.who ?? 'players') === 'players') ||
+  (s.type === 'event' && PLAYER_EVENTS.has(s.event))
+
+// What reaches the players in the level, or nobody when there are none
+// (graphs.lua `audience`): at the level's start nobody has arrived yet.
+export const REACHES_PLAYERS = new Set(['subtitle', 'clear_subtitle', 'fade', 'start_cinematic', 'end_cinematic',
+  'camera_follow', 'camera_flythrough', 'camera_track', 'camera_shake'])
+
 const NUMERIC = new Set(['int', 'number'])
 /** The properties a graph can reach, by name (empty for an engine without them). */
 export const propertiesOf = (gv) => new Map((gv?.properties ?? []).map((p) => [p.name, p]))
@@ -387,6 +457,29 @@ export function graphProblems (graph, gv, tv, { game = false, paths = null, maps
       }
     }
   }
+  // Removing the player: the engine refuses it, and the run stops there.
+  // (A despawn left at its default in a prop's run removes the prop: emitGraph.)
+  const roots = execRoots(graph)
+  const linkedTo = (id, pin) => (graph.links ?? []).some(([, t]) => t === `${id}.${pin}`)
+  for (const n of graph.nodes ?? []) {
+    const from = roots.get(n.id) ?? []
+    if (!from.length || !from.every(startsWithPlayer)) continue
+    if (n.type === 'action' && n.a === 'despawn' && (n.who ?? 'entity') === 'entity' && !linkedTo(n.id, 'who') && !despawnsTheProp(graph, n, roots)) {
+      problems.push(`node '${n.id}': despawn removes the one who set this off -- a player, and a script cannot remove a player, so the run stops here. Set who? to target, to remove ${from.some(propPinOf) ? 'the prop' : 'what it was done to'}`)
+    } else if (n.type === 'remove' && !linkedTo(n.id, 'entity') && !(propRunsOf(graph, n.id, roots)?.length === 1)) {
+      problems.push(`node '${n.id}': remove, with nothing linked to \`entity\`, removes the one who set this off -- a player, which a script cannot remove, so the run stops here. Link what to remove into \`entity\``)
+    }
+  }
+  // A map graph's opening line: the level starts before any player is in it,
+  // so what speaks to the players then reaches nobody.
+  if (!game) {
+    for (const n of graph.nodes ?? []) {
+      // (A sound plays from the run's entity, and that run has none.)
+      if (!REACHES_PLAYERS.has(n.type) && !(n.type === 'play_sound' && !linkedTo(n.id, 'entity'))) continue
+      const s = (roots.get(n.id) ?? []).find((r) => r.type === 'when_level_starts')
+      if (s) problems.push(`node '${n.id}': a ${n.type.replace(/_/g, ' ')} from '${s.id}' (when level starts) reaches nobody -- the level starts before any player is in it. Start it from "when player arrives" instead (with a once, for the first time only), or from the game graph's "when player arrives"`)
+    }
+  }
   const execOutUsed = new Set()
   const dataInUsed = new Set()
   const dataEdges = new Map()
@@ -432,6 +525,9 @@ export function emitGraph (graph, name, resolve, plain = null, { panels = null }
   const problems = []
   // Numbers taken from a variable become hidden get_var nodes linked in.
   const bound = []
+  // A despawn or a remove at its default in a prop's run: the prop (propPinOf).
+  const roots = execRoots(graph)
+  const extra = []
   const nodes = (graph.nodes ?? []).map((n) => {
     const { pos, show, ...withRefs } = n
     const rest = {}
@@ -447,7 +543,7 @@ export function emitGraph (graph, name, resolve, plain = null, { panels = null }
       // A wall picked for side_is is held as `side: {edge}`, as on a trigger
       // card; the resolver writes the side index and its expect_neighbour
       // guard from it, and every other place likewise.
-      const args = rest
+      const args = despawnsTheProp(graph, n, roots) ? { ...rest, who: 'target' } : rest
       out = resolve ? resolve(args, where) : args
       if (!resolve && Object.values(args).some((v) => v && typeof v === 'object' && !Array.isArray(v))) {
         problems.push(`${where}: names a place in a map, which a graph without one cannot resolve`)
@@ -458,12 +554,16 @@ export function emitGraph (graph, name, resolve, plain = null, { panels = null }
       if (plain) out = plain(rest, `graph node '${n.id}'`)
       else problems.push(`graph node '${n.id}': names a place in a map, which a graph without one cannot resolve`)
     }
+    if (n.type === 'remove' && !(graph.links ?? []).some(([, t]) => t === `${n.id}.entity`)) {
+      const from = propRunsOf(graph, n.id, roots)
+      if (from?.length === 1) extra.push([`${from[0].id}.${propPinOf(from[0])}`, `${n.id}.entity`])
+    }
     if (pos) out.meta = { x: Math.round(pos.x ?? 0), y: Math.round(pos.y ?? 0) }
     // Which optional arguments the board shows: the editor's, like the place.
     if (show?.length) out.meta = { ...(out.meta ?? {}), show: [...show] }
     return out
   })
-  const links = (graph.links ?? []).map((l) => [...l])
+  const links = [...(graph.links ?? []).map((l) => [...l]), ...extra]
   for (const b of bound) {
     const id = boundId(b.node, b.arg)
     nodes.push({ id, type: 'get_var', var: b.var, meta: { x: Math.round((b.pos?.x ?? 0) - 160), y: Math.round(b.pos?.y ?? 0), bound: `${b.node}.${b.arg}` } })

@@ -7,19 +7,35 @@
 // is a new form with no studio change. The only knowledge here is what each
 // TYPE looks like on screen; nothing here knows what a door is.
 //
-import { el, row, toggle, select, button, muted, addHelp, withIcon, icon, glyphOf } from './ui.js'
+import { el, row, toggle, select, button, muted, addHelp, withIcon, icon, glyphOf, NUM_KEYS } from './ui.js'
 
 // Yes/no fields whose absence means something of its own (see 'bool' below).
 const TRI_STATE = new Set(['autoaim'])
 
 /** "0.25" -> "0.25", "-4/48" -> [-4, 48], "2" -> 2. Null when unreadable. */
 export function parseFx (s) {
-  const t = String(s).trim()
+  const t = decimalPoint(s)
   if (/^-?\d+$/.test(t)) return Number(t)
   if (/^-?\d+\.\d{1,9}$/.test(t)) return t
   const m = /^(-?\d+)\s*\/\s*(\d+)$/.exec(t)
   if (m && Number(m[2]) !== 0) return [Number(m[1]), Number(m[2])]
   return null
+}
+
+/**
+ * A typed number as the person meant it: "-6,75" and "-6.75" alike (a comma
+ * is the decimal point on many keyboards). Null when it is no number.
+ */
+export function parseNum (s) {
+  const t = decimalPoint(s)
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(t)) return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+/** "-6,75" -> "-6.75": one comma between digits read as the decimal point. */
+function decimalPoint (s) {
+  return String(s).trim().replace(/^([-+]?\d*),(\d+)$/, '$1.$2')
 }
 
 export function showFx (v) {
@@ -29,8 +45,12 @@ export function showFx (v) {
 
 let listSeq = 0
 function input (value, onChange, { placeholder = '', type = 'text', choices = null } = {}) {
-  const i = el('input', { type, value: value ?? '', placeholder })
-  if (type === 'number') i.step = 'any'
+  // A number is shown in a text field on a desktop (NUM_KEYS), not type=number:
+  // the browser writes a number field in the system's own format ("-6,75" on a
+  // comma-decimal Mac). Read back with parseNum, which takes a point or a comma.
+  const i = type === 'number'
+    ? el('input', { ...NUM_KEYS, value: value ?? '', placeholder })
+    : el('input', { type, value: value ?? '', placeholder })
   i.addEventListener('change', () => onChange(i.value))
   // Names the studio knows -- the bank's sounds, the sheets' frames -- offered
   // as the field is typed in, and never enforced: a name from another module
@@ -77,7 +97,14 @@ const thingArg = (name, owner) => (name === 'name' && THING_NAMES.has(owner)) ||
 export function argFields (args, obj, ctx, skip = [], owner = null) {
   const rows = []
   const names = new Set(args.map((a) => a.name))
-  const fx = (v) => (Number.isInteger(v) ? v : String(Number(v.toFixed(3))))
+  // A picked coordinate, to three places: a number for a `number` argument
+  // (the graphs' -- text there is refused as no number), the decimal's text
+  // for an `fx` one (the triggers' exact decimals).
+  const types = new Map(args.map((a) => [a.name, a.type]))
+  const fx = (name, v) => {
+    const n = Number(v.toFixed(3))
+    return types.get(name) === 'fx' && !Number.isInteger(n) ? String(n) : n
+  }
   for (const a of args) {
     if (skip.includes(a.name)) continue
     argRows(a)
@@ -95,8 +122,8 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
     for (const [px, py, pz, what] of [['x', 'y', 'z', 'where'], ['pivot_x', 'pivot_y', null, 'turning about']]) {
       if (a.name !== px || !names.has(py) || !ctx.pickPoint) continue
       rows.push(row(`${glyphOf('action.pick')} ${what}`, button('pick a point on the map', () => ctx.pickPoint((p) => {
-        obj[px] = fx(p.x); obj[py] = fx(p.y)
-        if (pz && names.has(pz)) obj[pz] = fx(p.z ?? 0)
+        obj[px] = fx(px, p.x); obj[py] = fx(py, p.y)
+        if (pz && names.has(pz)) obj[pz] = fx(pz, p.z ?? 0)
         ctx.onChange()
       }))))
     }
@@ -104,6 +131,13 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
     const label = ctx.words?.[a.name] ?? (a.optional ? `${a.name}?` : a.name)
     const set = (v) => { if (v === undefined || v === '' || v === null) delete obj[a.name]; else obj[a.name] = v; ctx.onChange() }
     const cur = obj[a.name]
+    // A typed number: empty clears it, unreadable text is refused with a word.
+    const setNum = (v, round) => {
+      if (v === '') return set(undefined)
+      const n = parseNum(v)
+      if (n === null) { ctx.status?.(`${a.name}: write a number, e.g. 2.5`, 'warn'); return }
+      set(round ? Math.round(n) : n)
+    }
     let control
     switch (a.type) {
       case 'int':
@@ -145,7 +179,7 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         }
         // A ROOM'S TAG, from tapping the room (which is given one if it has none).
         if (a.name === 'tag' && ctx.pickTag) {
-          const i = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
+          const i = input(cur, (v) => setNum(v, true), { type: 'number' })
           rows.push(row(label, i, button(withIcon('action.pick'), () => ctx.pickTag((t) => { if (t) set(t) }))))
           return
         }
@@ -155,11 +189,11 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
                            (v) => set(v === '' ? undefined : Number(v))))
           return
         }
-        control = input(cur, (v) => set(v === '' ? undefined : Math.round(Number(v))), { type: 'number' })
+        control = input(cur, (v) => setNum(v, true), { type: 'number' })
         break
       // A plain number: units, seconds, degrees.
       case 'number':
-        control = input(cur, (v) => set(v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v)), { type: 'number' })
+        control = input(cur, (v) => setNum(v, false), { type: 'number' })
         break
       case 'fx':
         control = input(showFx(cur), (v) => { const p = v === '' ? undefined : parseFx(v); if (v !== '' && p === null) { ctx.status?.(`${a.name}: write a whole number, a decimal or n/d`, 'warn'); return } set(p) },
@@ -253,7 +287,8 @@ export function argFields (args, obj, ctx, skip = [], owner = null) {
         rows.push(toggle(label, !!cur, (v) => set(v)))
         return
       case 'enum':
-        rows.push(select(label, cur ?? '', [['', a.optional ? '(default)' : '(choose)'], ...a.values], (v) => set(v || undefined)))
+        // `defaultLabel`: what the default comes to here, when the caller knows (a despawn in a prop's run: the prop).
+        rows.push(select(label, cur ?? '', [['', a.optional ? (a.defaultLabel ?? '(default)') : '(choose)'], ...a.values], (v) => set(v || undefined)))
         return
       case 'sector': {
         const label2 = refLabel(cur, ctx)

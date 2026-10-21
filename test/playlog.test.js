@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
-import { isBad, failures, asText, FILES, tidy } from '../src/playlog.js'
+import { isBad, failures, asText, FILES, tidy, graphFailures } from '../src/playlog.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS } from '../src/module_emit.js'
 import { newDoc, addSector, addSpawn } from '../src/doc.js'
 import { bake } from '../src/bake.js'
@@ -82,6 +82,27 @@ else {
   const broken = await serve({ vars: {}, nodes: [{ id: 'go', type: 'when_level_starts' }, { id: 'fly', type: 'camera_flythrough', path: 9 }], links: [['go.then', 'fly.in']] }, 34704)
   const picked = broken.filter(isBad)
   check(picked.some((l) => /camera path tagged 9/.test(l)) && picked.some((l) => /not loaded/.test(l)), `a refused graph is picked out, by what the server said (${picked.slice(0, 2).join(' | ')})`)
+  // And on its board: the graph, by its file, and the node the refusal names.
+  const flyGraph = { nodes: [{ id: 'go', type: 'when_level_starts' }, { id: 'fly', type: 'camera_flythrough', path: 9 }], links: [['go.then', 'fly.in']] }
+  const onBoard = graphFailures(failures({ server: broken }), { name: 'main', file: 'first.main.graph.json', graph: flyGraph })
+  check(onBoard.some((f) => f.node === 'fly') && onBoard.some((f) => f.node === null && /not loaded/.test(f.text)), `the refusal is put on the board, at the node it names (${JSON.stringify(onBoard).slice(0, 300)})`)
+  check(!graphFailures(failures({ server: broken }), { name: 'main', file: 'other.main.graph.json', graph: flyGraph }).some((f) => /not loaded/.test(f.text)), 'CONTROL: not on another map\'s board')
+}
+
+// A RUN THAT RAISED: the hook is named, not the graph. On the board of the
+// graph that hook starts, at the node that removes something when that failed.
+{
+  const coin = { nodes: [{ id: 'touch', type: 'when_prop_touched', prop: 'coin' }, { id: 'gone', type: 'action', a: 'despawn' }, { id: 'say', type: 'subtitle', text: 'ka-ching' }],
+    links: [['touch.then', 'gone.in'], ['gone.then', 'say.in']] }
+  const logs = { server: ['[lua] on_touch error (tick 979): entity 1 is a player; a script cannot remove it', '[lua] on_touch error (tick 1010): entity 1 is a player; a script cannot remove it'] }
+  const f = graphFailures(failures(logs), { name: 'main', file: 'first.main.graph.json', graph: coin })
+  check(f.length === 1 && f[0].node === 'gone' && f[0].times === 2 && /cannot remove/.test(f[0].text), `a refused despawn is put at the despawn (${JSON.stringify(f)})`)
+  const door = { nodes: [{ id: 'room', type: 'when_sector_entered' }, { id: 'open', type: 'open_door', tag: 1 }], links: [['room.then', 'open.in']] }
+  check(graphFailures(failures(logs), { name: 'main', file: 'first.main.graph.json', graph: door }).length === 0, 'CONTROL: not on a graph that on_touch does not start')
+  const said = { server: ["[graphs] main: node 'say' (subtitle) acted on no player -- no player is in this level yet; tick `everyone` to reach them all"] }
+  const s2 = graphFailures(failures(said), { name: 'main', file: 'first.main.graph.json', graph: coin })
+  check(s2.length === 1 && s2[0].node === 'say', `a runtime warning is put at the node it names (${JSON.stringify(s2)})`)
+  check(graphFailures(failures(said), { name: 'welcome', file: 'module.welcome.graph.json', graph: coin }).length === 0, 'CONTROL: not on a graph of another name')
 }
 
 console.log(`playlog: ${checks} checks, ${fails} failures`)

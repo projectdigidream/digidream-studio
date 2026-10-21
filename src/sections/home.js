@@ -4,7 +4,7 @@
 // Moved out of main.js as a section of the module (app/router.js); it reaches
 // the studio's shared state and verbs through S, given at install.
 //
-import { newModule } from '../module_emit.js'
+import { newModule, cleanId } from '../module_emit.js'
 import { moduleProps } from '../props.js'
 import { el, button, row, text, muted, chips, ask, icon, withIcon } from '../ui.js'
 import { moduleProblems } from '../app/problems.js'
@@ -31,7 +31,15 @@ let deletingModules = false
 async function newModuleFlow () {
   const id = await ask('module id (letters, digits, dashes)', 'my-level')
   if (!id) return
-  const clean = id.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+  // Accents come off ("île" -> "ile"); a letter with no plain spelling is
+  // shown, and the id asked again, rather than dropped unseen.
+  let { id: clean, dropped } = cleanId(id)
+  if (dropped.length) {
+    const again = await ask(`An id is a-z, 0-9, _ and -: ${dropped.join(' ')} cannot be in it. Type the id again`, clean || 'my-level')
+    if (!again) return
+    ;({ id: clean, dropped } = cleanId(again))
+    if (dropped.length) { S.status(`${dropped.join(' ')} cannot be in an id: not made`, 'warn'); return }
+  }
   if (!clean) return
   if (await S.store.load(clean)) { S.status(`a module called ${clean} already exists`, 'warn'); return }
   const kind = await choose('What kind of game is it?', [
@@ -74,9 +82,13 @@ function setUpNewModule (kind) {
         if (p.action === 'vfx' && has(20)) p.effect = 20
       }
     }
-    // the keys it says as it starts are a first person's
-    const keys = (m.graphs?.welcome?.nodes ?? []).find((n) => n.id === 'keys' && n.type === 'subtitle')
-    if (keys) keys.text = 'WASD walk   mouse look   click or F fire   SPACE jump   E use'
+    // the keys it shows as it starts are a first person's: on a computer, and
+    // on a touch screen, where the controls are first person's too (touch_fps)
+    // (the starter's 'controls' panel, which its welcome graph opens: an author edits it on the Panels page)
+    const decor = (id) => (m.panels?.controls?.decor ?? []).find((d) => d.id === id)
+    const keys = decor('keys'); const touch = decor('keys_touch')
+    if (keys) keys.text = 'Keyboard: WASD walk | mouse look | click or F fire | SPACE jump | E use'
+    if (touch) touch.text = 'Touch: left thumb walks | drag to look | the buttons on the right: FIRE, JUMP, USE'
   }
   S.save()
   S.redraw?.()

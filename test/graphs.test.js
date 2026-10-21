@@ -566,5 +566,54 @@ if ((GV.properties ?? []).length) {
   }
 }
 
+// A PROP'S RUN. "when prop touched -> despawn" at its default removes the
+// prop (who: target in the file), not the player who touched it, which the
+// engine refuses and the run stops at. Said on the board where it would still
+// hit a player; a remove with nothing linked takes the prop's pin.
+{
+  const coin = { vars: {}, nodes: [
+    { id: 'touch', type: 'when_prop_touched', prop: 'coin', pos: { x: 0, y: 0 } },
+    { id: 'gone', type: 'action', a: 'despawn', pos: { x: 260, y: 0 } },
+    { id: 'say', type: 'subtitle', text: 'a coin', pos: { x: 520, y: 0 } }
+  ], links: [['touch.then', 'gone.in'], ['gone.then', 'say.in']] }
+  const out = emitGraph(coin, 'coin', null).json
+  check(out.nodes.find((n) => n.id === 'gone').who === 'target', 'a despawn left at its default in a prop\'s run is written as who: target')
+  check(!coin.nodes[1].who, 'and the board\'s node itself is left as the author set it')
+  check(!graphProblems(coin, GV, TV).some((p) => /despawn/.test(p)), `and the board says nothing about it (${graphProblems(coin, GV, TV).join(' | ')})`)
+  const explicit = structuredClone(coin); explicit.nodes[1].who = 'entity'
+  check(emitGraph(explicit, 'coin', null).json.nodes.find((n) => n.id === 'gone').who === 'entity', 'CONTROL: who: entity chosen by hand is kept')
+  check(graphProblems(explicit, GV, TV).some((p) => /^node 'gone': despawn removes the one who set this off -- a player/.test(p)), 'and the board says it removes a player')
+  const sector = structuredClone(coin); sector.nodes[0] = { id: 'touch', type: 'when_sector_entered', tag: 3, pos: { x: 0, y: 0 } }
+  check(!emitGraph(sector, 'coin', null).json.nodes.find((n) => n.id === 'gone').who, 'CONTROL: a despawn in a run from a room is left alone')
+  check(graphProblems(sector, GV, TV).some((p) => /^node 'gone': despawn removes .* a player/.test(p)), 'and said: a player walked in, and a player cannot be removed')
+  const monsters = structuredClone(sector); monsters.nodes[0].who = 'monsters'
+  check(!graphProblems(monsters, GV, TV).some((p) => /despawn removes/.test(p)), 'CONTROL: not said when only monsters set it off')
+  const mixed = structuredClone(coin); mixed.nodes.push({ id: 'room', type: 'when_sector_entered', tag: 3 }); mixed.links.push(['room.then', 'gone.in'])
+  check(!emitGraph(mixed, 'coin', null).json.nodes.find((n) => n.id === 'gone').who, 'CONTROL: a run that can also start from a room keeps the default')
+  const rm = { vars: {}, nodes: [{ id: 'touch', type: 'when_prop_touched', prop: 'coin' }, { id: 'rm', type: 'remove' }], links: [['touch.then', 'rm.in']] }
+  check(emitGraph(rm, 'rm', null).json.links.some(([f, t]) => f === 'touch.prop' && t === 'rm.entity'), 'a remove with nothing linked, in a prop\'s run, is fed the prop')
+  check(!graphProblems(rm, GV, TV).some((p) => /remove/.test(p)), 'and not said')
+  const rmRoom = structuredClone(rm); rmRoom.nodes[0] = { id: 'touch', type: 'when_wall_used' }
+  check(graphProblems(rmRoom, GV, TV).some((p) => /^node 'rm': remove, with nothing linked/.test(p)), 'CONTROL: a remove after a wall is used, with nothing linked, is said')
+  if (existsSync(TRIGGERCHECK)) {
+    const f = join(mkdtempSync(join(tmpdir(), 'dnp-graphs-')), 'coin.lua')
+    writeFileSync(f, ['dofile("maps/scripts/graph_vocab.lua")', 'dofile("maps/scripts/graphs.lua")',
+      `local ok, problems = graphs.load(${luaOfJson(out)}, "coin")`, 'if not ok then error(table.concat(problems or {}, "\\n")) end',
+      `ok, problems = graphs.load(${luaOfJson(emitGraph(rm, 'rm', null).json)}, "rm")`, 'if not ok then error(table.concat(problems or {}, "\\n")) end',
+      'triggers.load{ name = "carrier", triggers = { { name = "x", event = "on_tick", actions = { { a = "log", text = "x" } } } } }'].join('\n'))
+    const r = spawnSync(TRIGGERCHECK, ['.', f], { cwd: join(ROOT, 'engine'), encoding: 'utf8' })
+    check(r.status === 0, `and graphs.load takes both:\n${r.stderr}${r.stdout}`)
+  }
+
+  // A MAP GRAPH'S OPENING LINE: the level starts before anyone is in it.
+  const opening = { vars: {}, nodes: [{ id: 'start', type: 'when_level_starts' }, { id: 'line', type: 'subtitle', text: 'Welcome' }], links: [['start.then', 'line.in']] }
+  check(graphProblems(opening, GV, TV).some((p) => /^node 'line': a subtitle from 'start' \(when level starts\) reaches nobody.*when player arrives/.test(p)), `a subtitle from when level starts is said to reach nobody (${graphProblems(opening, GV, TV).join(' | ')})`)
+  const arrives = structuredClone(opening); arrives.nodes[0] = { id: 'start', type: 'when_player_arrives' }
+  check(!graphProblems(arrives, GV, TV).some((p) => /reaches nobody/.test(p)), 'CONTROL: from when player arrives it is not')
+  const sea = { vars: {}, nodes: [{ id: 'start', type: 'when_level_starts' }, { id: 'sea', type: 'play_sound', sound: 'sea.waves' }], links: [['start.then', 'sea.in']] }
+  check(graphProblems(sea, GV, TV).some((p) => /^node 'sea': a play sound from 'start'/.test(p)), 'and so is a sound played from nobody at the level\'s start')
+  check(!graphProblems(opening, GV, TV, { game: true }).some((p) => /reaches nobody/.test(p)), 'CONTROL: not said of a game graph (which has its own refusal of a level start)')
+}
+
 console.log(`graphs: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

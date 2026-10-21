@@ -1147,14 +1147,14 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
     const out = { asked, maps: Object.keys(S.docs).sort(), stored: Object.keys((await S.store.load('imp-test'))?.docs ?? {}).sort(), status: document.querySelector('.st-status')?.textContent }
     out.renamed = await S.renameModule('Imp Moved!')
     out.oldGone = !(await S.store.load('imp-test'))
-    out.newThere = !!(await S.store.load('impmoved'))
+    out.newThere = !!(await S.store.load('imp-moved'))
     out.refused = await S.renameModule(was)
     await S.openModule(was)
-    const del = S.deleteModule('impmoved')
+    const del = S.deleteModule('imp-moved')
     for (let i = 0; i < 100 && !document.querySelector('dialog[open]'); i++) await wait(50)
     document.querySelector('dialog[open] button[type=submit]')?.click()
     out.deleted = await del
-    out.goneNow = !(await S.store.load('impmoved'))
+    out.goneNow = !(await S.store.load('imp-moved'))
     out.back = S.rec.id === was
     return out
   })
@@ -1162,7 +1162,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   else {
     check(/Replace Imp test with the pack\? It has 2 maps \(first, second\)/.test(r.asked ?? ''), `importing over a module asks first, naming what comes (${r.asked})`)
     check(r.maps.join() === 'first,second' && r.stored.join() === 'first,second' && /Imported Imp test: 2 maps/.test(r.status ?? ''), `and brings the pack's maps back, open and kept, saying so (${JSON.stringify(r)})`)
-    check(r.renamed === 'impmoved' && r.oldGone && r.newThere && r.refused === 'impmoved', `renaming the module moves it, and an id another module has is refused (${JSON.stringify(r)})`)
+    check(r.renamed === 'imp-moved' && r.oldGone && r.newThere && r.refused === 'imp-moved', `renaming the module moves it, and an id another module has is refused (${JSON.stringify(r)})`)
     check(r.deleted && r.goneNow && r.back, `another module can be deleted (${JSON.stringify(r)})`)
   }
 }
@@ -1438,7 +1438,8 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
       id: S.rec.id, debug: m.debug, kinds: (m.vfx ?? []).map((v) => v.id).join(),
       tracer: hit?.tracer, hitVfx: hit?.hit_vfx, muzzle: fire.find((p) => p.action === 'vfx')?.effect,
       flash: viewmodelsOf(m).weapons?.gun?.fire?.[0]?.[1],
-      keys: m.graphs?.welcome?.nodes?.find((n) => n.id === 'keys')?.text,
+      keys: m.panels?.controls?.decor?.find((d) => d.id === 'keys')?.text,
+      keysTouch: m.panels?.controls?.decor?.find((d) => d.id === 'keys_touch')?.text,
       oldScript: /function on_attack/.test(m.scripts?.['starter.lua'] ?? ''),
       death: (() => { const g = m.graphs?.death; const n = (t) => g?.nodes?.find((x) => x.type === t); return !!(n('when_dies')?.what === 'players' && n('fade') && n('subtitle') && (g.links ?? []).length === 3) })(),
       spirit: m.props.find((p) => p.name === 'spirit')?.scale
@@ -1466,7 +1467,7 @@ check(drawn?.pictured && drawn.h > 0.5 && drawn.h < 1.5, `a placed prop is drawn
   else {
     check(r.id === 'fps-new' && r.debug === false && r.kinds === '20,21,22' && r.spirit === '2' && !r.oldScript, `a new module from the starter: no debug numbers, the starter's effects, the bigger spirit, the new script (${JSON.stringify(r)})`)
     check(r.tracer === 21 && r.hitVfx === 22 && r.muzzle === 20 && r.flash >= 7, `first person, its gun shows its shot: tracer, sparks, muzzle flash, a flash held 7 ticks (${JSON.stringify({ tracer: r.tracer, hit: r.hitVfx, muzzle: r.muzzle, flash: r.flash })})`)
-    check(/mouse look/.test(r.keys ?? ''), `and the keys it says as it starts are a first person's (${r.keys})`)
+    check(/mouse look/.test(r.keys ?? '') && /drag to look/.test(r.keysTouch ?? ''), `and the keys it shows as it starts are a first person's, on a computer and on a touch screen (${r.keys} / ${r.keysTouch})`)
     check(r.death, 'and the player\'s death is shown, on every map: a game graph fades to black, says so, and clears')
     check(r.pack === 'no sound editor here' || (r.pack.name === 'Club Sounds' && r.pack.jsonName === 'Club Sounds' && r.pack.sounds === 0 && r.pack.opened), `a new sound pack starts empty, under its own name (${JSON.stringify(r.pack)})`)
   }

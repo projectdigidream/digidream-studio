@@ -54,9 +54,17 @@ export class Gestures {
     else p.role = 'tool'
     this.pointers.set(e.pointerId, p)
     if (p.role === 'tool') {
+      // CONFIRMED A FRAME LATER: on a slow device (a busy GPU, a map with
+      // weather drawn every frame) the moves and the lift of the finger reach
+      // the page late, after this timer. Input is handed to the page before a
+      // frame's callbacks, so by then a drag or a quick tap has shown itself
+      // -- which used to turn every gesture of the Room tool into a hold.
       this.longTimer = setTimeout(() => {
-        const q = this.pointers.get(e.pointerId)
-        if (q && !q.moved) { q.role = 'done'; this.h.longPress?.(this.#info(q)) }
+        this.longTimer = null
+        requestAnimationFrame(() => {
+          const q = this.pointers.get(e.pointerId)
+          if (q && !q.moved && q.role === 'tool') { q.role = 'done'; this.h.longPress?.(this.#info(q)) }
+        })
       }, LONG_PRESS_MS)
     } else this.#cameraReset()
   }
@@ -88,6 +96,9 @@ export class Gestures {
     return { x: p.x, y: p.y, startX: p.startX, startY: p.startY, dx: p.x - p.startX, dy: p.y - p.startY,
              button: p.button, shift: p.shift, alt: p.alt }
   }
+
+  /** A finger (or button) is down on the map: what is drawn for itself alone can wait. */
+  get busy () { return this.pointers.size > 0 }
 
   #cancelLong () { if (this.longTimer) { clearTimeout(this.longTimer); this.longTimer = null } }
 

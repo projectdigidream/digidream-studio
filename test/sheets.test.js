@@ -94,5 +94,23 @@ refused = null
 try { await importSheetFile(asJson, { parseAtlas, pickPng: async () => null }) } catch (e) { refused = e.message }
 check(/needs its sheet/.test(refused ?? ''), 'CONTROL: a manifest without its picture is refused, naming the picture')
 
+// --- a plain picture: one frame, one view, standing on its bottom edge ------------
+{
+  const pic = await importSheetFile({ name: 'knight.png', bytes: r.png }, { parseAtlas, pickPng: async () => null })
+  check(pic.name === 'KNIGHT' && pic.manifest.image === 'KNIGHT.png', `a PNG becomes a sheet named after the file (${pic.name})`)
+  let a = null
+  try { a = parseAtlas(pic.manifest, pic.name) } catch (e) { check(false, `the client's parser accepts a picture's manifest: ${e.message}`) }
+  if (a) {
+    const f = a.frames['idle/0/v1']
+    check(a.views.count === 1 && a.animations.length === 1 && a.animations[0].name === 'idle', 'one view, one animation, idle')
+    check(f.rect.w === size.w && f.rect.h === size.h, 'the whole picture is the frame')
+    check(f.source.y + f.source.h === a.canvas, 'its bottom edge is the feet (the canvas bottom)')
+  }
+  check(pic.png === r.png, 'the picture is kept as it is')
+  let no = null
+  try { await importSheetFile({ name: 'fake.png', bytes: new Uint8Array(30) }, { parseAtlas, pickPng: async () => null }) } catch (e) { no = e.message }
+  check(/not a PNG/.test(no ?? ''), `CONTROL: a .png that is no PNG is refused with a word (${no})`)
+}
+
 console.log(`\nsheets: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

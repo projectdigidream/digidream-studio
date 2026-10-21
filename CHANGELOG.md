@@ -13,10 +13,65 @@ anything not released yet is under **Unreleased**.
   on. Remembered per device. The map's finest step is a 64th now (an 8th
   before); existing maps are unchanged.
 
+- **A plain PNG imports as a sheet**: "+ import sheet..." (Player, Monsters,
+  Props, Sprites) takes a single .png as a one-picture sheet, the same from
+  every side. A file that is not a PNG is refused with a message.
+- **The starter's controls are a panel**: a new module shows its keys in the
+  panel `controls` at the top of the screen for ten seconds (a line for a
+  keyboard and one for a touch screen), which a player can close with its ×.
+  Its words and look are edited on the Panels page; delete the `welcome` graph
+  or the panel to show nothing. The subtitle line stays free for the game's
+  own words.
+
 ### Fixed
 
 - **Undo did not survive Play**: coming back from the game, the map's and the
-  module's undo started empty. They are kept over the trip.
+  module's undo started empty. They are kept over the trip, and so are each
+  graph's zoom and scroll.
+- **A despawn after "when prop touched" removed the player**, and the run
+  stopped. Left at its default, despawn now removes the prop that was touched
+  (who? reads "target -- the prop (default here)"); a remove with nothing linked
+  takes the prop too. The board says so in red where a despawn or remove would
+  still hit a player.
+- **Graph errors were only in the Play log**: back from Play, what the game said
+  about a graph is on its board, at the node that failed. The line goes once
+  that node is changed, and at the next Play.
+- **An opening line from "when level starts" reached nobody**: the level starts
+  before any player is in it. The board says so for a subtitle, fade, cutscene,
+  camera or sound node there, and suggests "when player arrives" (with a once).
+- **A second wire from an exec output replaced the first unseen**: an exec
+  output leads to one node, so the new wire still replaces the old, but the
+  board names the wire that went, one undo brings it back, and it suggests a
+  sequence for both. The graph window's warnings show on the board itself.
+- **The graph's side panel jumped under the pointer** when a problem line
+  cleared; it keeps its space while the same node stays picked, and "delete
+  node" sits beside the node's title. A wire dragged to a node that just grew
+  reaches its plug, and a field still being typed is saved first.
+- **Choosing from a dropdown in the graph's side panel moved the focus** to
+  "delete graph" or "delete node"; it stays on the dropdown.
+- **"+ node..." dropped new nodes on top of others**: they go to the nearest
+  free spot by their real size, and the view moves just enough to show them.
+- **The play sound list said "(none)"** until the Sounds page had been opened.
+- **Picked points were not numbers**: "pick a point on the map" fills x/y/z
+  with numbers, so a spawn, a teleport or a when_near no longer says "`x` should
+  be a number". Number fields show a decimal point and take a comma when typed.
+- **Module and map ids lost accented letters**: "île" becomes "ile"; a letter
+  with no plain spelling is named and the id asked again.
+- **Weather broke the Room tool on slow phones**: with rain, snow, dust or embers
+  on a map, taps and drags counted as holds. A hold now waits a frame before it
+  counts, weather pauses while a finger is on the map, and a hold in the Room
+  tool places a corner.
+- **A dragged start flag kept height 0 on a raised floor**: spawns, lights and
+  placed things dragged onto a room take that room's floor height.
+- **Small rooms were hard to tap**: a tap well inside a small platform or thin
+  door picks the room; walls and corners win only near its edge. A "tap a room"
+  pick takes the room under the tap.
+- **A deleted map was still played**: Play removes old baked maps the module no
+  longer has, which the server was still loading.
+- **Phone keyboard and Back**: the graph board returns to its place when the
+  on-screen keyboard closes, and Back while typing only closes the keyboard.
+- **The Sky preview stayed black** until dragged; it shows the picture at once.
+- **The Panels page said "No panels yet"** behind a panel that was open.
 
 ## 0.4.2 -- 2026-10-20
 

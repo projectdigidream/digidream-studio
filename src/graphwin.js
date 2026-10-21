@@ -10,8 +10,8 @@
 //
 // Pins: exec on the left (in) and right (out) as ▷, data as ●. Drag from an
 // output to an input to link them; an exec exit goes to one place and a data
-// input takes one value, so a new link replaces the one it would break. Tap a
-// link to select it, and delete it from the side panel. Drag a node by its
+// input takes one value, so a new link replaces the one it would break, and
+// the board says which it was (the engine refuses a second). Tap a link to select it, and delete it from the side panel. Drag a node by its
 // title; drag the board to pan, pinch or wheel to zoom.
 //
 // TWO SCOPES, MANY GRAPHS. A map's graphs (doc.graphs, undone with the map)
@@ -30,14 +30,44 @@ import { argFields } from './argform.js'
 import { decorIdsOf } from './panels_emit.js'
 import { playScene } from './scene.js'
 import { isStart } from './scene_plan.js'
-import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME, VAR_NODES, varChoices, propertiesOf, propertyFits, isVarRef, bindableArgs, numberSources } from './graphs_emit.js'
+import { newGraph, nodeSpecs, pinsOf, graphProblems, graphsOf, parseGraphRoute, graphRoute, cleanGraphName, NAME_RE, MAP_GRAPH, GAME_NAME, VAR_NODES, varChoices, propertiesOf, propertyFits, isVarRef, bindableArgs, numberSources, despawnsTheProp, graphFile, gameGraphFile } from './graphs_emit.js'
+import { graphFailures, asRun } from './playlog.js'
 
 const CATEGORY = { event: 'ev', condition: 'cond', action: 'act', branch: 'flow', sequence: 'flow', delay: 'flow', once: 'flow',
                    get_var: 'data', set_var: 'act', add_var: 'act', literal: 'data', compare: 'data', math: 'data', logic: 'data', random: 'data',
                    on_call: 'ev', call: 'act' }
 // What the studio writes for a verb, never a person: no field and no pin.
 const HIDDEN_ARGS = ['side', 'expect_neighbour', 'expect_tag', 'fn']
+// A despawn at its default in a prop's run removes the prop (graphs_emit
+// despawnsTheProp): its who? says so, rather than "(default)".
+const propDefaults = (graph, n, args) => despawnsTheProp(graph, n)
+  ? args.map((a) => (a.name === 'who' ? { ...a, defaultLabel: 'target -- the prop (default here)' } : a))
+  : args
 const NODE_W = 236
+// A new node's height before it is drawn: on the tall side, so the room kept for it is enough.
+const NEW_NODE_H = 200
+
+/**
+ * The nearest spot to `start` for a w x h box that overlaps none of `rects`
+ * ({ x, y, w, h }) with a gap round each: tried on a grid, ring by ring
+ * outward, the closest of the first ring that has one. Pure, for the tests.
+ */
+export function freeSpotAmong (rects, start, w, h, { gap = 24, step = 24, rings = 200 } = {}) {
+  const free = (x, y) => !rects.some((r) => x < r.x + r.w + gap && r.x < x + w + gap && y < r.y + r.h + gap && r.y < y + h + gap)
+  for (let k = 0; k <= rings; k++) {
+    let best = null
+    for (let i = -k; i <= k; i++) {
+      for (let j = -k; j <= k; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== k) continue
+        const x = Math.round(start.x + i * step); const y = Math.round(start.y + j * step)
+        const d = i * i + j * j
+        if ((!best || d < best.d) && free(x, y)) best = { x, y, d }
+      }
+    }
+    if (best) return { x: best.x, y: best.y }
+  }
+  return { x: Math.round(start.x), y: Math.round(start.y) }
+}
 
 /** A node's colour: where a run starts, what it does, what it reads, how it flows. */
 function categoryOf (n, spec) {
@@ -78,6 +108,21 @@ const PANEL_ITEMS = [
 ]
 
 let win = null
+
+// WHERE THE BOARD WAS LOOKING, per module and graph: a Play round trip is a
+// fresh page, and every graph opened again at 100% in its corner. This
+// device's, like the last map edited, so it may be lost.
+const viewKey = (S, key) => `dnp.studio.graphView.${S.module?.id ?? ''}.${key}`
+function savedView (S, key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(viewKey(S, key)) ?? 'null')
+    return v && [v.x, v.y, v.z].every(Number.isFinite) && v.z > 0 ? { x: v.x, y: v.y, z: v.z } : null
+  } catch { return null }
+}
+function keepView (S, key, view) {
+  try { localStorage.setItem(viewKey(S, key), JSON.stringify({ x: Math.round(view.x), y: Math.round(view.y), z: Math.round(view.z * 1000) / 1000 })) } catch {}
+}
+
 /**
  * @param arg  a graph's address (graphs_emit.js graphRoute): `game[:name]`
  *             for one of the module's, `<map>[:name]` (or nothing) for one of
@@ -90,7 +135,7 @@ export function openGraph (S, arg = null) {
   const owner = scope === 'game' ? S.module : S.doc
   const name = to.name ?? graphsOf(owner)[0]?.[0] ?? (scope === 'game' ? GAME_NAME : MAP_GRAPH)
   const key = `${scope}:${scope === 'game' ? '' : S.docName}:${name}`
-  if (key !== win.key) { win.picked = null; win.view = { x: 40, y: 40, z: 1 } }
+  if (key !== win.key) { win.picked = null; win.view = savedView(S, key) ?? { x: 40, y: 40, z: 1 } }
   win.key = key
   win.scope = scope
   win.gname = name
@@ -159,6 +204,26 @@ class GraphWindow {
     this.S.ui.layer.dataset.workshop = '0'
   }
 
+  /**
+   * A word said on the board itself, as well as on the studio's status strip:
+   * that strip is under this window, so a warning sent only there (a wire
+   * replaced, a name taken) was never seen. It stays a while, or till tapped.
+   */
+  say (text, level = '') {
+    this.S.status(text, level)
+    if (!this.sayEl) {
+      this.sayEl = el('div', { class: 'gw-say ui-pill', role: 'status', 'aria-live': 'polite', title: 'tap to dismiss', onclick: () => { this.sayEl.hidden = true } })
+      this.sayEl.addEventListener('pointerdown', (e) => e.stopPropagation())
+    }
+    this.sayEl.textContent = text
+    for (const l of ['ok', 'warn', 'error']) this.sayEl.classList.toggle(`ui-pill--${l}`, level === l)
+    this.sayEl.hidden = !text
+    clearTimeout(this.sayTimer)
+    if (text) this.sayTimer = setTimeout(() => { this.sayEl.hidden = true }, 12000)
+    const board = this.root.querySelector('.gw-board')
+    if (board && this.sayEl.parentNode !== board) board.appendChild(this.sayEl)
+  }
+
   /** A change: to the map's document (undone with the map, re-baked) or the module's. */
   changed ({ redraw = true } = {}) {
     // An empty graph is kept -- it has a name someone gave it -- and simply
@@ -198,14 +263,14 @@ class GraphWindow {
       const raw = await ask('graph name (letters, digits, underscore)', '')
       const n = cleanGraphName(raw)
       if (!n) { this.render(); return }
-      if (taken.has(n)) { this.S.status(`there is a graph called ${n} here already`, 'warn'); this.render(); return }
+      if (taken.has(n)) { this.say(`there is a graph called ${n} here already`, 'warn'); this.render(); return }
       this.gname = n
       this.ensure()
       this.changed({ redraw: false })
     } else this.gname = name
     this.picked = null
-    this.view = { x: 40, y: 40, z: 1 }
     this.key = `${this.scope}:${this.game ? '' : this.S.docName}:${this.gname}`
+    this.view = savedView(this.S, this.key) ?? { x: 40, y: 40, z: 1 }
     // The address follows, so a reload comes back here.
     if (this.S.go) await this.S.go('graph', graphRoute(this.scope, this.S.docName, this.gname))
     this.render()
@@ -216,7 +281,7 @@ class GraphWindow {
     const n = cleanGraphName(raw)
     const o = this.owner
     if (!n || n === this.gname) { this.render(); return }
-    if (!NAME_RE.test(n) || o.graphs?.[n]) { this.S.status('that name is empty or taken here', 'warn'); this.render(); return }
+    if (!NAME_RE.test(n) || o.graphs?.[n]) { this.say('that name is empty or taken here', 'warn'); this.render(); return }
     // Kept in its place in the order.
     o.graphs = Object.fromEntries(Object.entries(o.graphs ?? {}).map(([k, v]) => [k === this.gname ? n : k, v]))
     if (!o.graphs[n]) o.graphs[n] = newGraph()
@@ -249,7 +314,7 @@ class GraphWindow {
     const S = this.S
     const g = this.graph ?? { vars: {} }
     return {
-      onChange: () => this.changed(), status: (m, l) => S.status(m, l),
+      onChange: () => this.changed(), status: (m, l) => this.say(m, l),
       // The game's graph is of no map: nothing to tap.
       ...(S.mapPickers && !this.game ? S.mapPickers((f) => this.aroundPick(f)) : {}),
       triggers: this.game ? [] : S.doc.triggers.map((t) => ({ id: t.id, name: t.name })),
@@ -284,7 +349,7 @@ class GraphWindow {
         el('div', { class: 'wk-details' }, [muted('No graph vocabulary staged with this studio (graph_vocab.json).')]))
       return
     }
-    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, props: this.S.propNames?.() ?? null, game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, props: this.S.propNames?.() ?? null, game: this.game, maps: Object.keys(S.docs), paths: this.game ? null : new Set((S.doc.paths ?? []).map((p) => p.tag)) }).concat(this.played())
     this.root.dataset.scope = this.scope
     const top = el('div', { class: 'wk-top' }, [
       el('span', { class: 'wk-title' }, withIcon('section.graphs', this.game ? 'the game' : S.docName)),
@@ -303,14 +368,17 @@ class GraphWindow {
     // data changed are built again. Building and laying out every node of a
     // big graph for each tap was what made it crawl.
     const boardKey = JSON.stringify({ g: this.gname, scope: this.scope, game: this.game, map: S.docName, vars: this.graph?.vars ?? null,
-      panels: Object.keys(this.S.module.panels ?? {}), maps: Object.keys(S.docs), paths: (S.doc?.paths ?? []).map((p) => p.tag) })
+      panels: Object.keys(this.S.module.panels ?? {}), maps: Object.keys(S.docs), paths: (S.doc?.paths ?? []).map((p) => p.tag),
+      // The module's sounds: a play_sound's list on the board is built with its node.
+      sounds: S.soundNames?.() ?? [] })
     if (this.world?.isConnected && this.boardGraph === this.graph && this.boardKey === boardKey) {
       this.#patchBoard(top, problems)
       return
     }
     this.boardGraph = this.graph
     this.boardKey = boardKey
-    const board = el('div', { class: 'wk-board gw-board' })
+    // Focusable (not in the Tab order), so focus put back off the side panel has a harmless place to land.
+    const board = el('div', { class: 'wk-board gw-board', tabindex: '-1' })
     const world = el('div', { class: 'wk-world' })
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('class', 'wk-edges')
@@ -340,9 +408,12 @@ class GraphWindow {
     this.#applyView()
     this.#boardGestures(board)
     board.appendChild(this.#zoomBar(board))
+    if (this.sayEl) board.appendChild(this.sayEl)
 
-    const side = el('div', { class: 'wk-details' }, this.#sideRows(problems))
+    const focus = this.#sideFocus()
+    const side = el('div', { class: 'wk-details' })
     this.root.replaceChildren(top, el('div', { class: 'wk-graph' }, [board]), side)
+    this.#fillSide(side, problems, focus)
     // A node that changes size (its fields, a font arriving, its help opened)
     // moves its pins: they are measured again and the links follow.
     this.resizeObs?.disconnect()
@@ -392,7 +463,8 @@ class GraphWindow {
     this.linkEls = null
     this.pinCache = null
     this.#applyView()
-    this.root.querySelector(':scope > .wk-details')?.replaceChildren(...this.#sideRows(problems))
+    const side = this.root.querySelector(':scope > .wk-details')
+    if (side) this.#fillSide(side, problems, this.#sideFocus())
     this.#linksSoon()
   }
 
@@ -572,7 +644,9 @@ class GraphWindow {
     const [kind, name, arg, arg2] = String(value).split(':')
     const g = this.ensure()
     if (kind === 'note') return this.addNote()
-    const at = this.#freeSpot()
+    const wide = kind === 'ui' ? NODE_W * 2 + 40 : NODE_W
+    const at = this.#freeSpot(wide)
+    this.#showSpot(at, wide)
     if (kind === 'ui') {
       const ev = { id: this.#newId(`${name}_used`), type: 'event', event: 'on_ui_event', pos: { x: at.x, y: at.y } }
       g.nodes.push(ev)
@@ -711,8 +785,54 @@ class GraphWindow {
   #drawSide () {
     const side = this.root.querySelector('.wk-details')
     if (!side) return
-    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, props: this.S.propNames?.() ?? null, game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) })
+    const problems = graphProblems(this.graph, this.gv, this.tv, { buttons: buttonNames(this.S.module), panels: this.S.module.panels ?? {}, props: this.S.propNames?.() ?? null, game: this.game, maps: Object.keys(this.S.docs), paths: this.game ? null : new Set((this.S.doc.paths ?? []).map((p) => p.tag)) }).concat(this.played())
+    this.#fillSide(side, problems, this.#sideFocus())
+  }
+
+  /**
+   * The side panel drawn again, and kept where it was under the pointer and
+   * the keyboard. Its problem lines are the first thing in it: one cleared by
+   * the field just filled moved everything below up, so the next click landed
+   * on the row under it -- "delete node", as often as not. While the same
+   * thing stays picked their box keeps the height it had; it gives the room
+   * back when something else is picked. And the control that had the focus
+   * (a select just chosen from) has it again in the new panel: lost, the
+   * browser's next Tab went on from where it was, to a red button.
+   */
+  #fillSide (side, problems, focus) {
+    const subject = `${this.gname}|${this.side ?? 'details'}|${this.picked?.kind ?? ''}:${this.picked?.id ?? this.picked?.index ?? ''}`
+    if (subject !== this.sideSubject) { this.sideSubject = subject; this.problemsH = 0 }
     side.replaceChildren(...this.#sideRows(problems))
+    const box = side.querySelector('.gw-problems')
+    if (box) {
+      box.style.minHeight = this.problemsH ? `${this.problemsH}px` : ''
+      this.problemsH = Math.max(this.problemsH, box.getBoundingClientRect().height)
+    }
+    if (focus) {
+      const same = this.#sideControls(side).filter((c) => c.key === focus.key)[focus.nth]?.el
+      if (same) same.focus({ preventScroll: true })
+      // Nothing to come back to: off the panel, not on whatever follows it.
+      else if (side.contains(document.activeElement) || document.activeElement === document.body) this.root.querySelector('.gw-board')?.focus({ preventScroll: true })
+    }
+  }
+
+  /** The side panel's controls, each with a name that survives drawing it again: its row's label and its kind. */
+  #sideControls (side) {
+    return [...side.querySelectorAll('select, input, textarea, button')].map((c) => {
+      const row = c.closest('.st-row')
+      return { el: c, key: `${c.tagName}|${c.type ?? ''}|${row?.querySelector('label')?.textContent ?? ''}|${c.tagName === 'BUTTON' ? c.textContent : ''}` }
+    })
+  }
+
+  /** Which of the side panel's controls has the focus, by name and place among those so named; null when none does. */
+  #sideFocus () {
+    const side = this.root.querySelector(':scope > .wk-details')
+    const a = document.activeElement
+    if (!side || !a || !side.contains(a)) return null
+    const all = this.#sideControls(side)
+    const me = all.find((c) => c.el === a)
+    if (!me) return null
+    return { key: me.key, nth: all.filter((c) => c.key === me.key).indexOf(me) }
   }
 
   #sideRows (problems) {
@@ -747,17 +867,39 @@ class GraphWindow {
     return `${b}${i}`
   }
 
-  /** Below everything, so a new node never lands on top of another. */
-  #freeSpot () {
+  /**
+   * Where a new node goes: beside the picked node, else in the middle of the
+   * view -- or the nearest spot to there whose box overlaps no node. The
+   * boxes are the nodes' drawn sizes: a node with fields is far taller than a
+   * row, which is how a fixed step down still landed new nodes on old ones.
+   * `w` is the width wanted (two nodes side by side for a panel's pair).
+   */
+  #freeSpot (w = NODE_W) {
     const nodes = this.graph?.nodes ?? []
     if (!nodes.length) return { x: 0, y: 0 }
+    const rects = nodes.map((n) => {
+      const e = this.nodeEls?.get(n.id)
+      return { x: n.pos?.x ?? 0, y: n.pos?.y ?? 0, w: e?.offsetWidth || NODE_W, h: e?.offsetHeight || NEW_NODE_H }
+    })
     const sel = this.picked?.kind === 'node' ? nodes.find((n) => n.id === this.picked.id) : null
-    const at = sel ? { x: (sel.pos?.x ?? 0) + NODE_W + 50, y: sel.pos?.y ?? 0 }
-      : { x: Math.min(...nodes.map((n) => n.pos?.x ?? 0)), y: Math.max(...nodes.map((n) => n.pos?.y ?? 0)) + 150 }
-    // never on another node (beside the picked one is often where the next already is): down a row until clear
-    const ROW = 140
-    for (let i = 0; i < 60 && nodes.some((n) => Math.abs((n.pos?.x ?? 0) - at.x) < NODE_W + 20 && Math.abs((n.pos?.y ?? 0) - at.y) < ROW - 10); i++) at.y += ROW
-    return at
+    const board = this.root.querySelector('.gw-board')?.getBoundingClientRect()
+    const start = sel ? { x: (sel.pos?.x ?? 0) + NODE_W + 50, y: sel.pos?.y ?? 0 }
+      : board?.width ? { x: (board.width / 2 - this.view.x) / this.view.z - w / 2, y: (board.height / 2 - this.view.y) / this.view.z - NEW_NODE_H / 2 }
+        : { x: Math.min(...rects.map((r) => r.x)), y: Math.max(...rects.map((r) => r.y + r.h)) + 40 }
+    return freeSpotAmong(rects, start, w, NEW_NODE_H)
+  }
+
+  /** The view moved, if need be, so the node at `at` is on screen: a node added out of sight looks like nothing happened. */
+  #showSpot (at, w = NODE_W) {
+    const board = this.root.querySelector('.gw-board')?.getBoundingClientRect()
+    if (!board?.width) return
+    const z = this.view.z
+    const x0 = at.x * z + this.view.x; const y0 = at.y * z + this.view.y
+    // Only as far as it takes, so what was in view mostly stays.
+    const m = 16
+    const nudge = (lo, size, room) => lo < m ? m - lo : lo + size > room - m ? Math.max(m - lo, room - m - (lo + size)) : 0
+    this.view.x += nudge(x0, w * z, board.width)
+    this.view.y += nudge(y0, NEW_NODE_H * z, board.height)
   }
 
   // --- the board ------------------------------------------------------------------
@@ -859,7 +1001,7 @@ class GraphWindow {
           button(v?.edge ? `wall ${v.edge}` : v?.edgeTwin ? `facing ${v.edgeTwin}` : withIcon('action.pick', 'tap a wall'), () => this.pickOnMap(['edge'], 'tap the wall').then((hit) => { n.side = { edge: hit.id }; this.changed() }))]))
       }
       const verb = this.tv[n.type === 'condition' ? 'conditions' : 'actions'].find((x) => x.name === n[key])
-      if (verb) out.push(...this.#argRows(verb.args, shown, argPins, linked, (args) => argFields(args, n, ctx, HIDDEN_ARGS, n[key])))
+      if (verb) out.push(...this.#argRows(verb.args, shown, argPins, linked, (args) => argFields(propDefaults(this.graph, n, args), n, ctx, HIDDEN_ARGS, n[key])))
     } else if (spec) {
       if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
         out.push(this.#varRow(n))
@@ -925,7 +1067,7 @@ class GraphWindow {
     return el('button', { class: 'gw-bind', type: 'button', icon: 'action.variable', title: `take ${name} from a variable`, 'data-bind': name, onclick: (e) => {
       e.stopPropagation()
       const first = numberSources(this.graph, this.gv)[0]
-      if (!first) { this.S.status('no variable to take it from yet: make one in 𝑥 variables', 'warn'); this.side = 'variables'; this.#drawSide(); return }
+      if (!first) { this.say('no variable to take it from yet: make one in 𝑥 variables', 'warn'); this.side = 'variables'; this.#drawSide(); return }
       n[name] = { var: first.value }
       this.changed()
     } })
@@ -975,9 +1117,30 @@ class GraphWindow {
     return el('div', { class: 'st-row' }, [el('label', { text: label }), i])
   }
 
+  /**
+   * What the last play-test's logs said about this graph (playlog.js
+   * graphFailures), as problems on its board: at the node that failed when
+   * the line names one. A line goes once that node -- or, for the graph as a
+   * whole, the graph -- is changed, and all of them at the next Play.
+   */
+  played () {
+    const pf = this.S.playFailures
+    const then = pf?.graphs?.get(this.key)
+    if (!pf?.bad?.length || !then || !this.graph) return []
+    const file = this.game ? gameGraphFile(this.gname) : graphFile(this.S.docName, this.gname)
+    const nodeOf = (g, id) => (g.nodes ?? []).find((n) => n.id === id)
+    const kept = (f) => (f.node ? asRun(nodeOf(this.graph, f.node)) === asRun(nodeOf(then, f.node)) : asRun(this.graph) === asRun(then))
+    return graphFailures(pf.bad, { name: this.gname, file, graph: then }).filter(kept)
+      .map((f) => `${f.node ? `node '${f.node}': ` : ''}in the last play-test, the game said: ${f.text}${f.times > 1 ? ` (×${f.times})` : ''}`)
+  }
+
   #applyView () {
     this.world.style.transform = `translate(${this.view.x}px, ${this.view.y}px) scale(${this.view.z})`
     if (this.zoomLabel) this.zoomLabel.textContent = `${Math.round(this.view.z * 100)}%`
+    // Kept once the board stops moving, not at every step of a drag.
+    clearTimeout(this.viewTimer)
+    const key = this.key; const view = { ...this.view }
+    if (key) this.viewTimer = setTimeout(() => keepView(this.S, key, view), 250)
   }
 
   /** Board pan and zoom: one finger or the mouse on empty board pans; pinch and wheel zoom. */
@@ -1091,47 +1254,64 @@ class GraphWindow {
   #linkGesture (pinEl) {
     pinEl.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation()
-      pinEl.setPointerCapture?.(e.pointerId)
       const from = pinEl.dataset.pin
       const kind = pinEl.dataset.kind
-      const a = this.#pinPoint(pinEl)
+      // A field still being typed in is committed FIRST: left to its blur, it
+      // committed mid-drag, a node grew or lost a row, and the plug aimed at
+      // had moved by the time the wire was let go. Its node may be drawn
+      // again by that, so the pin is found again by name and the drag is
+      // followed on the window, not on an element that may be gone.
+      const typing = document.activeElement
+      if (typing && typing !== document.body && this.root.contains(typing) && typing.matches('input, textarea')) typing.blur()
+      const live = this.world.querySelector(`.gw-pin[data-pin="${CSS.escape(from)}"][data-dir="out"]`) ?? pinEl
+      const a = this.#pinPoint(live)
+      // Held by the window itself, which is never drawn again (a touch is otherwise held by the pin it began on).
+      try { this.root.setPointerCapture(e.pointerId) } catch {}
       const rubber = document.createElementNS('http://www.w3.org/2000/svg', 'path')
       rubber.setAttribute('class', `wk-edge gw-${kind}-link gw-rubber`)
       rubber.setAttribute('marker-end', `url(#gw-arrow-${kind})`)
       this.svg.appendChild(rubber)
       // Every input it could go to lights up while it is dragged.
       this.world.dataset.linking = kind
-      pinEl.dataset.from = '1'
+      live.dataset.from = '1'
       const toWorld = (ev) => {
         const r = this.world.getBoundingClientRect()
         return { x: (ev.clientX - r.left) / this.view.z, y: (ev.clientY - r.top) / this.view.z }
       }
-      const move = (ev) => rubber.setAttribute('d', curve(a, toWorld(ev)))
+      const move = (ev) => { if (ev.pointerId === e.pointerId) rubber.setAttribute('d', curve(a, toWorld(ev))) }
       const up = (ev) => {
-        pinEl.removeEventListener('pointermove', move); pinEl.removeEventListener('pointerup', up); pinEl.removeEventListener('pointercancel', up)
+        if (ev.pointerId !== e.pointerId) return
+        removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up)
         rubber.remove()
         delete this.world.dataset.linking
-        delete pinEl.dataset.from
+        delete live.dataset.from
         const target = document.elementsFromPoint(ev.clientX, ev.clientY).map((x) => x.closest?.('.gw-pin')).find((x) => x && x.dataset.dir === 'in')
-        if (!target || target.dataset.kind !== kind) { if (target) this.S.status('exec links to exec, data to data', 'warn'); return }
+        if (!target || target.dataset.kind !== kind) { if (target) this.say('exec links to exec, data to data', 'warn'); return }
         this.link(from, target.dataset.pin, kind)
       }
-      pinEl.addEventListener('pointermove', move); pinEl.addEventListener('pointerup', up); pinEl.addEventListener('pointercancel', up)
+      addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up)
     })
   }
 
   /**
    * Link an output to an input. The rules are the runtime's: an exec exit goes
    * to one place and a data input takes one value, so the link that would
-   * break them is replaced rather than refused.
+   * break them is replaced rather than refused -- and said, since a chain cut
+   * that way shows nothing but a wire gone somewhere else on the board. The
+   * replacing is one change, so one undo puts the old wire back.
    */
   link (from, to, kind) {
     const g = this.ensure()
-    if (from.split('.')[0] === to.split('.')[0]) { this.S.status('a node cannot feed itself', 'warn'); return }
-    g.links = g.links.filter(([f, t]) => !(kind === 'exec' ? f === from : t === to))
+    if (from.split('.')[0] === to.split('.')[0]) { this.say('a node cannot feed itself', 'warn'); return }
+    if (g.links.some(([f, t]) => f === from && t === to)) return
+    const gone = g.links.filter(([f, t]) => kind === 'exec' ? f === from : t === to)
+    g.links = g.links.filter((l) => !gone.includes(l))
     g.links.push([from, to])
     this.picked = { kind: 'link', index: g.links.length - 1 }
     this.changed()
+    const node = (pin) => pin.slice(0, pin.lastIndexOf('.'))
+    if (gone.length && kind === 'exec') this.say(`an exec output leads to one node: the wire from ${from} to ${node(gone[0][1])} was replaced (undo puts it back; for both, add a sequence)`, 'warn')
+    else if (gone.length) this.say(`an input takes one value: the wire from ${gone[0][0]} to ${to} was replaced (undo puts it back)`, 'warn')
   }
 
   #pinPoint (pinEl) {
@@ -1433,7 +1613,8 @@ class GraphWindow {
     // What the last bake said about the graph (a place it could not resolve):
     // the status strip that would say it is under this window.
     const baked = (S.preview?.last?.errors ?? []).map((e) => e.msg).filter((m) => /graph/.test(m))
-    for (const m of [...problems, ...baked]) rows.push(el('div', { class: 'st-danger', text: m, style: 'white-space:pre-wrap;font-size:12px' }))
+    // In a box of their own, which #fillSide keeps from shrinking under the pointer.
+    rows.push(el('div', { class: 'gw-problems' }, [...problems, ...baked].map((m) => el('div', { class: 'st-danger', text: m, style: 'white-space:pre-wrap;font-size:12px' }))))
     if (this.picked?.kind === 'link' && g?.links[this.picked.index]) {
       const [f, t] = g.links[this.picked.index]
       const key = `${f}>${t}`
@@ -1469,11 +1650,13 @@ class GraphWindow {
     const g = this.graph
     const spec = nodeSpecs(this.gv).get(n.type)
     const ch = () => this.changed()
-    const rows = [el('div', { class: 'st-section-head' }, withIcon('action.expand', `${n.type}`))]
+    // Delete beside the title, above the fields: below them, a row that
+    // came or went as a field was filled moved it under the pointer.
+    const rows = [el('div', { class: 'gw-form-head' }, [el('div', { class: 'st-section-head' }, withIcon('action.expand', `${n.type}`)), button('delete node', () => this.#deleteNode(n), 'st-danger')])]
     if (spec?.doc) rows.push(muted(spec.doc))
     rows.push(text('id', n.id, (v) => {
       const id = v.trim().replace(/[^a-z0-9_]/gi, '_')
-      if (!id || g.nodes.some((x) => x.id === id && x !== n)) { S.status('that id is empty or taken', 'warn'); return }
+      if (!id || g.nodes.some((x) => x.id === id && x !== n)) { this.say('that id is empty or taken', 'warn'); return }
       // Links name nodes by id, so they follow the rename.
       g.links = g.links.map(([f, t]) => [f.startsWith(`${n.id}.`) ? `${id}${f.slice(n.id.length)}` : f, t.startsWith(`${n.id}.`) ? `${id}${t.slice(n.id.length)}` : t])
       n.id = id; this.picked = { kind: 'node', id }; ch()
@@ -1502,7 +1685,7 @@ class GraphWindow {
       }
       const linked = this.#linkedArgs(n)
       for (const [name, from] of linked) if ((verb?.args ?? []).some((a) => a.name === name)) rows.push(row(name, el('span', { class: 'gw-from' }, withIcon('action.left', `linked from ${from}`))))
-      if (verb) rows.push(...this.#withBinding(n, verb.args ?? [], linked, (args) => argFields(args, n, ctx, [...HIDDEN_ARGS, ...linked.keys()], n[key])))
+      if (verb) rows.push(...this.#withBinding(n, verb.args ?? [], linked, (args) => argFields(propDefaults(this.graph, n, args), n, ctx, [...HIDDEN_ARGS, ...linked.keys()], n[key])))
     } else if (['get_var', 'set_var', 'add_var'].includes(n.type)) {
       rows.push(this.#varRow(n))
       const p = propertiesOf(this.gv).get(n.var)
@@ -1516,7 +1699,6 @@ class GraphWindow {
       rows.push(...this.#withBinding(n, own.filter((a) => a.type !== 'value' || a.name === 'level'), linked, (args) => argFields(args, n, ctx, [], n.type)))
       for (const a of own.filter((x) => x.type === 'value' && x.name !== 'level')) rows.push(text(`${a.name}${a.optional ? ' (unless linked)' : ''}`, n[a.name] ?? '', (v) => { if (v === '') delete n[a.name]; else n[a.name] = literal(v); ch() }))
     }
-    rows.push(button('delete node', () => this.#deleteNode(n), 'st-danger'))
     return rows
   }
 
@@ -1556,8 +1738,8 @@ class GraphWindow {
       if (!k) return
       const gg = this.ensure()
       gg.vars ??= {}
-      if (k in gg.vars) { this.S.status(`there is a variable called ${k} already`, 'warn'); return }
-      if (propertiesOf(this.gv).has(k)) { this.S.status(`${k} is an entity's property (in the list below) -- a variable needs another name`, 'warn'); return }
+      if (k in gg.vars) { this.say(`there is a variable called ${k} already`, 'warn'); return }
+      if (propertiesOf(this.gv).has(k)) { this.say(`${k} is an entity's property (in the list below) -- a variable needs another name`, 'warn'); return }
       gg.vars[k] = 0
       this.changed()
     }))
@@ -1691,6 +1873,10 @@ const STYLE = `
 .wk-world[data-linking="exec"] .gw-pin.gw-in.gw-exec .gw-dot{background:var(--cv-graph-pin-valid);transform:scale(1.45)}
 .wk-world[data-linking="data"] .gw-pin.gw-in.gw-data .gw-dot{border-color:var(--cv-graph-pin-valid);background:var(--cv-graph-head-data);transform:scale(1.45)}
 .gw-pname{color:var(--cv-graph-node-text)}
+.gw-board:focus{outline:none}
+.gw-form-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.gw-say{position:absolute;left:8px;top:8px;z-index:6;max-width:calc(100% - 16px);box-sizing:border-box;height:auto;min-height:0;line-height:1.35;padding:4px 10px;border-radius:8px;white-space:normal;cursor:pointer}
+.gw-say[hidden]{display:none}
 .gw-zoom{position:absolute;right:8px;bottom:8px;z-index:5;display:flex;align-items:center;gap:4px;padding:4px}
 .gw .gw-zoom button{min-width:36px;height:34px;padding:0 8px;font-size:15px;line-height:1;cursor:pointer}
 .gw-zoom-pct{font-size:11px;min-width:42px;text-align:center}

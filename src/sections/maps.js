@@ -10,6 +10,7 @@ import { el, button, text, muted, ask, confirmDialog, toggle, number, select, wi
 import { metamapProblems, mapAt, outsideCell, MAX_RADIUS } from '../metamap.js'
 import { newMetamap } from '../migrate.js'
 import { thumbCanvas } from '../thumbs.js'
+import { cleanId } from '../module_emit.js'
 
 let S = null
 
@@ -50,7 +51,8 @@ function showMaps () {
     button('+ new map', async () => {
       const name = await ask('map name (letters, digits, dashes)', `map${names.length + 1}`)
       if (!name) return
-      const clean = name.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+      const { id: clean, dropped } = cleanId(name)
+      if (dropped.length) { S.status(`a map name is a-z, 0-9, _ and -: ${dropped.join(' ')} cannot be in it`, 'warn'); return }
       if (!clean || S.docs[clean]) { S.status('that name is taken or empty', 'warn'); return }
       S.docs[clean] = S.starterDoc(clean)
       S.save()
@@ -139,7 +141,8 @@ function cellTapped (x, y) {
   if (here) { S.mmPicked = here; showMaps(); return }
   // An empty cell, nothing in hand: a new map, there.
   ask('a new map in this cell (letters, digits, dashes)', `map${Object.keys(S.docs).length + 1}`).then((raw) => {
-    const clean = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+    const { id: clean, dropped } = cleanId(raw)
+    if (dropped.length) { S.status(`a map name is a-z, 0-9, _ and -: ${dropped.join(' ')} cannot be in it`, 'warn'); return }
     if (!clean) return
     if (S.docs[clean]) { S.status('that name is taken', 'warn'); return }
     const doc = S.starterDoc(clean)

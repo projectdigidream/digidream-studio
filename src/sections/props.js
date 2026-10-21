@@ -13,7 +13,7 @@ import { moduleProps, newProp, deleteProp, renameProp, placementsOf, propRows } 
 
 let S = null
 
-/** A monster's or prop's pictures: a .tsprite project, or an atlas .json and its .png. */
+/** A monster's or prop's pictures: a .tsprite project, an atlas .json and its .png, or one .png picture. */
 export async function importSheet () {
   const f = await shell.importFile('.tsprite,.json,.png')
   if (!f) return null
@@ -27,7 +27,8 @@ export async function importSheet () {
   } catch (e) { S.status(String(e.message ?? e), 'error'); return null }
   // A name the module already has is never taken over unasked: a second
   // sprite, made with the same id, would replace the first one's art.
-  const taken = (n) => !!S.module.sprites?.[n] || !!S.rec.assets?.[`sources/sprites/${n}.tsprite`]
+  // (A single picture of that name, a prop's, would become this sheet's image.)
+  const taken = (n) => !!S.module.sprites?.[n] || !!S.rec.assets?.[`sources/sprites/${n}.tsprite`] || !!S.rec.assets?.[`sprites/${n}.png`]
   if (taken(r.name)) {
     const raw = await ask(`There is a sheet called ${r.name} already. This one's name (A-Z, 0-9, _), or ${r.name} to replace it`, copyName(r.name, taken))
     const to = cleanName(raw ?? '')

@@ -37,7 +37,7 @@ import { openScreens } from './screens.js'
 import { openGraph } from './graphwin.js'
 import { openPanels } from './panelwin.js'
 import { decorIdsOf } from './panels_emit.js'
-import { writeStudioLog, noteStudioLog, showPlayLog, lastPlay, readLogs, failures } from './playlog.js'
+import { writeStudioLog, noteStudioLog, showPlayLog, lastPlay, readLogs, failures, playedGraphs } from './playlog.js'
 import { graphProblems, graphsOf, liveGraphs, graphFile } from './graphs_emit.js'
 import { markerNames, SIGN } from './markers.js'
 import { Core } from '/src/core.js'
@@ -47,7 +47,7 @@ import { loadMapcBinary, bake as bakeWith } from './bake.js'
 import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP, removeSector, graphsNaming } from './doc.js'
 import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
-import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf } from './module_emit.js'
+import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf, cleanId } from './module_emit.js'
 import { showPlayScreen } from './playscreen.js'
 import { recordFromEntries, recordToEntries } from './record.js'
 import { checkForUpdate } from './updates.js'
@@ -568,7 +568,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   globalThis.__dnpAppHidden = (hidden) => { try { before?.(hidden) } catch {} if (!hidden) backInFront() }
 }
 
-new Gestures(S.viewport.canvas, {
+S.gestures = new Gestures(S.viewport.canvas, {
   tap: (i) => tools.onTap(S, i),
   dragStart: (i) => tools.onDragStart(S, i),
   drag: (i) => tools.onDrag(S, i),
@@ -848,7 +848,9 @@ async function openDoc (name, { keepView = false } = {}) {
  */
 async function renameModule (raw) {
   const from = S.rec.id
-  const id = String(raw ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+  const { id, dropped } = cleanId(raw)
+  // Letters with no plain spelling are not lost in silence: the id is refused.
+  if (dropped.length) { S.say(`An id is a-z, 0-9, _ and -: ${dropped.join(' ')} cannot be in it. The id stays ${from}.`, 'warn'); return from }
   if (!id || id === from) return from
   if (await S.store.load(id)) { S.say(`There is already a module called ${id}: the id stays ${from}.`, 'warn'); return from }
   await settleSave()
@@ -1552,7 +1554,7 @@ S.setSheetHeight = async (name, h) => {
 
 S.openDoc = openDoc
 S.bankNames = bankNames
-S.soundNames = () => [...new Set([...(S.moduleSounds ?? []), ...(S.servedSounds ?? [])])]
+S.soundNames = () => { S.freshSounds?.(); return [...new Set([...(S.moduleSounds ?? []), ...(S.servedSounds ?? [])])] }
 S.spriteNames = () => [...new Set([...S.spriteUrls.keys(), ...(S.servedSprites ?? [])])].sort()
 
 /**
@@ -1725,6 +1727,12 @@ async function play ({ start = null } = {}) {
     // Every 16 files, the bar: a big module writes hundreds.
     if (i % 16 === 0) await screen.progress(i / r.files.length, `${i} of ${r.files.length} files`)
     await shell.writeFile(`${root}/${f.path}`, bytes)
+  }
+  // A MAP DELETED here leaves its bake from an earlier Play on disk, and the
+  // shell hands the server every .dnpm in maps/: the deleted map was played.
+  const written = new Set(r.files.map((f) => `${root}/${f.path}`))
+  for (const f of await shell.listFiles(`${root}/maps`).catch(() => [])) {
+    if (f.endsWith('.dnpm') && !written.has(f)) await shell.deleteFile(f).catch(() => {})
   }
   // The studio's part of the Play log (playlog.js), before anything starts.
   await writeStudioLog(S, r, { map })
@@ -1918,6 +1926,8 @@ async function finishBoot () {
       // What the play-test logged that looks wrong, said on the way back.
       readLogs().then((logs) => {
         const bad = failures(logs)
+        // Kept for the graph boards, which say what failed at the graph or the node (graphwin.js).
+        S.playFailures = { bad, graphs: playedGraphs(S) }
         if (bad.length) S.status(`back from playing ${back.map} -- the Play log has ${bad.length} line${bad.length > 1 ? 's' : ''} that look wrong (⋯ → Play log, or Home)`, 'warn')
       }).catch(() => {})
     }
@@ -1928,6 +1938,10 @@ async function finishBoot () {
   // dialog closes, else the page before this one, else Home. Only on Home is
   // it not taken, and the app goes to the background -- never quits.
   window.dnpBack = () => {
+    // BACK WHILE TYPING closes the keyboard: the field lets go and the page
+    // stays. It used to leave the map with the keyboard, one press for both.
+    const f = document.activeElement
+    if (f && f !== document.body && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA' || f.tagName === 'SELECT' || f.isContentEditable)) { f.blur(); return true }
     const dlg = [...document.querySelectorAll('dialog[open]')].pop()
     if (dlg) { if (dlg.dispatchEvent(new Event('cancel', { cancelable: true }))) dlg.close(); return true }
     if (S.router.current?.id === 'home') return false
@@ -1936,10 +1950,45 @@ async function finishBoot () {
   }
   // THE KEYBOARD MADE ROOM (the shell shortens the page): the field being
   // typed in is brought where it can be seen, not left under the keyboard.
-  addEventListener('resize', () => {
-    const f = document.activeElement
-    if (f && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA') && f.isConnected) requestAnimationFrame(() => f.scrollIntoView({ block: 'center', inline: 'nearest' }))
-  })
+  // AND PUT BACK when the keyboard goes or the field lets go: focusing a field
+  // and scrollIntoView also scroll boxes that are not meant to scroll
+  // (overflow hidden, as the graph board is), and the board stayed shifted
+  // up, its zoom buttons over the nodes.
+  {
+    let moved = []                       // [element, scrollTop, scrollLeft] as they were before
+    let tall = { w: innerWidth, h: visualViewport?.height ?? innerHeight }
+    const putBack = () => { for (const [n, top, left] of moved) { n.scrollTop = top; n.scrollLeft = left } moved = [] }
+    const fixed = (n) => { const o = getComputedStyle(n); return o.overflowY === 'hidden' || o.overflowY === 'clip' || o.overflowX === 'hidden' }
+    // As they were when the finger went down: the browser's own scroll to a
+    // focused field comes before the focus event.
+    const boxes = (f) => { const out = []; for (let n = f?.parentElement; n; n = n.parentElement) if (fixed(n)) out.push([n, n.scrollTop, n.scrollLeft]); return out }
+    let down = null
+    addEventListener('pointerdown', (e) => { down = { at: e.target, boxes: boxes(e.target) } }, true)
+    addEventListener('focusin', (e) => {
+      const f = e.target
+      if (!(f.tagName === 'INPUT' || f.tagName === 'TEXTAREA')) return
+      putBack()
+      moved = down && (down.at === f || f.contains(down.at) || down.at.contains?.(f)) ? down.boxes : boxes(f)
+      down = null
+    }, true)
+    addEventListener('focusout', () => requestAnimationFrame(() => {
+      const f = document.activeElement
+      if (!(f && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA'))) putBack()
+    }), true)
+    const onResize = () => requestAnimationFrame(() => {
+      const h = visualViewport?.height ?? innerHeight
+      // turned on its side, or taller again: no keyboard in the way
+      if (innerWidth !== tall.w || h >= tall.h - 1) { tall = { w: innerWidth, h: Math.max(h, innerWidth === tall.w ? tall.h : 0) }; putBack(); return }
+      const f = document.activeElement
+      if (!(f && (f.tagName === 'INPUT' || f.tagName === 'TEXTAREA') && f.isConnected)) return
+      for (let n = f.parentElement; n; n = n.parentElement) if (fixed(n) && !moved.some((m) => m[0] === n)) moved.push([n, n.scrollTop, n.scrollLeft])
+      const page = document.scrollingElement
+      if (page && !moved.some((m) => m[0] === page)) moved.push([page, page.scrollTop, page.scrollLeft])
+      f.scrollIntoView({ block: 'center', inline: 'nearest' })
+    })
+    addEventListener('resize', onResize)
+    visualViewport?.addEventListener('resize', onResize)
+  }
   stage('ready', 1)
   boot.hidden = true
   // The plugins' background pages (a sync), now that a module is open.
@@ -1956,7 +2005,9 @@ async function finishBoot () {
     // Not while a page covers the map (a graph, a workshop, Home): drawing
     // the level under an opaque page every frame was most of what a drag on
     // a big graph cost. It is drawn again the moment the map shows.
-    if (!mapCovered() && (S.viewport.dirty || S.viewport.animating)) S.viewport.render()
+    // Weather alone does not redraw while a finger is on the map: on a slow
+    // phone those frames were what kept the gesture's own events waiting.
+    if (!mapCovered() && (S.viewport.dirty || (S.viewport.animating && !S.gestures?.busy))) S.viewport.render()
     requestAnimationFrame(loop)
   })
 }

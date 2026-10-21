@@ -33,7 +33,9 @@ function saved (scope) {
 
 function previewOf (sky) {
   if (!preview) {
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    // Its picture kept: the canvas moves into each new sheet, and a phone's
+    // WebView showed it black there until a drag drew it again.
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(2, devicePixelRatio))
     renderer.setSize(480, 270)
     const scene = new THREE.Scene()
@@ -56,6 +58,9 @@ function previewOf (sky) {
     })
     const up = () => { last = null }
     c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up)
+    // and drawn whenever it comes into sight: a sheet laid out a frame late
+    // (a phone's) had it drawn while it was nowhere
+    if (typeof IntersectionObserver === 'function') new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) draw() }).observe(c)
   }
   preview.sky.set(skyFromMessage(skyMessage(sky))).then(() => draw())
   draw()
@@ -168,7 +173,7 @@ function showSky (scope = null) {
   S.ui.showSheet('Sky', rows)
   const sel = document.querySelector('[data-sky-scope]')
   if (sel) sel.value = scope ?? ''
-  requestAnimationFrame(() => draw())
+  requestAnimationFrame(() => { draw(); requestAnimationFrame(() => draw()) })
 }
 
 /** Hand it the studio's state, and publish what others call. */

@@ -140,6 +140,29 @@ export function emitModuleLua (module, { hooks = [] } = {}) {
 // bake here is given, so the two agree.
 const RUNTIME_DIR = 'engine/maps/scripts'
 
+/**
+ * An id as somebody typed it, made one the module, its files and its server
+ * take: lower-case letters, digits, _ and -. Accented letters lose their
+ * accents ("l'île" -> "l-ile"), spaces and apostrophes become dashes, and
+ * whatever has no plain-letter spelling is reported in `dropped`, so the
+ * caller can say so instead of losing it in silence.
+ * @returns { id, dropped: string[] }
+ */
+export function cleanId (raw) {
+  const SPELT = { ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', đ: 'd', ð: 'd', ł: 'l', þ: 'th', ı: 'i' }
+  const dropped = []
+  let out = ''
+  for (const ch of String(raw ?? '').trim().toLowerCase().normalize('NFD')) {
+    if (/[a-z0-9_-]/.test(ch)) out += ch
+    else if (/\p{M}/u.test(ch)) continue                   // the accent of the letter before
+    else if (SPELT[ch]) out += SPELT[ch]
+    else if (/[\s'’.,/–—]/.test(ch)) out += '-'
+    // a LETTER with no plain spelling is named (it would vanish); a sign is just left out, as ever
+    else if (/\p{L}/u.test(ch) && !dropped.includes(ch)) dropped.push(ch)
+  }
+  return { id: out.replace(/-{2,}/g, '-').replace(/^-+|-+$/g, ''), dropped }
+}
+
 export function newModule (id, name = id) {
   return {
     version: MODULE_VERSION,

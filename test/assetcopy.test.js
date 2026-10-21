@@ -32,5 +32,17 @@ check(tx.join() === 'STONE.png,STONE.texproj.json' && sx.join() === 'HERO.tsprit
 delete rec.assets['sources/textures/STONE.texproj.json']
 check(exportsOf(rec, 'texture', 'STONE').length === 1, 'CONTROL: a texture with no project exports its picture alone')
 
+// A module's or map's id (module_emit.js cleanId): accents come off, and what
+// has no plain spelling is reported, never dropped unseen.
+{
+  const { cleanId } = await import('../src/module_emit.js')
+  const a = cleanId('phare-de-l-île'); const b = cleanId("Le vieux phare de l'Île"); const c = cleanId('Straße 2')
+  check(a.id === 'phare-de-l-ile' && !a.dropped.length, `an accented letter keeps its letter (${a.id})`)
+  check(b.id === 'le-vieux-phare-de-l-ile' && c.id === 'strasse-2', `spaces and apostrophes are dashes, ß is ss (${b.id}, ${c.id})`)
+  const d = cleanId('niveau-ж')
+  check(d.id === 'niveau' && d.dropped.join('') === 'ж', `CONTROL: a letter with no plain spelling is reported (${JSON.stringify(d)})`)
+  check(cleanId('my_level-2').id === 'my_level-2', 'CONTROL: a clean id is itself')
+}
+
 console.log(`\nassetcopy: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

@@ -1,13 +1,15 @@
 //
 // Sprite sheets for a module's monsters and props: importing them.
 //
-// Two things can be imported, and they end up as the same two files:
+// Three things can be imported, and they end up as the same two files:
 //
 //   a ThreeSprite PROJECT (.tsprite)  -> composed here, by ThreeSprite's own
 //                                        runtime (studio/vendor/tsprite.js):
 //                                        the manifest and the packed sheet
 //   an ATLAS export (.json + .png)    -> taken as they are, the manifest
 //                                        checked by the client's own parser
+//   a plain PICTURE (.png)            -> one frame, one view: its manifest
+//                                        written here (pictureManifest)
 //
 // Either way the module gets assets/sprites/NAME.json and NAME.png, which is
 // what an `atlas NAME` line in props.txt names and what the client draws
@@ -83,7 +85,52 @@ export async function importSheetFile (file, { parseAtlas, pickPng }) {
     manifest.image = `${name}.png`
     return { name, manifest, png: png.bytes, warnings: [] }
   }
-  throw new Error('pick a .tsprite project, or an atlas .json and then its .png')
+  // A PLAIN PICTURE: one frame, seen the same from every side, standing on
+  // its bottom edge -- what somebody who drew a character in a paint program
+  // has. Its manifest is written here, as ThreeSprite would for a one-frame,
+  // one-view sprite; frames and turning views are ThreeSprite's to make.
+  if (/\.png$/i.test(file.name) || isPng(file.bytes)) {
+    const size = pngSize(file.bytes)
+    if (!size) throw new Error(`${file.name}: not a PNG this can read`)
+    const name = sheetName(file.name.replace(/\.[^.]*$/, ''))
+    if (!name) throw new Error(`${file.name}: the file needs a name made of letters and digits`)
+    const manifest = pictureManifest(name, size.w, size.h)
+    parseAtlas(manifest, name)
+    return { name, manifest, png: file.bytes, warnings: ['one picture, the same from every side (ThreeSprite makes turning views and frames)'] }
+  }
+  throw new Error('pick a .tsprite project, an atlas .json and then its .png, or a single .png picture')
+}
+
+const isPng = (b) => b && b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
+
+/** A PNG's width and height, from its header; null when it is no PNG. */
+export function pngSize (b) {
+  if (!isPng(b)) return null
+  const at = (i) => ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0
+  const w = at(16); const h = at(20)
+  return w > 0 && h > 0 ? { w, h } : null
+}
+
+/**
+ * The manifest of a one-picture sheet: the picture whole as its only frame,
+ * on a square canvas with its bottom edge on the canvas's bottom (the feet)
+ * and centred across it, one world unit tall (as a new ThreeSprite sprite).
+ */
+export function pictureManifest (name, w, h) {
+  const n = Math.max(w, h)
+  const source = { x: Math.floor((n - w) / 2), y: n - h, w, h }
+  return {
+    format: 'threesprite-atlas',
+    version: 1,
+    sprite: name,
+    canvas: { w: n, h: n },
+    worldHeight: 1,
+    image: `${name}.png`,
+    size: { w, h },
+    views: { count: 1, mirror: false, list: [{ index: 1, angleDeg: 0, mirrored: false, mirrorOf: null }] },
+    frames: { 'idle/0/v1': { rect: { x: 0, y: 0, w, h }, source, pivot: { x: (n / 2 - source.x) / w, y: (n - source.y) / h } } },
+    animations: [{ name: 'idle', fps: 1, loop: true, frames: [{ index: 0, views: { 1: 'idle/0/v1' } }] }]
+  }
 }
 
 /** What the module document keeps about a sheet (the files hold the rest). */

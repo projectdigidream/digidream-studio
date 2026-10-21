@@ -38,6 +38,44 @@ export function groundAt (S, info, z) {
 }
 
 /**
+ * THE ROOM UNDER A FINGER: the smallest room whose floor the tap lands in,
+ * each floor asked at its own height -- under a tilted camera a raised
+ * platform is not where the ground plane would put it.
+ */
+export function roomUnder (S, info) {
+  let best = null; let bestArea = Infinity
+  for (const z of new Set(S.doc.order.map((sid) => S.doc.sectors[sid].floor))) {
+    const g = groundAt(S, info, z)
+    const s = g ? sectorAt(S.doc, g.x, g.y) : null
+    if (!s || s.floor !== z) continue
+    const a = Math.abs(polyArea(s.verts))
+    if (a < bestArea) { best = s; bestArea = a }
+  }
+  // a floor height no room under the tap has: the plain ground answer
+  if (!best) { const g = groundAt(S, info, 0); best = g ? sectorAt(S.doc, g.x, g.y) : null }
+  return best
+}
+
+const polyArea = (vs) => vs.reduce((a, v, i) => { const w = vs[(i + 1) % vs.length]; return a + v.x * w.y - w.x * v.y }, 0) / 2
+
+/**
+ * HOW CLOSE TO ITS EDGE A ROOM'S WALLS AND CORNERS ARE TAKEN, in px: the usual
+ * reach, but never more than a quarter of the room's width on screen. A
+ * platform forty pixels across was all walls and corners at a finger's reach,
+ * and a thin door room all its neighbours' walls.
+ */
+function reachIn (S, s, px) {
+  if (!s) return px
+  const pts = s.verts.map((v) => S.viewport.toScreen(v.x, v.y, s.floor))
+  const xs = pts.map((p) => p.x); const ys = pts.map((p) => p.y)
+  const box = Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+  // a thin room standing at an angle has a wide box: twice its area over its outline is its width
+  const perim = pts.reduce((a, p, i) => a + Math.hypot(pts[(i + 1) % pts.length].x - p.x, pts[(i + 1) % pts.length].y - p.y), 0)
+  const width = perim > 0 ? Math.min(box, 4 * Math.abs(polyArea(pts)) / perim) : box
+  return Math.max(1, Math.min(px, width / 4))
+}
+
+/**
  * The edge under a screen point (within HIT_PX), or null.
  *
  * A SHARED WALL IS TWO EDGES in the same place, one per room, and "the
@@ -45,24 +83,31 @@ export function groundAt (S, info, z) {
  * the tap's side decides -- tap the wall from inside the room whose side you
  * mean -- and tapping the wall that is already selected flips to the other
  * side. The selected room's edge wins a tap exactly on the line.
+ *
+ * The reach shrinks with the room the wall belongs to and with the room the
+ * tap is in (reachIn): well inside a small room is that room, not a wall.
  */
-function edgeUnder (S, info) {
+function edgeUnder (S, info, under = roomUnder(S, info)) {
   const doc = S.doc
   const cands = []
+  const inReach = reachIn(S, under, HIT_PX)
   for (const sid of doc.order) {
     const s = doc.sectors[sid]
+    // The closest point on the edge to the tapped ground point, then its
+    // screen distance -- so the tolerance is in pixels at any zoom.
+    const g = groundAt(S, info, s.floor)
+    if (!g) continue
+    let reach = null
     for (let i = 0; i < s.verts.length; i++) {
       const a = s.verts[i]; const b = s.verts[(i + 1) % s.verts.length]
-      // The closest point on the edge to the tapped ground point, then its
-      // screen distance -- so the tolerance is in pixels at any zoom.
-      const g = groundAt(S, info, s.floor)
-      if (!g) continue
       const dx = b.x - a.x; const dy = b.y - a.y
       const len2 = dx * dx + dy * dy || 1
       const t = Math.max(0, Math.min(1, ((g.x - a.x) * dx + (g.y - a.y) * dy) / len2))
       const px = a.x + t * dx; const py = a.y + t * dy
       const d = S.viewport.screenDistance(info.x, info.y, px, py, s.floor)
-      if (d < HIT_PX) cands.push({ d, sector: s, i, edge: a.edge })
+      if (d >= Math.min(HIT_PX, inReach)) continue
+      reach ??= reachIn(S, s, inReach)
+      if (d < reach) cands.push({ d, sector: s, i, edge: a.edge })
     }
   }
   if (!cands.length) return null
@@ -71,8 +116,6 @@ function edgeUnder (S, info) {
   if (ties.length === 1) return ties[0]
   const k = S.selection?.kind === 'edge' ? ties.findIndex((c) => c.edge.id === S.selection.id) : -1
   if (k >= 0) return ties[(k + 1) % ties.length]
-  const g = groundAt(S, info, 0)
-  const under = g ? sectorAt(doc, g.x, g.y) : null
   return ties.find((c) => c.sector.id === under?.id) ??
          ties.find((c) => c.sector.id === (S.selection?.kind === 'sector' ? S.selection.id : S.selection?.sectorId)) ??
          ties[0]
@@ -99,22 +142,24 @@ export function otherSide (S, edgeId) {
   return null
 }
 
-/** What is under a screen point, in priority: furniture, edge, sector. */
+/**
+ * What is under a screen point, in priority: furniture, edge, sector.
+ * The corners shown are the selected room's (or every room's while one is
+ * drawn or a corner dragged), and they reach no further into the room the tap
+ * is in than its walls do.
+ */
 export function hitTest (S, info) {
-  const f = S.viewport.pickFurniture(info.x, info.y)
+  const under = roomUnder(S, info)
+  const sec = S.selection?.kind === 'sector' ? S.doc.sectors[S.selection.id]
+    : S.selection?.sectorId ? S.doc.sectors[S.selection.sectorId] : null
+  const f = S.viewport.pickFurniture(info.x, info.y, Math.min(reachIn(S, sec, Infinity), reachIn(S, under, Infinity)))
   if (f) {
-    if (f.kind === 'vertex') {
-      const sec = S.selection?.kind === 'sector' ? S.doc.sectors[S.selection.id]
-        : S.selection?.sectorId ? S.doc.sectors[S.selection.sectorId] : null
-      return { kind: 'vertex', id: f.id, sectorId: sec?.id }
-    }
+    if (f.kind === 'vertex') return { kind: 'vertex', id: f.id, sectorId: sec?.id }
     return { kind: f.kind, id: f.id }
   }
-  const e = edgeUnder(S, info)
+  const e = edgeUnder(S, info, under)
   if (e) return { kind: 'edge', id: e.edge.id, sectorId: e.sector.id }
-  const g = groundAt(S, info, 0)
-  const s = g ? sectorAt(S.doc, g.x, g.y) : null
-  if (s) return { kind: 'sector', id: s.id }
+  if (under) return { kind: 'sector', id: under.id }
   return null
 }
 
@@ -133,7 +178,13 @@ export function onTap (S, info) {
         return
       }
     }
-    const hit = hitTest(S, info)
+    let hit = hitTest(S, info)
+    // A ROOM ASKED FOR, the room the tap is in: its own walls and corners, or
+    // a marker standing in it, are not what was meant.
+    if (S.pick.kinds.includes('sector') && hit && !S.pick.kinds.includes(hit.kind)) {
+      const room = roomUnder(S, info)
+      if (room) hit = { kind: 'sector', id: room.id }
+    }
     if (hit && S.pick.kinds.includes(hit.kind)) { const p = S.pick; S.pick = null; S.redraw(); p.resolve(hit); return }
     S.status(`tap ${S.pick.kinds.join(' or ')}`, 'warn')
     return
@@ -318,7 +369,9 @@ export function onDragStart (S, info) {
   } else if (hit && (hit.kind === 'entity' || hit.kind === 'spawn' || hit.kind === 'light')) {
     const list = hit.kind === 'entity' ? S.doc.entities : hit.kind === 'spawn' ? S.doc.spawns : S.doc.lights
     const e = list.find((x) => x.id === hit.id)
-    S.drag = { kind: 'thing', e, start: { x: e.x, y: e.y }, from: g }
+    // how high over its floor it stands (a light hangs 2 up), never below it
+    const under = sectorAt(S.doc, e.x, e.y)
+    S.drag = { kind: 'thing', e, start: { x: e.x, y: e.y, z: e.z }, from: g, lift: under ? Math.max(0, (e.z ?? 0) - under.floor) : null }
     S.select(hit, { quiet: true })
   } else if (hit?.kind === 'sector' && S.selection?.kind === 'sector' && S.selection.id === hit.id) {
     const s = S.doc.sectors[hit.id]
@@ -354,6 +407,7 @@ export function onDrag (S, info) {
     d.s.verts.forEach((v, i) => { v.x = d.start[i].x + sx; v.y = d.start[i].y + sy })
   } else if (d.kind === 'thing') {
     d.e.x = snap(d.start.x + dx, step(S, 1 / 8)); d.e.y = snap(d.start.y + dy, step(S, 1 / 8))
+    onFloor(S, d)
   } else if (d.kind === 'pathpoint') {
     d.pt.x = snap(d.start.x + dx, step(S, 1 / 8)); d.pt.y = snap(d.start.y + dy, step(S, 1 / 8))
   }
@@ -380,17 +434,25 @@ export function onDragEnd (S, info, cancelled) {
   if (cancelled) {
     if (d.kind === 'vertex') { d.v.x = d.start.x; d.v.y = d.start.y }
     else if (d.kind === 'sector') d.s.verts.forEach((v, i) => { v.x = d.start[i].x; v.y = d.start[i].y })
-    else if (d.kind === 'thing') { d.e.x = d.start.x; d.e.y = d.start.y }
+    else if (d.kind === 'thing') { d.e.x = d.start.x; d.e.y = d.start.y; if (d.start.z !== undefined) d.e.z = d.start.z }
     else if (d.kind === 'pathpoint') { d.pt.x = d.start.x; d.pt.y = d.start.y }
     S.redraw(); S.previewNow()
     return
   }
-  if (d.kind === 'thing') {
-    // A thing dropped on a floor sits on it.
-    const sec = sectorAt(S.doc, d.e.x, d.e.y)
-    if (sec && 'dormant' in d.e) d.e.z = sec.floor
-  }
+  if (d.kind === 'thing') onFloor(S, d)
   S.commit()
+}
+
+/**
+ * A THING DRAGGED ONTO A ROOM stands on that room's floor, as one placed there
+ * does -- a start flag carried onto a raised floor kept height 0 and the
+ * player began inside the stone. What stood above its old floor (a light)
+ * stays as far above the new one; off every room it keeps its height.
+ */
+function onFloor (S, d) {
+  const sec = sectorAt(S.doc, d.e.x, d.e.y)
+  if (sec) d.e.z = sec.floor + (d.lift ?? 0)
+  else if (d.start.z !== undefined) d.e.z = d.start.z
 }
 
 export function onLongPress (S, info) {
@@ -405,6 +467,9 @@ export function onLongPress (S, info) {
     }
     return
   }
+  // The Room tool draws: a slow tap is still a corner, never the room under it
+  // selected (its panel opening over the room being drawn) or a corner removed.
+  if (S.tool === 'room') return roomTap(S, info)
   const hit = hitTest(S, info)
   if (!hit) return
   if (hit.kind === 'vertex' && hit.sectorId) {
