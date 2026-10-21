@@ -26,11 +26,11 @@ import { toLua, luaString, block } from './lua.js'
 
 const ENTITIES_HEADER = `-- Placed props and monsters. Positions are eighths of a unit, which is the
 -- studio's grid, so fx.frac(n, 8) is exact.`
-const ENTITIES_HEADER_FINE = `-- Placed props and monsters. Positions are 64ths of a unit (the studio's
--- grid, switched off), so fx.frac(n, 64) is exact.`
+const ENTITIES_HEADER_FINE = `-- Placed props and monsters. Positions are 256ths of a unit (the studio's
+-- grid, switched off), so fx.frac(n, 256) is exact.`
 
 // Positions are written in eighths, as they always were, unless one of them
-// needs the finer 64ths (placed with the grid off): a map whose things all
+// needs the finer 256ths (placed with the grid off): a map whose things all
 // sit on the 8th writes exactly what it wrote before.
 const denominator = (vals) => (vals.every((v) => Number.isInteger(Math.round(Number(v ?? 0) * RES) / (RES / 8))) ? 8 : RES)
 

@@ -212,10 +212,13 @@ async function bake (doc, opts) {
 // --- snapping and duplicates ------------------------------------------------------
 {
   const doc = newDoc('snap')
-  const s = addSector(doc, [{ x: 0.1, y: 0.1 }, { x: 7.9, y: 0.05 }, { x: 8.02, y: 0.1 }, { x: 8, y: 8 }, { x: 0, y: 8 }])
+  // Corners go onto the exact lattice (1/RES), not the map's grid: the grid is
+  // the tools' to apply, and switched off it must not come back here.
+  const s = addSector(doc, [{ x: 0.1, y: 0.1 }, { x: 8 - 0.3 / RES, y: 0.2 / RES }, { x: 8 + 0.3 / RES, y: 0.1 / RES }, { x: 8, y: 8 }, { x: 0, y: 8 }])
   normalize(doc)
   check(s.verts.length === 4, `a corner that snaps onto its neighbour is dropped (${s.verts.length} corners)`)
-  check(s.verts.every((v) => Number.isInteger(v.x * 4) && Number.isInteger(v.y * 4)), 'every corner sits on the grid')
+  check(s.verts.every((v) => Number.isInteger(v.x * RES) && Number.isInteger(v.y * RES)), 'every corner sits on the exact lattice')
+  check(s.verts.some((v) => v.x === Math.round(0.1 * RES) / RES), `CONTROL: a corner off the map's grid stays off it (${JSON.stringify(s.verts.map((v) => [v.x, v.y]))})`)
 }
 
 // --- which sector is under a point --------------------------------------------------

@@ -8,8 +8,9 @@
 // mapfmt.js from the same walk that writes the .map, so they cannot disagree
 // with it.
 //
-// NUMBERS ARE DYADIC. Every coordinate and height sits on a grid of 1/64 of a
-// unit (1/8 before the grid could be switched off), so a JS double holds it exactly, String() prints it exactly, and
+// NUMBERS ARE DYADIC. Every coordinate and height sits on a grid of 1/256 of a
+// unit (1/8 before the grid could be switched off; topology.js multiplies two
+// of them, so a map thousands of units wide stays far inside a double's 2^53), so a JS double holds it exactly, String() prints it exactly, and
 // mapc's parse_fx reads it back exactly. The document has no floats in the
 // sense the engine forbids: it has fractions whose denominator is a power of
 // two, which is the one kind of decimal that survives the round trip.
@@ -20,7 +21,7 @@
 // the id must follow the edge, not the vertex.
 //
 
-export const RES = 64             // grid resolution: coordinates are multiples of 1/RES
+export const RES = 256            // grid resolution: coordinates are multiples of 1/RES
 export const MIN_GRID = 1 / RES
 export const DEFAULT_GRID = 0.25
 

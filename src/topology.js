@@ -76,7 +76,10 @@ function classify (verts, x, y) {
 export function normalize (doc, { split = true } = {}) {
   for (const sid of doc.order) {
     const s = doc.sectors[sid]
-    for (const v of s.verts) { v.x = snap(v.x, doc.grid); v.y = snap(v.y, doc.grid) }
+    // Onto the exact lattice (1/RES), not the map's grid: where a corner lands
+    // on the grid is the tools' (tools.js step), and with the grid switched
+    // off a corner here was pulled back onto it after every edit.
+    for (const v of s.verts) { v.x = snap(v.x, 1 / RES); v.y = snap(v.y, 1 / RES) }
     // A corner equal to the one before it is one corner; the edge that
     // survives is the one leading on from it.
     s.verts = s.verts.filter((v, i, arr) => {

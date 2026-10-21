@@ -7,6 +7,10 @@ anything not released yet is under **Unreleased**.
 
 ### Fixed
 
+- **With the grid off, rooms still snapped to it**: every edit put each corner
+  back on the map's grid, so the switch only held until the next change. Corners
+  now stay where they are put, to a 256th of a unit (the finest step was a
+  64th).
 - **A new missile could hardly be seen**: its glowing dot was 0.35 m tall, a few
   pixels from across a room on a phone. A new missile is drawn 0.6 m tall and
   leaves a glowing particle trail in its colour (a particle kind of its own, on
@@ -21,8 +25,8 @@ A development release (the dev branch), built on engine 0.2.3.2.
 
 - **Snap to the grid, or not**: the map's ⋯ menu (or G) switches the grid off,
   and corners, rooms, things and points go exactly where they are put, to a
-  64th of a unit; a corner still joins another room's corner or wall it lands
-  on. Remembered per device. The map's finest step is a 64th now (an 8th
+  256th of a unit; a corner still joins another room's corner or wall it lands
+  on. Remembered per device. The map's finest step is a 256th now (an 8th
   before); existing maps are unchanged.
 
 - **A plain PNG imports as a sheet**: "+ import sheet..." (Player, Monsters,

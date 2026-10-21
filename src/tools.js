@@ -18,9 +18,9 @@ const CLOSE_PX = COARSE ? 30 : 18
 const SNAP_PX = COARSE ? 26 : 16
 
 // THE GRID SWITCHED OFF (S.freePlace, the map menu or G): things land where
-// they are put, to a 64th of a unit -- what the map format keeps exactly. A
+// they are put, to a 256th of a unit -- kept exactly by the studio and the map format. A
 // corner still joins another room's corner or wall it lands on.
-const FINE = 1 / 64 // doc.js MIN_GRID
+const FINE = 1 / 256 // doc.js RES
 const step = (S, coarse) => (S.freePlace ? FINE : coarse)
 
 /**
