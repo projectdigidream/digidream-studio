@@ -5,6 +5,14 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **A new missile could hardly be seen**: its glowing dot was 0.35 m tall, a few
+  pixels from across a room on a phone. A new missile is drawn 0.6 m tall and
+  leaves a glowing particle trail in its colour (a particle kind of its own, on
+  the Particles page). A small missile with no trail is flagged on the Missiles
+  page.
+
 ## 0.4.2.1 -- 2026-10-21
 
 A development release (the dev branch), built on engine 0.2.3.2.

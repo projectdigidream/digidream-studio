@@ -126,16 +126,32 @@ function addPicture (S, name, bytes) {
  * the name it is drawn as: a prop of that name, a glowing dot. The prop's
  * name, or null when it had one already.
  */
-export function giveMissileLook (S, name, rgb) {
+export function giveMissileLook (S, name, rgb = [255, 170, 60]) {
   const m = S.module.mobs?.missiles?.[name]
   if (!m) return null
+  // SEEN FROM ACROSS A ROOM: a 0.35 m dot was a few pixels at 12 m on a phone,
+  // and a missile nobody sees is a monster that kills from nowhere. So the dot
+  // is drawn 0.6 m tall (its hit size stays small) and leaves a glowing trail.
+  if (m.trail === undefined) m.trail = trailKind(S, rgb)
   const prop = m.prop ?? name
   if ((S.propNames?.() ?? (S.module.props ?? []).map((p) => p.name)).includes(prop)) return null
   const pic = freePicture(S, prop)
-  addPicture(S, pic, orbPng(rgb))
+  addPicture(S, pic, orbPng(rgb, 32))
   S.module.props ??= []
-  S.module.props.push({ id: nextPropId(S.module), name: prop, radius: 0.15, height: 0.35, solid: false, usable: false, art: artFromPicture(pic, 0.35) })
+  S.module.props.push({ id: nextPropId(S.module), name: prop, radius: 0.15, height: 0.35, solid: false, usable: false, art: artFromPicture(pic, 0.6) })
   return prop
+}
+
+/** A particle kind a missile's trail can be: one of this colour the module has, or a new one. Its number. */
+function trailKind (S, rgb) {
+  const colour = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]
+  S.module.vfx ??= []
+  const have = S.module.vfx.find((v) => v.type === 'particles' && v.trailOf === colour)
+  if (have) return have.id
+  const id = Math.max(19, ...S.module.vfx.map((v) => v.id)) + 1
+  S.module.vfx.push({ id, type: 'particles', trailOf: colour, count: 1, rate: 60, life: 0.35, lifeVar: 0.1, speed: 0.4, speedVar: 0.3,
+    cone: 0.5, gravity: -1, drag: 2, size: 0.28, sizeEnd: 0.02, colour, colourEnd: ((rgb[0] >> 2) << 16) | ((rgb[1] >> 3) << 8), blend: 'additive' })
+  return id
 }
 
 /**

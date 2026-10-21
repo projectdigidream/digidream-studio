@@ -133,6 +133,10 @@ export class MissileEditor {
     if (F.end === 'over') checks.push(`It passes over the target at ${F.endZ.toFixed(1)} m.`)
     if (F.end === 'expired') checks.push(`It runs out after ${F.endX.toFixed(1)} m, before the target at ${this.dist} m: make it last longer, or fly faster.`)
     if (blast && fxNum(blast.radius) >= this.dist) checks.push(blast.hurts_owner ? `The blast (${fxNum(blast.radius)} m) reaches its shooter ${this.dist} m away: it hurts itself.` : `The blast (${fxNum(blast.radius)} m) reaches back to its shooter ${this.dist} m away; the shooter is safe only because it does not hurt the one who fired it, but anything beside the shooter is hit.`)
+    // Seen from where it is fired from? A small picture and no trail is a few pixels at 12 m on a phone.
+    const art = (S.module.props ?? []).find((p) => p.name === (m.prop ?? this.name))?.art
+    const tall = art?.kind === 'sprite' ? Number(art.size ?? 1) * Number((S.module.props ?? []).find((p) => p.name === (m.prop ?? this.name))?.scale ?? 1) : null
+    if (m.trail === undefined && tall !== null && tall < 0.5) checks.push(`It is drawn ${tall} m tall with no trail: from across a room, on a phone, that is a few pixels, and it hits from nowhere. Give it a trail under Looks, or its prop a bigger picture.`)
     if (m.trail !== undefined && vfxDef(S, m.trail)?.type !== 'particles') checks.push(`Its trail is particle kind ${m.trail}, which ${vfxDef(S, m.trail) ? 'is a tracer, not particles' : 'the module does not have'}: nothing follows it. Pick one under Looks.`)
     if (!used.length) checks.push('Nothing fires it yet: give a monster\'s state a "fire the missile" step, or a weapon\'s a "launch the missile".')
     const info = F.end === 'hit' ? `${this.fromPlayer ? 'fired level' : g(m) ? 'thrown to land on the target\'s middle' : 'aimed at the target\'s middle'} · reaches ${this.dist} m in ${F.T.toFixed(2)} s (${F.ticks} ticks)${g(m) ? ` · peaks ${F.peak.toFixed(1)} m up` : ''}`
