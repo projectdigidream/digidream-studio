@@ -156,6 +156,25 @@ function parentOf (doc, s, order) {
 }
 
 /**
+ * The sectors s overlaps without either holding the other: a corner of one
+ * strictly inside the other, both ways, leaving out the rooms s holds whole.
+ * ponytail: corners only; a cross with no corner inside the other (an X of
+ * two thin strips) is not seen -- add edge crossings if that shape matters.
+ */
+function overlapping (doc, s, order) {
+  const out = []
+  for (const oid of order) {
+    if (oid === s.id) continue
+    const o = doc.sectors[oid]
+    const mineIn = s.verts.some((v) => classify(o.verts, I(v.x), I(v.y)) > 0)
+    const theirsIn = o.verts.filter((v) => classify(s.verts, I(v.x), I(v.y)) > 0).length
+    if (theirsIn === o.verts.length) continue        // a room inside s: s holds it
+    if (mineIn || theirsIn) out.push(o)
+  }
+  return out
+}
+
+/**
  * Work out what every edge is. Pure: reads the document, returns
  *
  *   { sectors: [{ id, ..., verts: [{ x, y, kind, neighbor, edge }],
@@ -200,7 +219,12 @@ export function derive (doc) {
     const s = doc.sectors[sid]
     const p = parentOf(doc, s, order)
     parents[sid] = p ? p.id : null
-    kinds[sid] = s.kind === 'auto' ? (p ? (s.floor > p.floor ? 'platform' : 'cut') : null)
+    // ACROSS A BORDER: an 'auto' sector inside no single room, over two or
+    // more, is a platform when its floor is above every room it reaches over
+    // (mapc takes that partial overlap since engine 8c813aa). A level or sunk
+    // one stays as it was, and mapc says why.
+    const over = p || s.kind !== 'auto' ? [] : overlapping(doc, s, order)
+    kinds[sid] = s.kind === 'auto' ? (p ? (s.floor > p.floor ? 'platform' : 'cut') : over.length && over.every((o) => s.floor > o.floor) ? 'platform' : null)
       : s.kind === 'cut' && !p ? null : s.kind
     if (p && s.verts.some((v) => classify(p.verts, I(v.x), I(v.y)) === 0)) {
       warnings.push({ sector: sid, msg: `touches the boundary of ${p.id}, which it sits inside; mapc refuses that -- move it inward` })

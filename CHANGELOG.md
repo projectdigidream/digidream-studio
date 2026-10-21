@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **A platform can reach across rooms**: a room drawn over two or more rooms,
+  with its floor above all of them, is a platform standing on them (open edges),
+  not a walled box. Needs engine 8c813aa; a level or sunk room across a border is
+  still refused, saying why.
+
 ### Fixed
 
 - **With the grid off, rooms still snapped to it**: every edit put each corner

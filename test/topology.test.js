@@ -209,6 +209,25 @@ async function bake (doc, opts) {
   check(s.verts.every((v) => ids.includes(v.edge.id)), 'edge ids survive the reversal')
 }
 
+// --- a platform across a border: over two rooms, higher than both ----------------------
+{
+  const doc = newDoc('across')
+  const r = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+  addSector(doc, r(0, 0, 20, 20), { floor: 0 }); addSector(doc, r(20, 0, 40, 20), { floor: 0 })
+  const plat = addSector(doc, r(15, 5, 25, 10), { floor: 2 })
+  addSpawn(doc, 'start', 5, 15)
+  normalize(doc)
+  const d = derive(doc)
+  check(d.kinds[plat.id] === 'platform', `a raised room over two rooms is a platform (${d.kinds[plat.id]})`)
+  const sp = d.sectors.find((x) => x.id === plat.id)
+  check(sp.verts.every((v) => v.kind === 'open'), `its edges are open, not walls (${sp.verts.map((v) => v.kind)})`)
+  const baked = bakeNative(emitMap(d, doc).text)
+  check(baked.ok, `and it bakes (${baked.stderr})`)
+  // CONTROL: level with the rooms it crosses, it is no platform (mapc refuses that overlap)
+  plat.floor = 0
+  check(derive(doc).kinds[plat.id] === null, 'CONTROL: a level room across a border is no platform')
+}
+
 // --- snapping and duplicates ------------------------------------------------------
 {
   const doc = newDoc('snap')
