@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.2 -- 2026-10-22
+
+A development release (the dev branch), built on engine 0.2.3.3.
+
 ### Added
 
 - **A platform can reach across rooms**: a room drawn over two or more rooms,
