@@ -87,8 +87,8 @@ function setUpNewModule (kind) {
     // (the starter's 'controls' panel, which its welcome graph opens: an author edits it on the Panels page)
     const decor = (id) => (m.panels?.controls?.decor ?? []).find((d) => d.id === id)
     const keys = decor('keys'); const touch = decor('keys_touch')
-    if (keys) keys.text = 'Keyboard: WASD walk | mouse look | click or F fire | SPACE jump | E use'
-    if (touch) touch.text = 'Touch: left thumb walks | drag to look | the buttons on the right: FIRE, JUMP, USE'
+    if (keys) keys.text = 'WASD walk | mouse look | click or F fire | SPACE jump | E use'
+    if (touch) touch.text = 'left thumb walks | drag to look | the buttons on the right: FIRE, JUMP, USE'
   }
   S.save()
   S.redraw?.()

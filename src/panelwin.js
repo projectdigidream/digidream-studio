@@ -122,10 +122,11 @@ class PanelWindow {
       this.stage.appendChild(frame)
       this.frame = frame
       // The module's HUD behind it, as the player will have it.
-      this.hud = new HudView({ host: frame, touch: false, insets: dev.insets, size: { width: dev.width, height: dev.height } })
+      // As that device draws it: a phone's touch-only elements, a computer's desktop-only ones.
+      this.hud = new HudView({ host: frame, touch: !!dev.touch, insets: dev.insets, size: { width: dev.width, height: dev.height } })
       this.hud.root.classList.add('pw-behind')
       this.view = new UiView({
-        host: frame, size: { width: dev.width, height: dev.height }, insets: dev.insets, ...(this.S.uiAssetOpts?.() ?? {}),
+        host: frame, size: { width: dev.width, height: dev.height }, insets: dev.insets, touch: !!dev.touch, ...(this.S.uiAssetOpts?.() ?? {}),
         onEvent: (uiId, wid, value) => this.#heard(wid, value),
         onChange: () => { if (this.mode === 'try' && this.view && !this.view.panels.size && !this.redrawing) this.#heard(0, 0) }
       })

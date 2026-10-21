@@ -7,7 +7,7 @@ anything not released yet is under **Unreleased**.
 
 ## 0.4.2.1 -- 2026-10-21
 
-A development release (the dev branch), built on engine 0.2.3.1.
+A development release (the dev branch), built on engine 0.2.3.2.
 
 ### Added
 
@@ -21,8 +21,9 @@ A development release (the dev branch), built on engine 0.2.3.1.
   Props, Sprites) takes a single .png as a one-picture sheet, the same from
   every side. A file that is not a PNG is refused with a message.
 - **The starter's controls are a panel**: a new module shows its keys in the
-  panel `controls` at the top of the screen for ten seconds (a line for a
-  keyboard and one for a touch screen), which a player can close with its ×.
+  panel `controls` near the top of the screen for ten seconds (the keyboard's
+  keys on a computer, the on-screen controls on a touch screen), which a player
+  can close with its ×.
   Its words and look are edited on the Panels page; delete the `welcome` graph
   or the panel to show nothing. The subtitle line stays free for the game's
   own words.
@@ -75,7 +76,8 @@ A development release (the dev branch), built on engine 0.2.3.1.
 - **Phone keyboard and Back**: the graph board returns to its place when the
   on-screen keyboard closes, and Back while typing only closes the keyboard.
 - **The Sky preview stayed black** until dragged; it shows the picture at once.
-- **The Panels page said "No panels yet"** behind a panel that was open.
+- **The Panels page said "No panels yet"** behind a panel that was open, and
+  its phone preview drew a computer's elements; it draws the touch-only ones.
 
 ## 0.4.2 -- 2026-10-20
 
