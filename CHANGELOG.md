@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.5 -- 2026-10-22
+
+A development release (the dev branch), built on engine 0.2.3.6: the graph
+nodes for how a player looks (set avatar, set layer, set animation for) and
+the snapshot format they need.
+
 ## 0.4.2.4 -- 2026-10-22
 
 A development release (the dev branch), built on engine 0.2.3.5. 0.4.2.3's
