@@ -9,9 +9,9 @@ anything not released yet is under **Unreleased**.
 
 A development release (the dev branch), built on engine 0.2.3.5. 0.4.2.3's
 desktop apps could not start (a file of the engine's desktop shell was left
-out); this is 0.4.2.3 as it should have been.
+out), and it was withdrawn; this is 0.4.2.3 as it should have been.
 
-## 0.4.2.3 -- 2026-10-22
+## 0.4.2.3 -- 2026-10-22 (withdrawn: its desktop apps could not start; see 0.4.2.4)
 
 A development release (the dev branch), built on engine 0.2.3.4.
 
