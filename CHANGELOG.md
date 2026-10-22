@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.6 -- 2026-10-22
+
+A development release (the dev branch), built on engine 0.2.3.6, with
+ThreeSprite 0.2.3.1, DigidreamSound 0.2.0.1 and the DAW from midisynth 0.2.0.1
+bundled.
+
 ## 0.4.2.5 -- 2026-10-22
 
 A development release (the dev branch), built on engine 0.2.3.6: the graph
