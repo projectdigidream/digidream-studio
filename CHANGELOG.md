@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.3 -- 2026-10-22
+
+A development release (the dev branch), built on engine 0.2.3.4.
+
 ### Added
 
 - **The studio updates itself on macOS, Windows and Linux too**: Home's "update
