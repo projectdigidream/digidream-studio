@@ -1014,6 +1014,7 @@ async function settleSave () {
   await save.flush()
   await saving?.catch(() => {})
 }
+S.settleSave = settleSave
 // Leaving the page (a browser tab closed): what is waiting to be saved, saved.
 addEventListener('pagehide', () => save.flush())
 addEventListener('beforeunload', () => save.flush())

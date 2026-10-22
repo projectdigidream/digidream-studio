@@ -32,9 +32,20 @@ export function versionOfTag (tag) {
 export const isDevVersion = (v) => String(v ?? '').split('.').length === 4
 
 /** The release's Android APK for this build (with or without bundled plugins); null if it has none. */
-export function apkUrl (u, withPlugins) {
-  const name = `digidream-studio-${withPlugins ? '' : 'noplugins-'}${u?.latest}-android.apk`
-  return u?.assets?.[name] ?? null
+export function apkUrl (u, withPlugins) { return assetUrl(u, withPlugins, 'android') }
+
+// The release's file for each kind of studio, by what release.mjs names them.
+const ARCHIVES = { android: 'android.apk', 'darwin-arm64': 'macos-arm64.zip', 'darwin-x64': 'macos-x64.zip', 'win32-x64': 'windows-x64.zip', 'linux-x64': 'linux-x64.tar.gz' }
+
+/**
+ * The release's download for this studio: `platform` is 'android' or a
+ * desktop's `${process.platform}-${process.arch}` (the shell says); with or
+ * without the bundled plugins, as this build is. Null if the release has none.
+ */
+export function assetUrl (u, withPlugins, platform) {
+  const tail = ARCHIVES[platform]
+  if (!tail) return null
+  return u?.assets?.[`digidream-studio-${withPlugins ? '' : 'noplugins-'}${u?.latest}-${tail}`] ?? null
 }
 
 /** -1, 0 or 1, part by part; a missing part is 0 (0.3 == 0.3.0, and 0.1.1.1 > 0.1.1). */

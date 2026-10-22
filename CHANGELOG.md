@@ -5,6 +5,15 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **The studio updates itself on macOS, Windows and Linux too**: Home's "update
+  now" downloads the release for this computer, and the studio quits and comes
+  back as the new one, with everything saved first. A stable studio is only
+  offered stable releases. An app that cannot replace itself where it is (opened
+  from Downloads on a Mac, an administrator's install) says so; "download"
+  still works. Needs the engine's desktop shell from this release on.
+
 ## 0.4.2.2 -- 2026-10-22
 
 A development release (the dev branch), built on engine 0.2.3.3.

@@ -13,7 +13,7 @@ import { thumbCanvas } from '../thumbs.js'
 import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
 import { startMapOf } from '../startmap.js'
-import { checkForUpdate, skipped, skipVersion, apkUrl } from '../updates.js'
+import { checkForUpdate, skipped, skipVersion, assetUrl } from '../updates.js'
 import { shell } from '../bridge.js'
 import { choose } from '../plugins/frame.js'
 import { giveWeaponLook } from '../placeholders.js'
@@ -204,17 +204,25 @@ function updateRows () {
 // pressed again.
 function selfUpdateButton (u) {
   const n = globalThis.dnp?.studio
-  const url = apkUrl(u, S.bundledPlugins > 0)
+  // A desktop shell says what it runs on (darwin-arm64, win32-x64, ...); the Android one does not.
+  const url = assetUrl(u, S.bundledPlugins > 0, n?.platform ?? 'android')
   if (!n?.selfUpdate || !url) return null
   const b = button(withIcon('action.export', 'update now'), async () => {
     b.disabled = true
     b.textContent = 'downloading…'
+    // On a desktop the app quits to be replaced: nothing waiting to be saved is left behind.
+    await S.settleSave?.()
     globalThis.__dnpSelfUpdateFailed = (msg) => { b.disabled = false; b.textContent = `update failed: ${msg} (try again)` }
     try {
       const r = await n.selfUpdate(url)
       b.disabled = r === 'installing'
       b.textContent = r === 'settings' ? 'allow installs, then press again' : 'installing…'
-    } catch (e) { globalThis.__dnpSelfUpdateFailed(e?.message ?? String(e)) }
+    } catch (e) {
+      const m = String(e?.message ?? e)
+      // An app it may not replace (macOS runs one opened from Downloads from a
+      // read-only copy; an administrator's install): say what to do, not EACCES.
+      globalThis.__dnpSelfUpdateFailed(/EACCES|EPERM|EROFS|read-only/i.test(m) ? 'this app cannot replace itself where it is (move it to Applications, or a folder of yours); "download" gets it by hand' : m)
+    }
   })
   b.dataset.action = 'self-update'
   return b

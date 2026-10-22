@@ -6,7 +6,7 @@
 //
 // House style: standalone, prints ok/FAIL, ends with a count.
 
-import { versionOfTag, compareVersions, whatChanged, checkForUpdate, isDevVersion, apkUrl } from '../src/updates.js'
+import { versionOfTag, compareVersions, whatChanged, checkForUpdate, isDevVersion, apkUrl, assetUrl } from '../src/updates.js'
 
 const name = 'updates'
 let checks = 0
@@ -78,6 +78,12 @@ const github = (tag, status = 200, dev = []) => async (url) => {
   check(main.state === 'current', `CONTROL: a main build is still not offered the dev release (${main.state} ${main.latest})`)
   const st = await checkForUpdate('0.4.1', { fetchFn: github('studio-v0.4.2', 200, ['studio-v0.4.2.1']), store: memory(), now: 1 })
   check(st.latest === '0.4.2' && apkUrl(st, true) === 'https://github.com/x/studio-v0.4.2.apk', `a stable build installs the stable release's APK, never the newer dev one (${st.latest})`)
+}
+
+{
+  const u = { latest: '0.4.3', assets: Object.fromEntries(['macos-arm64.zip', 'macos-x64.zip', 'windows-x64.zip', 'linux-x64.tar.gz', 'android.apk'].flatMap((t) => [[`digidream-studio-0.4.3-${t}`, `u:${t}`], [`digidream-studio-noplugins-0.4.3-${t}`, `n:${t}`]])) }
+  check(assetUrl(u, true, 'darwin-arm64') === 'u:macos-arm64.zip' && assetUrl(u, true, 'win32-x64') === 'u:windows-x64.zip' && assetUrl(u, false, 'linux-x64') === 'n:linux-x64.tar.gz', 'each desktop takes its own archive, with or without plugins')
+  check(assetUrl(u, true, 'win32-arm64') === null && assetUrl(u, true, 'freebsd-x64') === null, 'CONTROL: a computer the release has no archive for is offered none')
 }
 
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
