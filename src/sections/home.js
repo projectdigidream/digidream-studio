@@ -221,7 +221,12 @@ function selfUpdateButton (u) {
       const m = String(e?.message ?? e)
       // An app it may not replace (macOS runs one opened from Downloads from a
       // read-only copy; an administrator's install): say what to do, not EACCES.
-      globalThis.__dnpSelfUpdateFailed(/EACCES|EPERM|EROFS|read-only/i.test(m) ? 'this app cannot replace itself where it is (move it to Applications, or a folder of yours); "download" gets it by hand' : m)
+      // A studio unpacked loose among other files (Downloads): replacing its
+      // folder would take them too, so the shell refuses (engine 3ec0270).
+      const why = /EACCES|EPERM|EROFS|read-only/i.test(m) ? 'this app cannot replace itself where it is (move it to Applications, or a folder of yours)'
+        : /holds other files/i.test(m) ? 'the studio shares its folder with other files: unpack it into a folder of its own to update it here'
+          : null
+      if (why) { b.disabled = true; b.textContent = `${why}; "download" gets it by hand` } else globalThis.__dnpSelfUpdateFailed(m)
     }
   })
   b.dataset.action = 'self-update'
