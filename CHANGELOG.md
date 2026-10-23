@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.7 -- 2026-10-23
+
+A development release (the dev branch), built on engine 0.2.3.7 (its snapshot
+format changed: a studio and a game of different engine builds do not talk).
+The desktop studio's "Play shows colliders" needs the next engine release's
+shell; the Android studio has it now.
+
 ### Added
 
 - **Ledge grab and coyote time** (engine 0.2.3.7): Player → climbing has
