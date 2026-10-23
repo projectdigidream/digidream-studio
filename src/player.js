@@ -56,11 +56,14 @@ export const PLAYER_PARAMS = [
     P('aim_snap', 'count', 0, 'directions', 'aim snaps to this many directions; 0 is free aim')] },
   { group: 'jumping', params: [
     P('jump_impulse', 'number', 9, 'units/s', 'upward speed a jump gives'),
-    P('max_jumps', 'count', 2, 'jumps', 'before landing again: 1 single, 2 double, 0 none')] },
+    P('max_jumps', 'count', 2, 'jumps', 'before landing again: 1 single, 2 double, 0 none'),
+    P('coyote_time', 'number', 0.1, 's', 'after walking off an edge, the ground jump is still there this long')] },
   { group: 'climbing', params: [
     P('climb_enabled', 'switch', true, '', 'climbing walls marked climbable'),
     P('climb_speed', 'number', 4, 'units/s', ''),
-    P('climb_auto', 'switch', false, '', 'how a wall is grabbed: off, by holding GRAB (G, or the touch button); on, by pushing into it')] },
+    P('climb_auto', 'switch', false, '', 'how a wall is grabbed: off, by holding GRAB (G, or the touch button); on, by pushing into it'),
+    P('ledge_grab', 'switch', false, '', 'in the air, catch the edge of a higher floor a jump just misses (any side, climbable or not); JUMP pulls up, pushing away drops'),
+    P('ledge_reach', 'number', 0.5, 'units', 'how far above the head a ledge\'s top may be and still be caught')] },
   { group: 'dashing', params: [
     P('max_dashes', 'count', 1, 'dashes', 'before landing again; 0 is no dash'),
     P('dash_speed', 'number', 30, 'units/s', ''),

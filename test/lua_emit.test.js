@@ -155,6 +155,15 @@ if (!existsSync(TRIGGERCHECK)) {
   writeFileSync(mfile, moveLua.text)
   const rm = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), mfile], { encoding: 'utf8' })
   check(rm.status === 0, `the runtime takes a map that sets how its camera moves:\n${rm.stderr}`)
+  // THE AUTOMATIC CAMERA (engine 0.2.3.7): its four fields by the server's own names, taken by the runtime.
+  const autoLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: null, autoTurn: true, autoDelay: 3, autoRate: 2, collide: true } }, emitted)
+  const autoLine = autoLua.text.split('\n').find((l) => /level_camera\{/.test(l)) ?? ''
+  check(['auto_turn', 'auto_delay', 'auto_rate', 'collide'].every((w) => names.includes(w) && new RegExp(`${w} = `).test(autoLine)) && /auto_delay = 3000 \/ 1000/.test(autoLine), `the automatic camera is written by the engine's wire names (${autoLine.trim()})`)
+  const afile = join(dir, 'camera_auto.lua')
+  writeFileSync(afile, autoLua.text)
+  const ra = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), afile], { encoding: 'utf8' })
+  check(ra.status === 0, `the runtime takes a map with the automatic camera:\n${ra.stderr}`)
+  check(!/auto_/.test(emitMapLua({ ...doc, camera: { yaw: 0.1, pitch: null, distance: null, autoDelay: 3 } }, emitted).text), 'CONTROL: with the swing off, its delay is not written')
 
   // CONTROL: without the guards the runtime refuses the table. If it did not,
   // a stale side index would be discovered by walking into the wrong wall.

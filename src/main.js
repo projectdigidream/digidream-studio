@@ -1745,7 +1745,8 @@ async function play ({ start = null } = {}) {
   try {
     // The shell starts the server, then loads the game in this window: the
     // screen stays until the page is replaced.
-    await shell.launch({ module: root, map })
+    // the colliders drawn over the game (engine 0.2.3.7's ?colliders=1), when the map menu says so
+    await shell.launch({ module: root, map, ...(S.playColliders ? { colliders: true } : {}) })
     await screen.progress(1, 'loading the game')
     // A shell that started the game without replacing this page (or a page
     // that is slow to go): the screen must not outlive its purpose.
@@ -1859,10 +1860,21 @@ S.toggleFreePlace = () => {
   S.status(S.freePlace ? 'grid off: things go exactly where you put them (a corner still joins a corner or wall it lands on)' : `grid on: things snap to the map's grid (${S.doc.grid})`, 'ok')
 }
 
+// PLAY WITH THE COLLIDERS DRAWN (engine 0.2.3.7): every body's and wall's
+// collider over the frame, to see why something hits or misses. Per device;
+// in the game F4 turns them on and off too.
+try { S.playColliders = localStorage.getItem('dnp.studio.playColliders') === '1' } catch {}
+S.togglePlayColliders = () => {
+  S.playColliders = !S.playColliders
+  try { localStorage.setItem('dnp.studio.playColliders', S.playColliders ? '1' : '0') } catch {}
+  S.status(S.playColliders ? 'Play shows the colliders over the game (F4 in the game turns them off)' : 'Play shows the game as it is', 'ok')
+}
+
 function showMenu () {
   S.ui.showMenu([
     ['Map settings…', showMapSettings],
     [S.freePlace ? 'Snap to grid: off (turn on)' : 'Snap to grid: on (turn off)', () => S.toggleFreePlace()],
+    [S.playColliders ? 'Play shows colliders: on (turn off)' : 'Play shows colliders: off (turn on)', () => S.togglePlayColliders()],
     ['Play log…', () => S.go('playlog')],
     ['Camera…', () => S.showCamera()],
     ['Import texture (PNG)', () => S.importTexture()],

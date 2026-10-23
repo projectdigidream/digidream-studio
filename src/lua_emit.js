@@ -101,6 +101,11 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   if (cam.blend != null) camFields.push(`cam_path_blend = ${milli(cam.blend)} / 1000`)
   // How the following camera moves (CAMERA_MOTION): only what the map sets.
   for (const f of CAMERA_MOTION) if (cam[f.key] != null) camFields.push(`${f.wire} = ${milli(cam[f.key])} / 1000`)
+  // The automatic camera (engine 0.2.3.7, CAMERA_SET 19-22): behind the player, walls pulling it in.
+  if (cam.autoTurn) camFields.push('auto_turn = 1')
+  if (cam.autoTurn && cam.autoDelay != null) camFields.push(`auto_delay = ${milli(cam.autoDelay)} / 1000`)
+  if (cam.autoTurn && cam.autoRate != null) camFields.push(`auto_rate = ${milli(cam.autoRate)} / 1000`)
+  if (cam.collide) camFields.push('collide = 1')
   if (camFields.length) {
     L.push('')
     L.push('-- The camera this map is played from, for everyone who joins it.')

@@ -5,6 +5,18 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Ledge grab and coyote time** (engine 0.2.3.7): Player → climbing has
+  "ledge_grab" (catch the edge of a higher floor a jump just misses) and
+  "ledge_reach"; Player → jumping has "coyote_time". The avatar's animation rows
+  have `hang`, beside `climb`.
+- **A camera behind the player**: the map's Camera panel, "behind the player",
+  swings it round behind the player unless they turned it lately, at a delay and
+  rate of the map's, and can let walls pull it in.
+- **Play shows colliders**: a switch in the map menu draws every collider over
+  the game as it plays (F4 in the game turns them off and on).
+
 ## 0.4.2.6 -- 2026-10-22
 
 A development release (the dev branch), built on engine 0.2.3.6, with

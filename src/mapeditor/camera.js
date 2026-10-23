@@ -220,6 +220,19 @@ function showCamera () {
       ? button(withIcon('action.reset', "back to the engine's movement"), () => { for (const f of CAMERA_MOTION) delete c[f.key]; S.commit(); showCamera() })
       : muted("The engine's own movement: a smooth follow with a small dead zone, aimed at the player."),
 
+    // THE AUTOMATIC CAMERA (engine 0.2.3.7): it swings round behind the
+    // player unless they turned it lately, and walls can pull it in -- a low
+    // camera behind the player rather than the high overhead one.
+    el('div', { class: 'st-section-head' }, withIcon('maptool.camera', 'behind the player')),
+    addHelp(toggle('swing round behind the player', !!c.autoTurn, (v) => { if (v) c.autoTurn = true; else delete c.autoTurn; S.commit(); showCamera() }),
+      'The camera turns to look along where the player faces, unless they turned it themselves in the last few seconds. Its distance and its angle down above are where it settles.'),
+    c.autoTurn ? addHelp(slider(`after (s)${c.autoDelay != null ? ' (own)' : ''}`, c.autoDelay ?? 2, { min: 0, max: 10, step: 0.25 },
+      (v, done) => { if (done) { c.autoDelay = v; S.commit() } }), 'How long after the player last turned the camera it starts swinging back.') : null,
+    c.autoTurn ? addHelp(slider(`how fast (turns/s)${c.autoRate != null ? ' (own)' : ''}`, c.autoRate ?? 1.5, { min: 0.1, max: 6, step: 0.1 },
+      (v, done) => { if (done) { c.autoRate = v; S.commit() } }), 'How quickly it swings round.') : null,
+    addHelp(toggle('walls pull it in', !!c.collide, (v) => { if (v) c.collide = true; else delete c.collide; S.commit() }),
+      'A wall (or a ceiling) between the camera and the player brings it closer, so it never looks through one. Best with a low camera behind the player.'),
+
     el('div', { class: 'st-section-head' }, withIcon('graphgroup.cutscene', 'how it follows')),
     select('mode', c.mode ?? '', [['', "follow the player (the engine's own)"], ['track', 'track: stay on the path, nearest the player'],
                                   ['flythrough', 'flythrough: ride the path at a speed'], ['auto', 'auto: take the path when the player comes near']],
