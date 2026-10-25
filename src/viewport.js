@@ -157,14 +157,50 @@ export class Viewport {
       for (let v = 0; v < col.count; v++) (Math.floor(v / 4) === mid ? a : b).toArray(col.array, v * 3)
       col.needsUpdate = true
     }
-    paint(minor, COLORS.gridMajor, COLORS.grid)
-    paint(major, COLORS.gridMajor, COLORS.gridMajor)
+    if (this.gridLines.area) { minor.material.color.set(COLORS.grid); major.material.color.set(COLORS.gridMajor) } else {
+      paint(minor, COLORS.gridMajor, COLORS.grid)
+      paint(major, COLORS.gridMajor, COLORS.gridMajor)
+    }
     minor.material.opacity = ALPHA.grid
     major.material.opacity = ALPHA.gridMajor
     this.segments.material.opacity = ALPHA.pickable
     for (const t of this.labelCache.values()) t.dispose()
     this.labelCache.clear()
     this.dirty = true
+  }
+
+  /**
+   * THE GRID OVER A MAP'S TILE: with the metamap on, the grid covers exactly
+   * the open map's cell, [x0, y0]-[x1, y1] in engine units (a line a unit,
+   * a brighter one every 8, as the plain grid), not a square about the origin
+   * that a tile larger than 256 runs off. Null: the plain 512-unit grid.
+   */
+  setGridArea (area) {
+    const key = area ? area.join(',') : ''
+    if (key === (this.gridArea ?? '')) return
+    this.gridArea = key
+    for (const g of [this.gridLines.minor, this.gridLines.major]) { this.grid.remove(g); g.geometry.dispose(); g.material.dispose() }
+    let minor; let major
+    if (!area) {
+      minor = new THREE.GridHelper(512, 512, COLORS.gridMajor, COLORS.grid)
+      major = new THREE.GridHelper(512, 64, COLORS.gridMajor, COLORS.gridMajor)
+    } else {
+      const [x0, y0, x1, y1] = area
+      const lines = (every) => {
+        const pts = []
+        for (let x = Math.ceil(x0 / every) * every; x <= x1; x += every) pts.push(toThreeX(x), 0, toThreeZ(y0), toThreeX(x), 0, toThreeZ(y1))
+        for (let y = Math.ceil(y0 / every) * every; y <= y1; y += every) pts.push(toThreeX(x0), 0, toThreeZ(y), toThreeX(x1), 0, toThreeZ(y))
+        const geo = new THREE.BufferGeometry()
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+        return geo
+      }
+      minor = new THREE.LineSegments(lines(1), new THREE.LineBasicMaterial({ color: COLORS.grid }))
+      major = new THREE.LineSegments(lines(8), new THREE.LineBasicMaterial({ color: COLORS.gridMajor }))
+    }
+    minor.material.transparent = major.material.transparent = true
+    this.grid.add(minor, major)
+    this.gridLines = { minor, major, area: !!area }
+    this.reskin()
   }
 
   resize () {

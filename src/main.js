@@ -1512,7 +1512,10 @@ function redraw () {
   // THE METAMAP: this map's cell, its neighbours' names, and its boundary
   // sides by how they meet a neighbour's (metamap.js seamCheck).
   const mm = S.module.metamap
-  if (mm?.enabled && mm.pitch && mm.cells?.[S.docName]) {
+  const onTile = !!(mm?.enabled && mm.pitch && mm.cells?.[S.docName])
+  // the grid covers the map's own tile on the metamap, else the plain one
+  S.viewport.setGridArea(onTile ? [0, 0, mm.pitch[0], mm.pitch[1]] : null)
+  if (onTile) {
     const [pw, ph] = mm.pitch
     // This map's own limits on the shared world's grid: thick and opaque, so
     // where it ends and a neighbour begins reads at any zoom.

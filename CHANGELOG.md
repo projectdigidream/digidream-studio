@@ -5,6 +5,13 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Fixed
+
+- **On the metamap, the grid covers the map's own tile**: it was a square about
+  the origin, which a tile larger than 256 units ran off and which went on past
+  the tile's edge. It now fills the tile exactly, a line a unit and a brighter
+  one every 8.
+
 ## 0.4.2.8 -- 2026-10-25
 
 A development release (the dev branch), built on engine 0.2.3.8.
