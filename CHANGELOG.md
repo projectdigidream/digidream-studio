@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.8 -- 2026-10-25
+
+A development release (the dev branch), built on engine 0.2.3.8.
+
 ### Added
 
 - **Several rooms at once in the map editor**: Shift+click a room (on a phone,
