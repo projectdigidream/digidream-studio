@@ -57,7 +57,9 @@ export const PLAYER_PARAMS = [
   { group: 'jumping', params: [
     P('jump_impulse', 'number', 9, 'units/s', 'upward speed a jump gives'),
     P('max_jumps', 'count', 2, 'jumps', 'before landing again: 1 single, 2 double, 0 none'),
-    P('coyote_time', 'number', 0.1, 's', 'after walking off an edge, the ground jump is still there this long')] },
+    P('coyote_time', 'number', 0.1, 's', 'after walking off an edge, the ground jump is still there this long'),
+    P('variable_jump', 'switch', false, '', 'a jump is as high as JUMP is held: letting go while it rises cuts it, so a tap is a short hop'),
+    P('jump_release_keep', 'number', 0.5, '×', 'with variable_jump, how much of the rising speed letting go keeps (1 cuts nothing, 0 stops it dead)')] },
   { group: 'climbing', params: [
     P('climb_enabled', 'switch', true, '', 'climbing walls marked climbable'),
     P('climb_speed', 'number', 4, 'units/s', ''),

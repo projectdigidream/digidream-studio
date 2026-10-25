@@ -21,6 +21,7 @@ export function inspector (sel, doc, ctx) {
   if (!sel) return null
   switch (sel.kind) {
     case 'sector': return sectorForm(doc.sectors[sel.id], doc, ctx)
+    case 'sectors': return roomsForm(sel.ids.map((id) => doc.sectors[id]).filter(Boolean), doc, ctx)
     case 'edge': return edgeForm(sel, doc, ctx)
     case 'vertex': return vertexForm(sel, doc, ctx)
     case 'entity': return entityForm(doc.entities.find((e) => e.id === sel.id), doc, ctx)
@@ -34,6 +35,7 @@ export function titleFor (sel, doc) {
   if (!sel) return ''
   switch (sel.kind) {
     case 'sector': return `Sector ${sel.id}`
+    case 'sectors': return `${sel.ids.length} rooms`
     case 'edge': return `Wall ${sel.id} of ${sel.sectorId ?? findEdge(doc, sel.id)?.sector.id ?? ''}`
     case 'vertex': return `Corner ${sel.id}`
     case 'entity': { const e = doc.entities.find((x) => x.id === sel.id); return e?.kind === 'sign' ? `Sign ${e.text ? `"${e.text}"` : e.name}` : `${e?.kind === 'mob' ? 'Monster' : 'Prop'} ${e?.name ?? ''}` }
@@ -110,14 +112,18 @@ function problemRows (list) {
   return list.map((p) => el('div', { class: p.level === 'warn' ? 'st-warn-box' : 'st-danger st-problem', icon: p.level === 'warn' ? 'status.warning' : 'status.error', text: ` ${p.msg}` }))
 }
 
+// HEIGHTS IN FINER STEPS when the grid is switched off (the map menu, G): a
+// slider's box rounds what is typed to its step, so 0.25 there made 1.1 a 1.
+const heightStep = (ctx) => (ctx.fine?.() ? 1 / 256 : 0.25)
+
 function sectorForm (s, doc, ctx) {
-  const range = { min: -32, max: 64, step: 0.25 }
+  const range = { min: -32, max: 64, step: heightStep(ctx) }
   const body = [
     ...problemRows(ctx.problems?.(s.id) ?? []),
     slider('floor', s.floor, range, (v, done) => { s.floor = v; if (s.ceil <= v) s.ceil = v + 0.25; done ? ctx.commit() : ctx.preview() }),
     slider('ceiling', s.ceil, range, (v, done) => { s.ceil = v; if (s.floor >= v) s.floor = v - 0.25; done ? ctx.commit() : ctx.preview() }),
     slider('light', s.light, { min: 0, max: 255, step: 1 }, (v, done) => { s.light = v; done ? ctx.commit() : ctx.preview() }),
-    slider('thickness', s.thickness, { min: 0, max: 16, step: 0.25 }, (v, done) => { s.thickness = v; done ? ctx.commit() : ctx.preview() }),
+    slider('thickness', s.thickness, { min: 0, max: 16, step: heightStep(ctx) }, (v, done) => { s.thickness = v; done ? ctx.commit() : ctx.preview() }),
     texButton('floor tex', s.floorTex, ctx, (n) => { s.floorTex = n; ctx.commit() }),
     texButton('ceiling tex', s.ceilTex, ctx, (n) => { s.ceilTex = n; ctx.commit() }),
     // OPEN TO THE SKY (docs/SKY.md): DOOM's sky flat, F_SKY1, is a window onto
@@ -148,11 +154,48 @@ function sectorForm (s, doc, ctx) {
     number('tag', s.tag, { min: 0, max: 65535, step: 1 }, (v) => { s.tag = Math.round(v); ctx.commit() }),
     el('div', { class: 'st-row' }, [
       button('duplicate', () => { ctx.duplicateSector(s.id) }),
+      ctx.rooms ? button('copy', () => ctx.rooms.copy()) : null,
+      // a phone has no Shift: this is how more rooms join the selection there
+      ctx.rooms ? button(ctx.rooms.adding() ? 'adding rooms: on' : 'select more rooms', () => ctx.rooms.setAdding(!ctx.rooms.adding())) : null,
       button('delete', () => { const gone = removeSector(doc, s.id); ctx.select(null); ctx.commit(); ctx.roomDeleted?.(s.id, gone) }, 'st-danger')
-    ]),
+    ].filter(Boolean)),
     muted('Drag a corner to reshape. Tap a wall for its textures and flags. Long-press a corner to remove it.')
   ]
   return body
+}
+
+/**
+ * SEVERAL ROOMS (rooms.js): what is done to them together. Each one is still
+ * edited on its own panel (tap it without Shift); here are the moves, the
+ * copies, and the looks they can all share.
+ */
+function roomsForm (rooms, doc, ctx) {
+  const R = ctx.rooms
+  const same = (k) => { const v = new Set(rooms.map((r) => r[k] ?? null)); return v.size === 1 ? [...v][0] : '(mixed)' }
+  const all = (k) => (n) => { for (const r of rooms) r[k] = n; ctx.commit(); ctx.refreshSheet?.() }
+  return [
+    muted(`${rooms.length} rooms: ${rooms.map((r) => r.id).join(', ')}. Drag one of them to move them all, with the rooms inside them and what stands in them. Shift+click, or holding a room, adds it or takes it out ("adding rooms" does it by a tap); Shift+drag takes a box of them.`),
+    el('div', { class: 'st-row' }, [
+      button('copy', () => R.copy()), button('duplicate', () => R.duplicate()),
+      R.hasClip() ? button('paste', () => R.paste()) : null
+    ].filter(Boolean)),
+    el('div', { class: 'st-row' }, [
+      button('turn left', () => R.turn({ quarter: 1 })), button('turn right', () => R.turn({ quarter: -1 })), button('mirror', () => R.turn({ mirror: true }))
+    ]),
+    el('div', { class: 'st-row' }, [
+      button('raise 0.25', () => R.raise(0.25)), button('lower 0.25', () => R.raise(-0.25)),
+      button('raise 1', () => R.raise(1)), button('lower 1', () => R.raise(-1))
+    ]),
+    // any amount, typed (negative lowers); finer than the grid when it is off
+    number('raise all by', 0, { min: -64, max: 64, step: heightStep(ctx) }, (v) => { if (v) R.raise(v) }),
+    ...['floorTex', 'ceilTex'].map((k) => { const v = same(k); const mixed = v === '(mixed)'; return texButton(k === 'floorTex' ? 'floor texture' : 'ceiling texture', mixed ? null : v, ctx, all(k), mixed ? '(mixed)' : null) }),
+    slider('light', Number.isFinite(rooms[0]?.light) ? rooms[0].light : 255, { min: 0, max: 255, step: 1 }, (v, done) => { for (const r of rooms) r.light = Math.round(v); done ? ctx.commit() : ctx.preview() }),
+    el('div', { class: 'st-row' }, [
+      button(R.adding() ? 'adding rooms: on (turn off)' : 'add more by tapping', () => R.setAdding(!R.adding())),
+      button('select none', () => R.select([])),
+      button(`delete ${rooms.length} rooms`, () => R.remove(), 'st-danger')
+    ])
+  ]
 }
 
 /** What a climbable side climbs, by the engine's rule; a flag on the wrong side of a step offered across. */
@@ -252,7 +295,7 @@ function entityForm (e, doc, ctx) {
     text('name', e.name, (v) => { e.name = v.trim(); ctx.commit() }),
     select('kind', e.kind, [['mob', 'monster'], ['prop', 'prop']], (v) => { e.kind = v; ctx.commit() }),
     e.kind === 'mob' ? toggle('dormant', e.dormant, (v) => { e.dormant = v; ctx.commit() }) : null,
-    number('height', e.z, { min: -32, max: 64, step: 0.25 }, (v) => { e.z = v; ctx.commit() }),
+    number('height', e.z, { min: -32, max: 64, step: heightStep(ctx) }, (v) => { e.z = v; ctx.commit() }),
     // Which way it faces when the level starts: 0 is +x (east), counter-
     // clockwise; drawn as the arrow at its foot.
     slider('facing (°)', e.angle ?? 0, { min: 0, max: 355, step: 5 }, (v, done) => {
@@ -278,8 +321,8 @@ function signForm (e, doc, ctx) {
   return [
     select('marker', e.name, opts, (v) => { e.name = v; ctx.commit() }),
     text('text', e.text ?? '', (v) => { const t = v.slice(0, 128); if (t) e.text = t; else delete e.text; ctx.commit() }, { placeholder: 'EXIT' }),
-    number('at height', e.z, { min: -32, max: 64, step: 0.25 }, (v) => { e.z = v; ctx.commit() }),
-    number('raised by', e.height ?? 0, { min: 0, max: 32, step: 0.25 }, fx('height')),
+    number('at height', e.z, { min: -32, max: 64, step: heightStep(ctx) }, (v) => { e.z = v; ctx.commit() }),
+    number('raised by', e.height ?? 0, { min: 0, max: 32, step: heightStep(ctx) }, fx('height')),
     number('seen within (0: anywhere)', e.range ?? 0, { min: 0, max: 512, step: 1 }, fx('range')),
     toggle('seen through walls', !!e.through, (v) => { if (v) e.through = true; else delete e.through; ctx.commit() }),
     toggle('only with the debug overlay', !!e.debug, (v) => { if (v) e.debug = true; else delete e.debug; ctx.commit() }),
@@ -293,7 +336,7 @@ function spawnForm (p, doc, ctx) {
   if (!p) return null
   return [
     text('tag', p.tag, (v) => { p.tag = v.trim() || 'start'; ctx.commit() }),
-    number('height', p.z, { min: -32, max: 64, step: 0.25 }, (v) => { p.z = v; ctx.commit() }),
+    number('height', p.z, { min: -32, max: 64, step: heightStep(ctx) }, (v) => { p.z = v; ctx.commit() }),
     muted("The server spawns players at the tag 'start'. Other tags are for teleports and scripts."),
     button('delete', () => { doc.spawns = doc.spawns.filter((x) => x.id !== p.id); ctx.select(null); ctx.commit() }, 'st-danger')
   ]
@@ -319,7 +362,7 @@ function lightForm (l, doc, ctx) {
     row('colour', color),
     slider('radius', l.radius, { min: 1, max: 48, step: 0.5 }, (v, done) => { l.radius = v; done ? ctx.commit() : ctx.preview() }),
     slider('intensity', l.intensity, { min: 0, max: 4, step: 0.125 }, (v, done) => { l.intensity = v; done ? ctx.commit() : ctx.preview() }),
-    number('height', l.z, { min: -32, max: 64, step: 0.25 }, (v) => { l.z = v; ctx.commit() }),
+    number('height', l.z, { min: -32, max: 64, step: heightStep(ctx) }, (v) => { l.z = v; ctx.commit() }),
     button('delete', () => { if (performance.now() < pickerUp) return; doc.lights = doc.lights.filter((x) => x.id !== l.id); ctx.select(null); ctx.commit() }, 'st-danger')
   ]
 }

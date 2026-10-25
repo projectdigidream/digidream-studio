@@ -2437,7 +2437,8 @@ await page.keyboard.press('Escape')
   })
   if (!vars.skip) {
     check(vars.rows.props > 50 && vars.rows.readOnlyX.join() === 'get', `the variables pane lists every property, a read-only one only to get (${JSON.stringify(vars.rows)})`)
-    check(vars.filtered.length && vars.filtered.every((n) => /jump/.test(n)) , `and is searched (${vars.filtered.join(', ')})`)
+    // searched by name and by what each one does: a rule whose description speaks of jumping (coyote_time) is found too
+    check(['jump_impulse', 'max_jumps'].every((n) => vars.filtered.includes(n)) && !vars.filtered.includes('move_speed'), `and is searched (${vars.filtered.join(', ')})`)
     check(vars.node?.var === 'hp' && vars.groups.includes('the entity') && vars.offersX === false,
           `a property's set is dropped in from its row, and the node's dropdown is grouped, offering only what a set may name (${JSON.stringify(vars)})`)
   }

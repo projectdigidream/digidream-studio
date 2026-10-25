@@ -44,9 +44,10 @@ import { Core } from '/src/core.js'
 import { parseProps } from '/src/render/props.js'
 import { parseAtlas } from '/src/render/atlas.js'
 import { loadMapcBinary, bake as bakeWith } from './bake.js'
-import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP, removeSector, graphsNaming } from './doc.js'
+import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP, removeSector, graphsNaming, snap } from './doc.js'
 import { climbSides, climbProblems } from './climb.js'
 import { normalize } from './topology.js'
+import { copyRooms, pasteRooms, turnRooms, middleOf } from './rooms.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf, cleanId } from './module_emit.js'
 import { showPlayScreen } from './playscreen.js'
 import { recordFromEntries, recordToEntries } from './record.js'
@@ -1072,6 +1073,72 @@ S.select = (sel, { quiet = false } = {}) => {
   if (!quiet || S.ui.sheetOpen) showInspector()
 }
 S.refreshSheet = () => { if (S.ui.sheetOpen && S.selection) showInspector() }
+
+// SEVERAL ROOMS (rooms.js). One room is a 'sector' selection, as it always
+// was; two or more are { kind: 'sectors', ids }. Shift+tap adds or removes a
+// room, Shift+drag draws a box; on a phone "adding rooms" (the room's panel)
+// does what Shift does until it is switched off.
+S.selectedRooms = () => (S.selection?.kind === 'sector' ? [S.selection.id] : S.selection?.kind === 'sectors' ? [...S.selection.ids] : [])
+S.selectRooms = (ids) => {
+  const live = ids.filter((id) => S.doc.sectors[id])
+  S.select(live.length === 0 ? null : live.length === 1 ? { kind: 'sector', id: live[0] } : { kind: 'sectors', ids: live })
+}
+S.toggleRoom = (id) => {
+  const ids = S.selectedRooms()
+  S.selectRooms(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])
+}
+S.setAddRooms = (on) => {
+  S.addRooms = !!on
+  S.status(on ? 'adding rooms: tap a room to add or take it out, drag on the floor for a box of them' : 'tapping picks one thing again', 'ok')
+  S.refreshSheet()
+}
+// The box a Shift+drag draws: screen-space, over the map.
+S.showBox = (d) => {
+  if (!S.boxEl) {
+    S.boxEl = Object.assign(document.createElement('div'), { className: 'sd-selbox' })
+    Object.assign(S.boxEl.style, { position: 'fixed', zIndex: 60, pointerEvents: 'none', border: '1px dashed var(--dnp-color-accent)', background: 'color-mix(in srgb, var(--dnp-color-accent) 12%, transparent)' })
+  }
+  if (!d) { S.boxEl.remove(); return }
+  if (!S.boxEl.isConnected) document.body.append(S.boxEl)
+  Object.assign(S.boxEl.style, { left: `${Math.min(d.x0, d.x1)}px`, top: `${Math.min(d.y0, d.y1)}px`, width: `${Math.abs(d.x1 - d.x0)}px`, height: `${Math.abs(d.y1 - d.y0)}px` })
+}
+// THE ROOM CLIPBOARD: kept on the device, so rooms copied on one map paste
+// on another, or in another module.
+const CLIP_KEY = 'dnp.studio.roomClip'
+S.roomClip = () => { try { return JSON.parse(localStorage.getItem(CLIP_KEY) ?? 'null') } catch { return null } }
+S.copyRooms = (ids = S.selectedRooms()) => {
+  if (!ids.length) { S.status('select a room (or several) to copy', 'warn'); return }
+  const clip = copyRooms(S.doc, ids)
+  try { localStorage.setItem(CLIP_KEY, JSON.stringify(clip)) } catch {}
+  S.status(`copied ${clip.rooms.length} room${clip.rooms.length > 1 ? 's' : ''}${clip.entities.length + clip.lights.length ? ` and ${clip.entities.length + clip.lights.length} thing(s) in them` : ''}: paste with ⌘V / Ctrl+V or the map menu`, 'ok')
+}
+/** Paste: `at` the middle of the view (a paste), or moved by `by` from where they were copied (a duplicate). */
+const pasteClip = (clip, { by = null } = {}) => {
+  if (!clip?.rooms?.length) { S.status('nothing copied yet: select rooms and copy them first', 'warn'); return }
+  const grid = S.doc.grid || 0.25
+  let dx = by?.x ?? 0; let dy = by?.y ?? 0
+  if (!by) {
+    const g = S.viewport.groundPoint(innerWidth / 2, innerHeight / 2, 0) ?? clip.middle
+    dx = snap(g.x - clip.middle.x, grid); dy = snap(g.y - clip.middle.y, grid)
+  }
+  const ids = pasteRooms(S.doc, clip, dx, dy)
+  S.selectRooms(ids)
+  S.commit()
+  S.status(`${ids.length} room${ids.length > 1 ? 's' : ''} pasted: drag them into place`, 'ok')
+}
+S.pasteRooms = () => pasteClip(S.roomClip())
+S.duplicateRooms = (ids = S.selectedRooms()) => { if (ids.length) pasteClip(copyRooms(S.doc, ids), { by: { x: 2, y: 2 } }) }
+S.duplicateSector = (id) => S.duplicateRooms([id])
+S.deleteRooms = (ids = S.selectedRooms()) => {
+  const gone = []
+  for (const id of ids) if (S.doc.sectors[id]) gone.push(...removeSector(S.doc, id))
+  S.select(null)
+  S.commit()
+  S.say(`Deleted ${ids.length} room${ids.length > 1 ? 's' : ''}${gone.length ? `, and the ${gone.length} trigger(s) that worked them` : ''}. Undo brings ${ids.length > 1 ? 'them' : 'it'} back.`, 'ok')
+}
+S.turnRooms = (opts, ids = S.selectedRooms()) => { if (!ids.length) return; turnRooms(S.doc, ids, { ...opts, grid: S.doc.grid || 0.25 }); S.commit(); S.refreshSheet() }
+S.raiseRooms = (by, ids = S.selectedRooms()) => { for (const id of ids) { const r = S.doc.sectors[id]; if (r) { r.floor += by; r.ceil += by } } S.commit(); S.refreshSheet() }
+S.roomsMiddle = (ids = S.selectedRooms()) => middleOf(S.doc, ids)
 S.pickTexture = (current, onPick) => {
   // once each: the module's own are among the ones the app serves too
   const names = [...new Set([...Object.keys(S.module.textures ?? {}), ...S.textureNames])]
@@ -1083,14 +1150,6 @@ S.openPalette = () => S.ui.showSheet('Place', placePalette({
   // signs read a text: every marker but the two that show a health
   signs: markerNames(S.doc?.ui ?? S.module.ui).filter((n) => n !== 'health' && n !== 'debug_health')
 }, (armed) => { S.place = armed; S.openPalette(); if (armed) S.status(`tap the floor to place ${armed.name}`, 'ok') }, () => S.showProps()))
-S.duplicateSector = (id) => {
-  const s = S.doc.sectors[id]
-  const copy = addSector(S.doc, s.verts.map((v) => ({ x: v.x + 2, y: v.y + 2 })),
-                         { kind: s.kind, floor: s.floor, ceil: s.ceil, light: s.light, thickness: s.thickness, floorTex: s.floorTex, ceilTex: s.ceilTex })
-  copy.verts.forEach((v, i) => { const { id: _e, ...attrs } = s.verts[i].edge; v.edge = newEdge(S.doc, { ...attrs, flags: { ...s.verts[i].edge.flags } }) })
-  S.select({ kind: 'sector', id: copy.id })
-  S.commit()
-}
 S.pickInViewport = (kinds, prompt) => new Promise((resolve) => {
   S.pick = { kinds, resolve }
   S.status(prompt, 'ok')
@@ -1204,7 +1263,13 @@ const ctx = {
   // a sign's marker: the templates this map's screens offer, and the way to its look
   markerNames: () => markerNames(S.doc?.ui ?? S.module.ui),
   editMarker: (name) => S.go('screens', `markers/${name}`),
-  roomDeleted: (id, gone) => roomDeleted(id, gone)
+  roomDeleted: (id, gone) => roomDeleted(id, gone),
+  // the grid switched off (the map menu, G): heights in its finest step too
+  fine: () => !!S.freePlace,
+  // several rooms at once (rooms.js through S)
+  rooms: { copy: () => S.copyRooms(), paste: () => S.pasteRooms(), duplicate: () => S.duplicateRooms(), remove: () => S.deleteRooms(),
+           turn: (o) => S.turnRooms(o), raise: (by) => S.raiseRooms(by), select: (ids) => S.selectRooms(ids),
+           adding: () => !!S.addRooms, setAdding: (on) => S.setAddRooms(on), hasClip: () => !!S.roomClip()?.rooms?.length }
 }
 
 /** A message the bake that follows does not wipe at once: what was just done, said long enough to read. */
@@ -1280,6 +1345,7 @@ function chooseTool (id) {
   if (id === 'play') return play()
   if (id === 'menu') return showMenu()
   if (id === 'graph') return S.go('graph')
+  if (id !== 'select' && S.addRooms) S.addRooms = false
   if (S.tool === 'room' && id !== 'room') tools.cancelRoom(S)
   if ((S.tool === 'path' || S.tool === 'camera') && id !== 'path' && id !== 'camera') { S.pathEdit = null; S.pathPointSel = null; redraw() }
   S.tool = id
@@ -1313,13 +1379,21 @@ function onKey (e) {
   const mod = e.ctrlKey || e.metaKey
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) restore(S.history.redo()); else mapUndo(); return }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); restore(S.history.redo()); return }
+  // Rooms: copy, paste, duplicate, all of them (rooms.js)
+  if (mod && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase()
+    if (k === 'c' && S.selectedRooms().length) { e.preventDefault(); S.copyRooms(); return }
+    if (k === 'v') { e.preventDefault(); S.pasteRooms(); return }
+    if (k === 'd' && S.selectedRooms().length) { e.preventDefault(); S.duplicateRooms(); return }
+    if (k === 'a') { e.preventDefault(); S.selectRooms([...S.doc.order]); return }
+  }
   // ⌘V is not V: a key held with ⌘, Ctrl or Alt is somebody else's shortcut, never the map's letter
   if (mod || e.altKey) return
   switch (e.key) {
     case 'Escape':
       if (S.draw.corners.length) tools.cancelRoom(S)
       else if (S.tool === 'path') chooseTool('select')
-      else { S.pick = null; S.select(null) }
+      else { S.pick = null; if (S.addRooms) S.setAddRooms(false); S.select(null) }
       break
     case 'Enter': if (S.tool === 'room') tools.finishRoom(S); break
     case 'Delete': case 'Backspace': deleteSelection(); break
@@ -1346,6 +1420,7 @@ function deleteSelection () {
   const sel = S.selection
   if (!sel) return
   const d = S.doc
+  if (sel.kind === 'sectors') { S.deleteRooms(); return }
   if (sel.kind === 'sector') { const gone = removeSector(d, sel.id); S.select(null); S.commit(); roomDeleted(sel.id, gone); return } else if (sel.kind === 'entity') d.entities = d.entities.filter((x) => x.id !== sel.id)
   else if (sel.kind === 'spawn') d.spawns = d.spawns.filter((x) => x.id !== sel.id)
   else if (sel.kind === 'light') d.lights = d.lights.filter((x) => x.id !== sel.id)
@@ -1380,6 +1455,8 @@ function redraw () {
       if (S.tool === 'room') lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor })), closed: true, ...tint('corner'), width: 2 })
     }
   }
+  // several rooms: each outlined, no corners (a corner belongs to one room)
+  if (sel?.kind === 'sectors') for (const id of sel.ids) { const o = d.sectors[id]; if (o) lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor })), closed: true, ...tint('outline'), width: 2 }) }
   if (s) {
     lines.push({ points: s.verts.map((v) => ({ x: v.x, y: v.y, z: s.floor })), closed: true, ...tint('outline') })
     handles.push(...s.verts.map((v) => ({ id: v.id, x: v.x, y: v.y, z: s.floor, hot: sel.kind === 'vertex' && sel.id === v.id })))
@@ -1858,6 +1935,7 @@ S.toggleFreePlace = () => {
   S.freePlace = !S.freePlace
   try { localStorage.setItem('dnp.studio.freePlace', S.freePlace ? '1' : '0') } catch {}
   S.status(S.freePlace ? 'grid off: things go exactly where you put them (a corner still joins a corner or wall it lands on)' : `grid on: things snap to the map's grid (${S.doc.grid})`, 'ok')
+  S.refreshSheet?.()   // the open panel's heights take the new step
 }
 
 // PLAY WITH THE COLLIDERS DRAWN (engine 0.2.3.7): every body's and wall's
@@ -1874,6 +1952,8 @@ function showMenu () {
   S.ui.showMenu([
     ['Map settings…', showMapSettings],
     [S.freePlace ? 'Snap to grid: off (turn on)' : 'Snap to grid: on (turn off)', () => S.toggleFreePlace()],
+    ...(S.roomClip()?.rooms?.length ? [[`Paste ${S.roomClip().rooms.length} room${S.roomClip().rooms.length > 1 ? 's' : ''}`, () => S.pasteRooms()]] : []),
+    [S.addRooms ? 'Adding rooms by tap: on (turn off)' : 'Select several rooms (tap to add)', () => S.setAddRooms(!S.addRooms)],
     [S.playColliders ? 'Play shows colliders: on (turn off)' : 'Play shows colliders: off (turn on)', () => S.togglePlayColliders()],
     ['Play log…', () => S.go('playlog')],
     ['Camera…', () => S.showCamera()],
@@ -1885,7 +1965,7 @@ function showMenu () {
       muted('Place: monsters, props, spawns and lights, on the floor you tap.'),
       muted('Triggers: doors, lifts, switches, teleports, ambushes and exits in one tap, then change any detail on the card.'),
       muted('Graph: node scripting for this map. The module\'s monsters, player, weapons and everything else are in the rail on the left (or ‹ on a phone).'),
-      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Q/E rotate · V plan/game view · G snap to grid on/off · +/- zoom · arrows pan.')
+      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Shift+click (or holding a room) adds it to the selection, Shift+drag takes a box of them · ⌘/Ctrl+C, V, D copy, paste, duplicate rooms · ⌘/Ctrl+A every room · Q/E rotate · V plan/game view · G snap to grid on/off · +/- zoom · arrows pan.')
     ])]
   ])
 }

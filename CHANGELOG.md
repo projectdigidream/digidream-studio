@@ -5,6 +5,25 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Several rooms at once in the map editor**: Shift+click a room (on a phone,
+  hold it, or switch on "adding rooms" in its panel) to add it to the selection
+  or take it out; Shift+drag on the floor takes a box of rooms; ⌘/Ctrl+A takes
+  them all. Dragging one moves them all, with the rooms inside them and the
+  monsters, props and lights standing in them. Their panel copies, duplicates,
+  pastes, turns them a quarter either way, mirrors them, raises or lowers them
+  (by a step or any typed amount), gives them one floor or ceiling texture or
+  light, and deletes them. ⌘/Ctrl+C, V and D copy, paste and duplicate; a copy
+  pastes on another map too (the map menu has "Paste rooms"), in the middle of
+  the view. A copy carries no tag and no triggers, and the start stays where it
+  is.
+- **Heights in finer steps with the grid off**: a room's floor, ceiling and
+  thickness, and a thing's height, take a 256th of a unit when the grid is
+  switched off (they rounded what was typed to a quarter).
+- **Variable jump** (engine 4c4755b): Player → jumping has "variable_jump" (a jump
+  as high as JUMP is held) and "jump_release_keep".
+
 ## 0.4.2.7 -- 2026-10-23
 
 A development release (the dev branch), built on engine 0.2.3.7 (its snapshot

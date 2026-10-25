@@ -9,6 +9,7 @@
 //
 import { addSector, addSpawn, addLight, addEntity, addPathPoint, snap, newId, newEdge } from './doc.js'
 import { sectorAt, snapToMap, normalize, sideKinds } from './topology.js'
+import { withInner, thingsIn } from './rooms.js'
 
 // A finger covers more than a mouse pointer: on a touch screen closing a room
 // on its first corner, and snapping onto a corner, reach further.
@@ -191,6 +192,13 @@ export function onTap (S, info) {
   }
   switch (S.tool) {
     case 'select': {
+      // SEVERAL ROOMS: with Shift held (or "adding rooms" on, for a phone), a
+      // tap adds the room under it to the selection, or takes it out.
+      if (info.shift || S.addRooms) {
+        const room = roomUnder(S, info)
+        if (room) S.toggleRoom(room.id)
+        return
+      }
       const hit = hitTest(S, info)
       // Tapping a corner of the selected sector selects the corner; tapping
       // the sector again keeps it (and reopens its sheet).
@@ -361,6 +369,22 @@ export function onDragStart (S, info) {
   }
   const hit = S.tool === 'select' ? hitTest(S, info) : null
   const g = groundAt(S, info, 0)
+  // A GROUP of rooms: a drag that starts on one of the selected rooms moves
+  // them all, with the rooms inside them and what stands in them.
+  const chosen = S.tool === 'select' ? S.selectedRooms() : []
+  const under = S.tool === 'select' ? roomUnder(S, info) : null
+  if (S.tool === 'select' && (info.shift || S.addRooms) && !(under && chosen.includes(under.id))) {
+    // a box: every room whose middle is inside it joins the selection
+    S.drag = { kind: 'box', x0: info.x, y0: info.y, x1: info.x, y1: info.y }
+    return
+  }
+  if (under && chosen.length && chosen.includes(under.id) && (chosen.length > 1 || hit?.kind === 'sector')) {
+    const ids = withInner(S.doc, chosen)
+    const things = thingsIn(S.doc, ids)
+    const moving = [...ids.flatMap((id) => S.doc.sectors[id].verts), ...things.entities, ...things.lights, ...things.spawns]
+    S.drag = { kind: 'rooms', ids, moving, start: moving.map((p) => ({ x: p.x, y: p.y })), from: groundAt(S, info, under.floor), z: under.floor }
+    return
+  }
   if (hit?.kind === 'vertex' && hit.sectorId) {
     const s = S.doc.sectors[hit.sectorId]
     const v = s.verts.find((x) => x.id === hit.id)
@@ -373,9 +397,6 @@ export function onDragStart (S, info) {
     const under = sectorAt(S.doc, e.x, e.y)
     S.drag = { kind: 'thing', e, start: { x: e.x, y: e.y, z: e.z }, from: g, lift: under ? Math.max(0, (e.z ?? 0) - under.floor) : null }
     S.select(hit, { quiet: true })
-  } else if (hit?.kind === 'sector' && S.selection?.kind === 'sector' && S.selection.id === hit.id) {
-    const s = S.doc.sectors[hit.id]
-    S.drag = { kind: 'sector', s, start: s.verts.map((v) => ({ x: v.x, y: v.y })), from: groundAt(S, info, s.floor) }
   } else {
     S.drag = { kind: 'pan', last: { x: info.x, y: info.y } }
   }
@@ -394,7 +415,18 @@ export function onDrag (S, info) {
     d.last = { x: info.x, y: info.y }
     return
   }
-  const z = d.kind === 'vertex' || d.kind === 'sector' ? d.s.floor : d.kind === 'pathpoint' ? d.pt.z : 0
+  if (d.kind === 'box') { d.x1 = info.x; d.y1 = info.y; S.showBox?.(d); return }
+  if (d.kind === 'rooms') {
+    const g = groundAt(S, info, d.z)
+    if (!g || !d.from) return
+    const sx = snap(g.x - d.from.x, step(S, S.doc.grid)); const sy = snap(g.y - d.from.y, step(S, S.doc.grid))
+    d.moving.forEach((p, i) => { p.x = d.start[i].x + sx; p.y = d.start[i].y + sy })
+    S.redraw()
+    // each room reshaped on the loaded map; a bake when one cannot be
+    if (!d.ids.every((id) => S.previewDrag(id))) S.previewNow()
+    return
+  }
+  const z = d.kind === 'vertex' ? d.s.floor : d.kind === 'pathpoint' ? d.pt.z : 0
   const g = groundAt(S, info, z)
   if (!g || !d.from) return
   const dx = g.x - d.from.x; const dy = g.y - d.from.y
@@ -402,9 +434,6 @@ export function onDrag (S, info) {
     // A corner dragged onto another room's corner or wall joins it.
     const p = snapAt(S, d.start.x + dx, d.start.y + dy, d.s.floor, d.s.id)
     d.v.x = p.x; d.v.y = p.y
-  } else if (d.kind === 'sector') {
-    const sx = snap(dx, step(S, S.doc.grid)); const sy = snap(dy, step(S, S.doc.grid))
-    d.s.verts.forEach((v, i) => { v.x = d.start[i].x + sx; v.y = d.start[i].y + sy })
   } else if (d.kind === 'thing') {
     d.e.x = snap(d.start.x + dx, step(S, 1 / 8)); d.e.y = snap(d.start.y + dy, step(S, 1 / 8))
     onFloor(S, d)
@@ -414,7 +443,7 @@ export function onDrag (S, info) {
   S.redraw()
   // Reshape the one sector on the loaded map; a bake only when that cannot
   // apply (no good bake yet, or the outline cannot be meshed).
-  if (d.kind === 'vertex' || d.kind === 'sector') { if (!S.previewDrag(d.s.id)) S.previewNow() }
+  if (d.kind === 'vertex') { if (!S.previewDrag(d.s.id)) S.previewNow() }
 }
 
 export function onDragEnd (S, info, cancelled) {
@@ -431,9 +460,25 @@ export function onDragEnd (S, info, cancelled) {
   const d = S.drag
   S.drag = null
   if (!d || d.kind === 'pan') return
+  if (d.kind === 'box') {
+    S.showBox?.(null)
+    if (cancelled) return
+    const [x0, x1] = [Math.min(d.x0, d.x1), Math.max(d.x0, d.x1)]; const [y0, y1] = [Math.min(d.y0, d.y1), Math.max(d.y0, d.y1)]
+    const inBox = S.doc.order.filter((sid) => {
+      const vs = S.doc.sectors[sid].verts
+      const p = S.viewport.toScreen(vs.reduce((a, v) => a + v.x, 0) / vs.length, vs.reduce((a, v) => a + v.y, 0) / vs.length, S.doc.sectors[sid].floor)
+      return p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1
+    })
+    S.selectRooms([...new Set([...S.selectedRooms(), ...inBox])])
+    return
+  }
+  if (d.kind === 'rooms') {
+    if (cancelled) { d.moving.forEach((p, i) => { p.x = d.start[i].x; p.y = d.start[i].y }); S.redraw(); S.previewNow(); return }
+    S.commit()
+    return
+  }
   if (cancelled) {
     if (d.kind === 'vertex') { d.v.x = d.start.x; d.v.y = d.start.y }
-    else if (d.kind === 'sector') d.s.verts.forEach((v, i) => { v.x = d.start[i].x; v.y = d.start[i].y })
     else if (d.kind === 'thing') { d.e.x = d.start.x; d.e.y = d.start.y; if (d.start.z !== undefined) d.e.z = d.start.z }
     else if (d.kind === 'pathpoint') { d.pt.x = d.start.x; d.pt.y = d.start.y }
     S.redraw(); S.previewNow()
@@ -491,6 +536,16 @@ export function onLongPress (S, info) {
     s.verts.splice(i + 1, 0, v)
     S.select({ kind: 'vertex', id: v.id, sectorId: s.id })
     S.commit()
+    return
+  }
+  // HOLDING A ROOM (well inside it: a wall or corner held is the corner rules
+  // above) adds it to the selection, or takes it out: Shift+click's way on a
+  // phone, which has no Shift.
+  if (hit.kind === 'sector' && S.tool === 'select') {
+    const had = S.selectedRooms().includes(hit.id)
+    S.toggleRoom(hit.id)
+    const n = S.selectedRooms().length
+    S.status(had ? `room ${hit.id} taken out: ${n} selected` : `room ${hit.id} added: ${n} selected (hold another to add it too)`, 'ok')
     return
   }
   S.select(hit)
