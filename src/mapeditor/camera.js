@@ -232,6 +232,14 @@ function showCamera () {
       (v, done) => { if (done) { c.autoRate = v; S.commit() } }), 'How quickly it swings round.') : null,
     addHelp(toggle('walls pull it in', !!c.collide, (v) => { if (v) c.collide = true; else delete c.collide; S.commit() }),
       'A wall (or a ceiling) between the camera and the player brings it closer, so it never looks through one. Best with a low camera behind the player.'),
+    // BY HEIGHT over the player (engine 0.2.3.8, CAMERA_SET 23-24): where it
+    // sits and what it looks at, rather than an angle down.
+    addHelp(toggle('set its height over the player', c.cameraHeight != null, (v) => { if (v) { c.cameraHeight = 3; c.aimHeight ??= 1 } else { delete c.cameraHeight; delete c.aimHeight } S.commit(); showCamera() }),
+      'The camera sits this high above the player\'s feet, its distance behind them, and the angle down follows from the two -- instead of the angle above. Off: the angle decides, as before.'),
+    c.cameraHeight != null ? addHelp(slider(`height (units, ${c.cameraHeight})`, c.cameraHeight, { min: 0, max: 30, step: 0.25 },
+      (v, done) => { c.cameraHeight = v; if (done) { S.commit(); showCamera() } }), 'How high above the player\'s feet the camera sits.') : null,
+    c.cameraHeight != null ? addHelp(slider(`looks at (units up, ${c.aimHeight ?? 0})`, c.aimHeight ?? 0, { min: 0, max: 6, step: 0.125 },
+      (v, done) => { c.aimHeight = v; if (done) { S.commit(); showCamera() } }), 'The point above the player\'s feet it looks at and swings round: their middle, their head, or the floor (0).') : null,
 
     el('div', { class: 'st-section-head' }, withIcon('graphgroup.cutscene', 'how it follows')),
     select('mode', c.mode ?? '', [['', "follow the player (the engine's own)"], ['track', 'track: stay on the path, nearest the player'],

@@ -64,7 +64,7 @@ export const PLAYER_PARAMS = [
     P('climb_enabled', 'switch', true, '', 'climbing walls marked climbable'),
     P('climb_speed', 'number', 4, 'units/s', ''),
     P('climb_auto', 'switch', false, '', 'how a wall is grabbed: off, by holding GRAB (G, or the touch button); on, by pushing into it'),
-    P('ledge_grab', 'switch', false, '', 'in the air, catch the edge of a higher floor a jump just misses (any side, climbable or not); JUMP pulls up, pushing away drops'),
+    P('ledge_grab', 'switch', false, '', 'falling, catch the edge of a higher floor a jump just missed (any side, climbable or not; rising past one goes on by); JUMP pulls up, pushing away drops'),
     P('ledge_reach', 'number', 0.5, 'units', 'how far above the head a ledge\'s top may be and still be caught')] },
   { group: 'dashing', params: [
     P('max_dashes', 'count', 1, 'dashes', 'before landing again; 0 is no dash'),

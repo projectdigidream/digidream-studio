@@ -100,8 +100,15 @@ check(/studio \d+\.\d+\.\d+(\.\d+)? · /.test(bootText) && /opening the store/.t
   // Each map on the home has a thumbnail of its rooms.
   const thumb = await page.evaluate(async () => {
     await window.__studio.go('maps'); await window.__studio.go('home')
-    await new Promise((r) => setTimeout(r, 300))
-    const c = document.querySelector('.sd-page .sd-map canvas.sd-thumb')
+    // A thumbnail is drawn a frame after its page is (it needs its size), and
+    // Home may be drawn again meanwhile (an update check): wait for one that
+    // has been drawn -- an undrawn canvas is the default 300 wide and blank.
+    let c = null
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 100))
+      c = document.querySelector('.sd-page .sd-map canvas.sd-thumb')
+      if (c && c.width !== 300) break
+    }
     if (!c) return null
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data
     let lit = 0

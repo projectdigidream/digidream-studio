@@ -21,8 +21,13 @@ anything not released yet is under **Unreleased**.
 - **Heights in finer steps with the grid off**: a room's floor, ceiling and
   thickness, and a thing's height, take a 256th of a unit when the grid is
   switched off (they rounded what was typed to a quarter).
-- **Variable jump** (engine 4c4755b): Player → jumping has "variable_jump" (a jump
+- **Variable jump** (engine 0.2.3.8): Player → jumping has "variable_jump" (a jump
   as high as JUMP is held) and "jump_release_keep".
+- **The camera by its height over the player** (engine 0.2.3.8): the Camera
+  panel's "behind the player" sets how high it sits and what it looks at, the
+  angle down following from its height and distance. The avatar's animation
+  rows have `hop` (a jump off a ledge), and the graph's "change player setting"
+  lists the player's settings to choose from.
 
 ## 0.4.2.7 -- 2026-10-23
 

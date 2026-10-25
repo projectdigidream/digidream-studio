@@ -164,6 +164,14 @@ if (!existsSync(TRIGGERCHECK)) {
   const ra = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), afile], { encoding: 'utf8' })
   check(ra.status === 0, `the runtime takes a map with the automatic camera:\n${ra.stderr}`)
   check(!/auto_/.test(emitMapLua({ ...doc, camera: { yaw: 0.1, pitch: null, distance: null, autoDelay: 3 } }, emitted).text), 'CONTROL: with the swing off, its delay is not written')
+  // THE CAMERA BY HEIGHT (engine 0.2.3.8): camera_height and aim_height, by the server's names, taken by the runtime
+  const hLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: 6, cameraHeight: 3, aimHeight: 1.25 } }, emitted)
+  const hLine = hLua.text.split('\n').find((l) => /level_camera\{/.test(l)) ?? ''
+  check(names.includes('camera_height') && names.includes('aim_height') && /camera_height = 3000 \/ 1000/.test(hLine) && /aim_height = 1250 \/ 1000/.test(hLine), `the camera's height and aim are written by the engine's names (${hLine.trim()})`)
+  const hfile = join(dir, 'camera_height.lua')
+  writeFileSync(hfile, hLua.text)
+  const rh = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), hfile], { encoding: 'utf8' })
+  check(rh.status === 0, `the runtime takes a map with the camera's height:\n${rh.stderr}`)
 
   // CONTROL: without the guards the runtime refuses the table. If it did not,
   // a stale side index would be discovered by walking into the wrong wall.
