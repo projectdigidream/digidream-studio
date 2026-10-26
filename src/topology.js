@@ -108,9 +108,10 @@ export function normalize (doc, { split = true } = {}) {
     // sector. Corners sharing coordinates split the same edge once.
     // ponytail: O(corners x edges); a grid index if maps get big.
     const corners = []
-    for (const sid of doc.order) for (const v of doc.sectors[sid].verts) corners.push({ sid, x: I(v.x), y: I(v.y) })
+    for (const sid of doc.order) if (!isEffect(doc.sectors[sid])) for (const v of doc.sectors[sid].verts) corners.push({ sid, x: I(v.x), y: I(v.y) })
     for (const sid of doc.order) {
       const s = doc.sectors[sid]
+      if (isEffect(s)) continue
       const out = []
       for (let i = 0; i < s.verts.length; i++) {
         const p = s.verts[i]; const q = s.verts[(i + 1) % s.verts.length]
@@ -139,6 +140,14 @@ export function normalize (doc, { split = true } = {}) {
   }
   return doc
 }
+
+/**
+ * AN EFFECT SECTOR (kind 'effect', docs/SECTOR_FX.md 7) is a volume for
+ * effects and events, laid over the map: no floor, no walls, overlapping
+ * anything. The room topology never sees one -- it splits nothing, is split
+ * by nothing, holds and is held by nothing, joins no room's side.
+ */
+export const isEffect = (s) => s?.kind === 'effect'
 
 /** The sector immediately containing s, or null. Smallest by area wins. */
 function parentOf (doc, s, order) {
@@ -197,10 +206,12 @@ export function sideKinds (doc) {
 export function derive (doc) {
   const warnings = []
   const order = doc.order.filter((sid) => doc.sectors[sid]?.verts.length >= 3)
+  // the rooms: what the topology is made of (an effect sector lies over them)
+  const rooms = order.filter((sid) => !isEffect(doc.sectors[sid]))
 
   // Reversed-edge lookup: "x1,y1>x2,y2" -> { sid, edge }
   const byEdge = new Map()
-  for (const sid of order) {
+  for (const sid of rooms) {
     const s = doc.sectors[sid]
     s.verts.forEach((v, i) => {
       const q = s.verts[(i + 1) % s.verts.length]
@@ -217,13 +228,14 @@ export function derive (doc) {
   const kinds = {}
   for (const sid of order) {
     const s = doc.sectors[sid]
-    const p = parentOf(doc, s, order)
+    if (isEffect(s)) { parents[sid] = null; kinds[sid] = 'effect'; continue }
+    const p = parentOf(doc, s, rooms)
     parents[sid] = p ? p.id : null
     // ACROSS A BORDER: an 'auto' sector inside no single room, over two or
     // more, is a platform when its floor is above every room it reaches over
     // (mapc takes that partial overlap since engine 8c813aa). A level or sunk
     // one stays as it was, and mapc says why.
-    const over = p || s.kind !== 'auto' ? [] : overlapping(doc, s, order)
+    const over = p || s.kind !== 'auto' ? [] : overlapping(doc, s, rooms)
     kinds[sid] = s.kind === 'auto' ? (p ? (s.floor > p.floor ? 'platform' : 'cut') : over.length && over.every((o) => s.floor > o.floor) ? 'platform' : null)
       : s.kind === 'cut' && !p ? null : s.kind
     if (p && s.verts.some((v) => classify(p.verts, I(v.x), I(v.y)) === 0)) {
@@ -239,6 +251,8 @@ export function derive (doc) {
     const n = s.verts.length
     const verts = s.verts.map((v, i) => {
       const q = s.verts[(i + 1) % n]
+      // an effect sector's corners are plain: no wall, no opening, no neighbour
+      if (kinds[sid] === 'effect') return { x: v.x, y: v.y, kind: 'effect', neighbor: null, edge: v.edge }
       const twin = byEdge.get(`${I(q.x)},${I(q.y)}>${I(v.x)},${I(v.y)}`)
       let kind = 'wall'
       let neighbor = null
@@ -279,7 +293,7 @@ export function derive (doc) {
         }
       }
     }
-    return { id: sid, floor: s.floor, ceil: s.ceil, tag: s.tag, light: s.light, thickness: s.thickness,
+    return { id: sid, effect: kinds[sid] === 'effect', floor: s.floor, ceil: s.ceil, tag: s.tag, light: s.light, thickness: s.thickness,
              floorTex: s.floorTex, ceilTex: s.ceilTex,
              // How each flat is painted travels with the sector: the emitter
              // writes from what derive hands it, so a style left behind here
@@ -359,7 +373,8 @@ export function sectorAt (doc, x, y) {
   let bestArea = Infinity
   for (const sid of doc.order) {
     const s = doc.sectors[sid]
-    if (s.verts.length < 3) continue
+    // the room under a point: an effect sector is nobody's floor
+    if (s.verts.length < 3 || isEffect(s)) continue
     if (classify(s.verts, I(x), I(y)) < 0) continue
     const a = Math.abs(area2(s.verts))
     if (a < bestArea) { best = s; bestArea = a }

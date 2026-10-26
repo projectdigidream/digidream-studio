@@ -5,6 +5,20 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+### Added
+
+- **Effect areas** (engine 0.2.3.9): a room's kind can be "effect area", a
+  volume for its effects (rain, snow, dust, embers, fog) laid over anything --
+  rooms, platforms, other effect areas -- with nothing drawn and nothing to
+  bump into. Its panel is its bottom, top, effects and tag; "when sector
+  entered" and "when sector left" hear a body come in and go out. It is outlined
+  on the map, and taken by tapping its outline (a tap inside is the room's).
+
+### Fixed
+
+- **An effect's numbers showed a decimal comma** on a computer set to one ("0,5"):
+  they show a point, and a comma typed is read.
+
 ### Fixed
 
 - **On the metamap, the grid covers the map's own tile**: it was a square about

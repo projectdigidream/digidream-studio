@@ -72,7 +72,8 @@ export function drawThumb (canvas, doc, { imageFor = (n) => `/textures/${n}.png`
   const X = (x) => t.ox + t.k * x
   const Y = (y) => t.oy - t.k * y
   const redraw = () => drawThumb(canvas, doc, { imageFor, bounds, skin })
-  const floors = (doc.order ?? []).map((sid) => doc.sectors[sid]).filter((s) => s && s.verts?.length >= 3)
+  // an effect area has no floor to draw (engine SECTOR_FX.md 7)
+  const floors = (doc.order ?? []).map((sid) => doc.sectors[sid]).filter((s) => s && s.verts?.length >= 3 && s.kind !== 'effect')
   const lo = Math.min(...floors.map((s) => s.floor)); const hi = Math.max(...floors.map((s) => s.floor))
   floors.sort((a, b) => area(b.verts) - area(a.verts))
   for (const s of floors) {

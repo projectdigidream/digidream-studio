@@ -159,6 +159,9 @@ export function hitTest (S, info) {
     return { kind: f.kind, id: f.id }
   }
   const e = edgeUnder(S, info, under)
+  // An effect sector is taken by its outline (inside it, a tap is the room's):
+  // its sides are no walls, so the outline is the sector itself.
+  if (e && e.sector.kind === 'effect') return { kind: 'sector', id: e.sector.id }
   if (e) return { kind: 'edge', id: e.edge.id, sectorId: e.sector.id }
   if (under) return { kind: 'sector', id: under.id }
   return null

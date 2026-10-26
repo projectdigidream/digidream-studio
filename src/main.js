@@ -1308,7 +1308,8 @@ function rememberStyle (s) {
   if (!s) return
   // The next room drawn takes after the last one touched: heights, light,
   // textures, and whether it is a floating platform.
-  S.style.sector = { kind: s.kind, floor: s.floor, ceil: s.ceil, light: s.light, thickness: s.thickness, floorTex: s.floorTex, ceilTex: s.ceilTex }
+  // (an effect area is not what the next room is drawn as: it stays a room)
+  S.style.sector = { kind: s.kind === 'effect' ? 'auto' : s.kind, floor: s.floor, ceil: s.ceil, light: s.light, thickness: s.thickness, floorTex: s.floorTex, ceilTex: s.ceilTex }
   S.style.edge = { middle: s.verts[0]?.edge.middle ?? null }
 }
 
@@ -1455,6 +1456,8 @@ function redraw () {
       if (S.tool === 'room') lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor })), closed: true, ...tint('corner'), width: 2 })
     }
   }
+  // EFFECT AREAS (kind 'effect'): drawn as nothing in the game, so outlined here always
+  for (const oid of d.order) { const o = d.sectors[oid]; if (o?.kind === 'effect' && o.verts.length >= 3) lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor + 0.05 })), closed: true, ...tint('path'), width: 2 }) }
   // several rooms: each outlined, no corners (a corner belongs to one room)
   if (sel?.kind === 'sectors') for (const id of sel.ids) { const o = d.sectors[id]; if (o) lines.push({ points: o.verts.map((v) => ({ x: v.x, y: v.y, z: o.floor })), closed: true, ...tint('outline'), width: 2 }) }
   if (s) {

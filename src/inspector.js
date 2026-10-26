@@ -112,11 +112,37 @@ function problemRows (list) {
   return list.map((p) => el('div', { class: p.level === 'warn' ? 'st-warn-box' : 'st-danger st-problem', icon: p.level === 'warn' ? 'status.warning' : 'status.error', text: ` ${p.msg}` }))
 }
 
+const KINDS = [['auto', 'room: walls (by floor height inside another)'], ['platform', 'floating platform: open edges, fall off'], ['cut', 'cut into the floor of the room around it'],
+  ['effect', 'effect area: only its effects (rain, snow, fog...), laid over anything, nothing drawn']]
+
+/**
+ * AN EFFECT AREA (kind 'effect', engine docs/SECTOR_FX.md 7): a volume for
+ * effects and events over the map -- its bottom and top, its tag, its effects.
+ * Bodies walk through it; graphs hear them enter and leave it.
+ */
+function effectForm (s, doc, ctx) {
+  const range = { min: -32, max: 64, step: heightStep(ctx) }
+  return [
+    ...problemRows(ctx.problems?.(s.id) ?? []),
+    muted('An effect area: its effects drawn over whatever it lies on, rooms and platforms alike. Nothing stands in it or bumps into it; "when sector entered" and "when sector left" hear a body come in and go out, by this sector or its tag. Tap its outline to pick it again.'),
+    select('kind', s.kind, KINDS, (v) => { s.kind = v; ctx.commit(); ctx.refreshSheet?.() }),
+    slider('bottom', s.floor, range, (v, done) => { s.floor = v; if (s.ceil <= v) s.ceil = v + 0.25; done ? ctx.commit() : ctx.preview() }),
+    slider('top', s.ceil, range, (v, done) => { s.ceil = v; if (s.floor >= v) s.floor = v - 0.25; done ? ctx.commit() : ctx.preview() }),
+    ...fxRows(s, ctx.fxSchema?.() ?? null, ctx),
+    number('tag', s.tag, { min: 0, max: 65535, step: 1 }, (v) => { s.tag = Math.round(v); ctx.commit() }),
+    el('div', { class: 'st-row' }, [
+      button('duplicate', () => { ctx.duplicateSector(s.id) }),
+      button('delete', () => { const gone = removeSector(doc, s.id); ctx.select(null); ctx.commit(); ctx.roomDeleted?.(s.id, gone) }, 'st-danger')
+    ])
+  ]
+}
+
 // HEIGHTS IN FINER STEPS when the grid is switched off (the map menu, G): a
 // slider's box rounds what is typed to its step, so 0.25 there made 1.1 a 1.
 const heightStep = (ctx) => (ctx.fine?.() ? 1 / 256 : 0.25)
 
 function sectorForm (s, doc, ctx) {
+  if (s.kind === 'effect') return effectForm(s, doc, ctx)
   const range = { min: -32, max: 64, step: heightStep(ctx) }
   const body = [
     ...problemRows(ctx.problems?.(s.id) ?? []),
@@ -146,8 +172,7 @@ function sectorForm (s, doc, ctx) {
       return texButton(`all ${field}s`, one, ctx, (n) => { for (const v of walls) v.edge[field] = n; ctx.commit() }, have.size > 1 ? '(mixed)' : null)
     }),
     muted('Upper and lower are the bands a wall shows only where another room is behind it: above that room\'s ceiling, and below its floor.'),
-    select('edges', s.kind, [['auto', 'room: walls (by floor height inside another)'], ['platform', 'floating platform: open edges, fall off'], ['cut', 'cut into the floor of the room around it']],
-           (v) => { s.kind = v; ctx.commit() }),
+    select('edges', s.kind, KINDS, (v) => { s.kind = v; ctx.commit(); ctx.refreshSheet?.() }),
     ...styleRows('floor', s, 'floorStyle', ctx),
     ...styleRows('ceiling', s, 'ceilStyle', ctx),
     ...fxRows(s, ctx.fxSchema?.() ?? null, ctx),

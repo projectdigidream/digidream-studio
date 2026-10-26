@@ -121,6 +121,27 @@ export function emitMap (derived, doc, scripts = [], { body = doc.body ?? DEFAUL
   for (const s of derived.sectors) {
     if (s.verts.length < 3) continue
     L.push('')
+    // AN EFFECT SECTOR (docs/SECTOR_FX.md 7, map version 17): a volume for its
+    // effects and events, over the map -- bottom and top, its tag, its fx and
+    // plain corners; nothing drawn, no light, textures or thickness.
+    if (s.effect) {
+      L.push([`sector type effect floor ${num(s.floor)} ceil ${num(s.ceil)}`, ...(s.tag ? [`tag ${s.tag}`] : [])].join(' '))
+      const firstE = L.length
+      for (const line of fxLines(s.fx)) L.push(`  ${line}`)
+      if (area2(s.verts) < 0) throw new Error(`${s.id}: derive() handed a clockwise loop; normalize() first`)
+      s.verts.forEach((v, i) => {
+        const q = s.verts[(i + 1) % s.verts.length]
+        L.push(`  vertex ${num(v.x)} ${num(v.y)}`)
+        lineOwner[L.length] = { sector: s.id, edge: v.edge.id }
+        const rec = { index: side, sector: s.id, neighbor: null, edge: v.edge, a: v, b: q }
+        sides.push(rec)
+        sideIndex.set(v.edge.id, side)
+        side++
+      })
+      L.push('end')
+      for (let n = firstE; n <= L.length; n++) lineOwner[n] ??= { sector: s.id }
+      continue
+    }
     const head = [`sector floor ${num(s.floor)} ceil ${num(s.ceil)}`]
     if (s.tag) head.push(`tag ${s.tag}`)
     head.push(`light ${s.light}`)

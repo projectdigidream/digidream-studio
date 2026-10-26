@@ -12,7 +12,7 @@
 // the rest by baking a probe map with one effect of each kind and reading it
 // back through the client's own readEffects -- the same numbers the game draws.
 //
-import { el, row, button, muted, chips, select, withIcon, icon } from './ui.js'
+import { el, row, button, muted, chips, select, withIcon, icon, NUM_KEYS } from './ui.js'
 import { newDoc, addSector, addSpawn, FX_KIND_NAMES, CAP } from './doc.js'
 import { normalize, derive } from './topology.js'
 import { emitMap, fxWord } from './mapfmt.js'
@@ -74,10 +74,12 @@ export function fxRows (s, schema, ctx) {
         input.addEventListener('change', () => set(input.value.slice(1)))
       } else {
         const shown = key === 'top' && def < 0 ? 'ceiling' : String(Number(def.toFixed(4)))
-        input = el('input', { type: 'number', step: 'any', value: has ? e.params[key] : '', placeholder: shown })
+        // the studio's number field: a point shown whatever the computer's own
+        // number format (a type=number field showed "0,5"), a comma typed taken
+        input = el('input', { ...NUM_KEYS, value: has ? String(e.params[key]) : '', placeholder: shown })
         input.addEventListener('change', () => {
-          if (input.value === '') { set(null); return }
-          const v = Number(input.value)
+          if (input.value.trim() === '') { set(null); return }
+          const v = Number(input.value.trim().replace(',', '.'))
           if (Number.isFinite(v)) set(v)
         })
       }

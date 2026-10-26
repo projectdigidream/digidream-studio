@@ -228,6 +228,34 @@ async function bake (doc, opts) {
   check(derive(doc).kinds[plat.id] === null, 'CONTROL: a level room across a border is no platform')
 }
 
+// --- an effect sector: laid over the rooms, part of no topology (map version 17) ----
+{
+  const doc = newDoc('effects')
+  const r = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+  const a = addSector(doc, r(0, 0, 10, 10), { floor: 0 }); const b = addSector(doc, r(10, 0, 20, 10), { floor: 0 })
+  const fog = addSector(doc, r(6, 3, 14, 7), { kind: 'effect', floor: 0, ceil: 6, tag: 5, fx: [{ kind: 'fog', params: { density: 0.45, top: 2.5 } }] })
+  addSpawn(doc, 'start', 2, 2)
+  normalize(doc)
+  check(a.verts.length === 4 && b.verts.length === 4, `the rooms are not split at its corners (${a.verts.length}, ${b.verts.length} corners)`)
+  const d = derive(doc)
+  check(d.kinds[fog.id] === 'effect' && d.parents[fog.id] === null, 'it is an effect sector, inside nobody')
+  const da = d.sectors.find((x) => x.id === a.id)
+  check(da.verts.filter((v) => v.kind === 'neighbor').length === 1 && da.verts.every((v) => v.neighbor !== fog.id), 'the rooms keep their one shared wall, and none opens onto it')
+  check(sectorAt(doc, 8, 5)?.id === a.id, 'the room under a point inside it is the room, not the effect sector')
+  const text = emitMap(d, doc).text
+  check(/^sector type effect floor 0 ceil 6 tag 5$/m.test(text) && /^  vertex 6 3$/m.test(text) && /fx fog/.test(text), 'it is written as a type effect block, with plain corners and its fx')
+  const baked = bakeNative(text)
+  check(baked.ok, `and the map bakes (${baked.stderr})`)
+  if (baked.ok) {
+    const bytes = baked.dnpm
+    check(new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true) === 17, `as map version 17 (${new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true)})`)
+  }
+  // CONTROL: the same rooms with no effect sector are no version 17
+  const plain = newDoc('plain'); addSector(plain, r(0, 0, 10, 10)); addSector(plain, r(10, 0, 20, 10)); addSpawn(plain, 'start', 2, 2); normalize(plain)
+  const pb = bakeNative(emitMap(derive(plain), plain).text)
+  if (pb.ok) { const bytes = pb.dnpm; check(new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true) !== 17, 'CONTROL: a map without one is written as before') }
+}
+
 // --- snapping and duplicates ------------------------------------------------------
 {
   const doc = newDoc('snap')
