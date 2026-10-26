@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.9 -- 2026-10-26
+
+A development release (the dev branch), built on engine 0.2.3.9 (map version
+17, for effect areas).
+
 ### Added
 
 - **Effect areas** (engine 0.2.3.9): a room's kind can be "effect area", a
