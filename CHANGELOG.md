@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.10 -- 2026-10-26
+
+A development release (the dev branch), built on engine 0.2.3.10 (props, monsters
+and players lit by the map).
+
 - Its own light: a checkbox "its own light (not lit)" for props (the prop editor), monsters (Looks, and the body rows) and missiles (Looks), written as `bright` on the `prop` line; the game then draws it at full light instead of lighting it by its room and the lamps near it (engine 0.2.3.10).
 
 ## 0.4.2.9 -- 2026-10-26
