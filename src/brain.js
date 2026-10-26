@@ -151,6 +151,7 @@ export function bodyRows (S, prop, changed) {
     sheet ? muted('height is what the body collides as. sprite height is how tall the sheet is drawn, for everything that uses it; scale multiplies that for this body alone.') : muted('scale multiplies how big the picture is drawn; the body it collides as stays height and radius.'),
     number('speed', prop.speed ?? 0, { min: 0, max: 30, step: 0.1 }, (v) => { prop.speed = v; changed() }),
     toggle('solid', !!prop.solid, (v) => { prop.solid = v; changed() }),
+    toggle('its own light (not lit)', !!prop.bright, (v) => { if (v) prop.bright = true; else delete prop.bright; changed() }),
     ...artRows(S, prop, changed, { uses: animUses(module.mobs?.mobs?.[prop.name]) }),
     muted(`Prop id ${prop.id}. The numbers are what a state's \`anim\` names.`)
   ]

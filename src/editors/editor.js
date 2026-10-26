@@ -986,7 +986,8 @@ export class NodeEditor {
           el('div', { class: 'me-row' }, [button('Bring in sounds of your own…', () => S.go('sounds')), el('span', { class: 'me-muted', text: 'a pack made in the sound tool, on the Sounds page' })])]),
         el('div', { class: 'me-panel' }, [el('div', { class: 'me-h first', text: 'Its body' }),
           numField('Width (radius)', fxNum(prop.radius) ?? 0.35, 'm', (v) => { prop.radius = fxOf(v ?? 0.35); this.changed() }),
-          numField('Drawn at', Number(prop.scale ?? 1), '× size', (v) => { if (v === null || v === 1) delete prop.scale; else prop.scale = fxOf(v); this.changed() }, { hint: 'the picture only; its body stays its size', lo: 0.25, hi: 6, say: (m) => this.say(m, 'warn') })])
+          numField('Drawn at', Number(prop.scale ?? 1), '× size', (v) => { if (v === null || v === 1) delete prop.scale; else prop.scale = fxOf(v); this.changed() }, { hint: 'the picture only; its body stays its size', lo: 0.25, hi: 6, say: (m) => this.say(m, 'warn') }),
+          checkField('Its own light (not lit)', !!prop.bright, (v) => { if (v) prop.bright = true; else delete prop.bright; this.changed() }, 'drawn at full light in the dark, like a fireball, not lit by the room and lamps')])
       ])
     ])]
   }

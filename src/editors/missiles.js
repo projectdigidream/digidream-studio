@@ -9,7 +9,7 @@ import { el, button, confirmDialog, typedValue, NUM_KEYS } from '../ui.js'
 import { MISSILE_ACTIONS, groupsWithMore, unphrased, newAct, sentence, secs, ticksOf, fxNum, fxOf } from '../phrases.js'
 import { flight } from '../missileflight.js'
 import { emitBurst, stepParticles, rampColour } from '/src/render/vfx.js'
-import { injectCss, sentenceEl, chooser, numField, selectField, toast, trackFocus, restoreFocus } from './common.js'
+import { injectCss, sentenceEl, chooser, numField, selectField, checkField, toast, trackFocus, restoreFocus } from './common.js'
 import { vfxDef } from './preview.js'
 import { giveMissileLook } from '../placeholders.js'
 
@@ -179,6 +179,7 @@ export class MissileEditor {
       numField('Burst lasts', m.burst_ticks ? secs(m.burst_ticks) : '', 's', (v) => { if (!v) delete m.burst_ticks; else m.burst_ticks = ticksOf(v); set() }, { placeholder: 'none' })
     ]
     const prop = (S.module.props ?? []).find((p) => p.name === m.prop)
+    if (prop) looks.push(checkField('Its own light (not lit)', !!prop.bright, (v) => { if (v) prop.bright = true; else delete prop.bright; set() }, `drawn at full light in the dark, not lit by the room and lamps; every missile drawn as ${m.prop} shares it`))
     if (prop) looks.push(numField('Drawn at', Number(prop.scale ?? 1), '× size', (v) => { if (v === null || v === 1) delete prop.scale; else prop.scale = fxOf(v); set() }, { hint: `the picture only: "Hit size" is what it collides with. Every missile drawn as ${m.prop} shares it.`, lo: 0.25, hi: 6, say }))
     return [pv,
       el('div', { class: 'me-ov' }, [

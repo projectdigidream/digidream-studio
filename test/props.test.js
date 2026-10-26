@@ -47,6 +47,11 @@ check(k?.type === 'sprite' && k.size === 1.5 && k.billboard === true, `a single 
 check(k?.states?.get(0)?.frames?.[0] === 'BARREL', 'drawn from the picture, state 0')
 check(k?.radius === 0.5 && k.height === 1.5 && (k.flags & 1) === 1, `the body is there too: radius, height, solid (${JSON.stringify({ r: k?.radius, h: k?.height, f: k?.flags })})`)
 check(parsed.warnings.length === 0, `no warnings from the parser (${parsed.warnings.join('; ')})`)
+check(!k?.bright, 'CONTROL: a prop is lit by the map unless told')
+p.bright = true
+k = parseProps(emitProps(module)).kinds.get(1001)
+check(k?.bright === true && (k.flags & 1) === 1, 'its own light: `bright` on the prop line, read by the game, solid kept')
+delete p.bright
 
 p.art = artFromSheet(module, 'SPIR')
 parsed = parseProps(emitProps(module))

@@ -108,6 +108,7 @@ export function propRows (module, p, ctx) {
     number('scale', p.scale ?? 1, { min: 0.1, max: 8, step: 0.05 }, (v) => { p.scale = v; ctx.changed() }),
     toggle('solid', !!p.solid, (v) => { p.solid = v; ctx.changed() }),
     toggle('usable', !!p.usable, (v) => { p.usable = v; ctx.changed() }),
+    toggle('its own light (not lit)', !!p.bright, (v) => { if (v) p.bright = true; else delete p.bright; ctx.changed() }),
     row('picture', chips([
       ...ctx.pictures.map((n) => ({ id: `pic:${n}`, label: n, on: art?.kind === 'sprite' && art.states?.[0]?.frames?.[0] === n })),
       ...ctx.sheets.map((n) => ({ id: `sheet:${n}`, label: `${n} (sheet)`, on: art?.kind === 'atlas' && art.sheet === n })),

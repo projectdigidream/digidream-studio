@@ -9,7 +9,7 @@
 //
 // A prop in the module document:
 //
-//   { id, name, radius, height, speed?, solid?, usable?, scale?,
+//   { id, name, radius, height, speed?, solid?, usable?, bright?, scale?,
 //     art: { kind: 'atlas', sheet: 'SPIR', states: { 0: 'idle', 1: 'walk' } }
 //        | { kind: 'sprite', size, billboard?, states: [{ state, fps, once?, frames: [...] }] }
 //        | null }
@@ -82,6 +82,8 @@ export function emitProps (module) {
     if (p.scale && p.scale !== 1) rec.push(`scale ${num(p.scale)}`)
     if (p.solid) rec.push('solid')
     if (p.usable) rec.push('usable')
+    // its own light: drawn at full light, not lit by its sector and lamps (engine 0.2.3.10)
+    if (p.bright) rec.push('bright')
     L.push(rec.join(' '))
     const art = p.art
     if (art?.kind === 'atlas') {
