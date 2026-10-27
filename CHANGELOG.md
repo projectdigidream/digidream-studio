@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.12 -- 2026-10-27
+
+A development release (the dev branch), built on engine 0.2.3.12: the last before the
+stable 0.4.3.
+
 - Big maps are no longer refused before Play or Export: the studio's limits were the engine's of a month ago (512 rooms, 4096 corners and sides, 256 textures), and are its current ones again (16384 rooms, 65535 corners and sides, 1024 textures). A test now reads each limit from the engine's own headers.
 - The studio asks the browser to keep its storage (modules, snapshots, drafts), so a phone short of space does not clear it.
 - The tools bundled by copying (the DAW, the sound tool, the packager) are refused while their source has uncommitted changes, each copy records its source's commit, and the check copies them again and compares. It found the packager's copy a version behind; it is current now.
