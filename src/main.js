@@ -1656,7 +1656,7 @@ S.suggest = (arg, owner) => {
   // the module's movement (docs/MOVEMENT.md): its states, meters and moves by name
   if (arg === 'state' && /movement_state/.test(owner ?? '')) return ['default', ...stateNames(S.module)]
   if (arg === 'meter' && /meter/.test(owner ?? '')) return meterNames(S.module)
-  if (arg === 'move' && owner === 'start_move') return moveNames(S.module)
+  if (arg === 'move' && (owner === 'start_move' || owner === 'enable_move')) return moveNames(S.module)
   if (arg === 'sound' || (arg === 'name' && owner === 'sound')) return S.soundNames()
   if (arg === 'icon' || arg === 'frame') return S.spriteNames()
   if (arg === 'item') return S.propNames()

@@ -15,7 +15,7 @@
 //   movement: {
 //     states:      [{ name, group, speed?, accel?, friction?, gravity?, buoyancy?, jump?, anim?, flags: [] }],
 //     meters:      [{ name, max, start?, rate?, rules: [{ in, rate, when: [cond] }] }],
-//     moves:       [{ name, mix: 'set'|'add', way, speed, for, priority?, cost?: { meter, n }, when: [cond] }],
+//     moves:       [{ name, mix: 'set'|'add', way, speed, for, priority?, cost?: { meter, n }, off?, when: [cond] }],
 //     transitions: [{ from, to, when: [cond], do?: action }]
 //   }
 //
@@ -45,7 +45,8 @@ export const NUMBERS = [
   ['buoyancy', 'the lift in water, while it is at the waist or above'],
   ['jump', 'its jump, for a transition that says "do jump"']
 ]
-export const FLAGS = ['no_jump', 'no_dash', 'no_attack', 'no_use', 'no_crouch', 'weapon_hidden', 'counts_as_ground', 'invulnerable']
+// `off`: it starts switched off, for a script or a graph to switch on per player (MOVEMENT.md, "Switching them off")
+export const FLAGS = ['off', 'no_jump', 'no_dash', 'no_attack', 'no_use', 'no_crouch', 'weapon_hidden', 'counts_as_ground', 'invulnerable']
 export const BUTTONS = ['jump', 'crouch', 'up', 'dash', 'climb', 'hover', 'flight', 'grapple', 'use', 'attack']
 export const CONDITIONS = [
   ['grounded', 'on the ground'], ['airborne', 'in the air'], ['rising', 'going up'], ['falling', 'falling'],
@@ -118,6 +119,7 @@ export function movementLines (module) {
     const w = [`move ${v.name} ${v.mix ?? 'set'} ${v.way ?? 'facing'} ${num(v.speed ?? 0)} for ${num(v.for ?? 0.2)}`]
     if (v.priority) w.push(`priority ${Math.round(v.priority)}`)
     if (v.cost?.meter) w.push(`cost ${v.cost.meter} ${num(v.cost.n ?? 0)}`)
+    if (v.off) w.push('off')
     push(w.join(' ') + whenText(v.when), { kind: 'move', i })
   })
   ;(m.transitions ?? []).forEach((t, i) => {
@@ -332,7 +334,7 @@ const GROUP_OPTIONS = [
 ]
 const NUM_LABELS = { speed: 'top speed', accel: 'speeds up', friction: 'slows down', gravity: 'gravity ×', buoyancy: 'floats up', jump: 'jump' }
 const FLAG_WORDS = {
-  no_jump: 'no jumping', no_dash: 'no dash', no_attack: 'no attacking', no_use: 'no using', no_crouch: 'no crouching',
+  off: 'starts switched off', no_jump: 'no jumping', no_dash: 'no dash', no_attack: 'no attacking', no_use: 'no using', no_crouch: 'no crouching',
   weapon_hidden: 'weapon put away', counts_as_ground: 'counts as ground', invulnerable: "can't be hurt"
 }
 const DEPTH_WORDS = { none: 'out of the water', feet: 'water at the feet', waist: 'water at the waist', eyes: 'under water' }
@@ -375,7 +377,7 @@ const sign = (v) => `${v > 0 ? '+' : v < 0 ? '-' : ''}${num(Math.abs(v))}`
 const meterSay = (t) => [`0 to ${num(t.max ?? 10)}`, t.start !== undefined ? `starts at ${num(t.start)}` : '', `${sign(t.rate ?? 0)} a second`,
   ...(t.rules ?? []).map((r) => `${sign(r.rate ?? 0)} in ${r.in ?? 'any'}${r.when?.length ? ` when ${conds(r.when)}` : ''}`)].filter(Boolean).join(' · ')
 const moveSay = (v) => [`${v.mix === 'add' ? 'pushes' : 'holds'} ${v.way ?? 'facing'} at ${num(v.speed ?? 0)} for ${num(v.for ?? 0.2)} s`,
-  v.cost?.meter ? `costs ${num(v.cost.n ?? 0)} ${v.cost.meter}` : '', v.when?.length ? `by itself when ${conds(v.when)}` : 'when a way or a graph starts it'].filter(Boolean).join(' · ')
+  v.cost?.meter ? `costs ${num(v.cost.n ?? 0)} ${v.cost.meter}` : '', v.off ? 'starts switched off' : '', v.when?.length ? `by itself when ${conds(v.when)}` : 'when a way or a graph starts it'].filter(Boolean).join(' · ')
 
 // --- bare controls (the line's own label is the card's) ---
 
@@ -534,7 +536,8 @@ function moveEditor (S, v, i, changed) {
       field('seconds', numIn(v.for ?? 0.2, 'seconds', (x) => { v.for = x ?? 0; changed() }, { lo: 0, hi: 60 })),
       field('priority', numIn(v.priority, '0', (x) => { if (!x) delete v.priority; else v.priority = Math.round(x); changed() }, { lo: 0, hi: 255 }), 'a new move replaces a running one on its axis only at a priority no lower'),
       field('costs', sel(v.cost?.meter ?? '', keep([['', 'nothing'], ...meterNames(S.module)], v.cost?.meter), (x) => { if (x) v.cost = { meter: x, n: v.cost?.n ?? 10 }; else delete v.cost; changed() }, 'costs')),
-      v.cost ? field('how much', numIn(v.cost.n ?? 0, 'amount', (x) => { v.cost.n = x ?? 0; changed() }, { lo: 0 })) : null
+      v.cost ? field('how much', numIn(v.cost.n ?? 0, 'amount', (x) => { v.cost.n = x ?? 0; changed() }, { lo: 0 })) : null,
+      field('at the start', sel(v.off ? 'off' : 'on', [['on', 'switched on'], ['off', 'switched off']], (x) => { if (x === 'off') v.off = true; else delete v.off; changed() }), 'switched off, it never starts until a graph (enable move) or a script switches it on for that player')
     ].filter(Boolean)),
     el('div', { class: 'mv-small', text: (v.when ??= []).length ? 'starts by itself when' : 'starts when a way ("start a move") or a graph starts it -- or by itself:' }),
     ...condRows(S, v.when, changed, { noAsked: true }),
@@ -553,6 +556,11 @@ function hints (S) {
   if (wet && !docs.some((d) => Object.values(d.sectors ?? {}).some((s) => s.kind === 'effect' && s.liquid))) {
     out.push('No map has water yet: on a map, draw an effect area and switch on "liquid (water)" in its panel. Until then, nothing here that needs water happens.')
   }
+  // switched off at the start, and no graph switches it on: it never runs (unless a script does)
+  const graphs = [S.module, ...docs].flatMap((o) => Object.values(o?.graphs ?? {})).flatMap((g) => g?.nodes ?? [])
+  const enabled = (type, key, name) => graphs.some((n) => n.type === type && n[key] === name && n.on !== false)
+  for (const s of m?.states ?? []) if (s.flags?.includes('off') && !enabled('enable_movement_state', 'state', s.name)) out.push(`${s.name} starts switched off, and no graph switches it on ("enable movement state" ${s.name}): it never runs, unless a script does.`)
+  for (const v of m?.moves ?? []) if (v.off && !enabled('enable_move', 'move', v.name)) out.push(`The move ${v.name} starts switched off, and no graph switches it on ("enable move" ${v.name}): it never starts, unless a script does.`)
   const tags = new Set(docs.flatMap((d) => Object.values(d.sectors ?? {}).map((s) => s.tag)).filter(Boolean))
   for (const tag of new Set(all.filter((c) => c.k === 'floor').map((c) => Math.round(c.tag ?? 0)))) {
     if (!tags.has(tag)) out.push(`No floor is tagged ${tag} yet: give a room tag ${tag} in its panel on a map, or what waits for "on a floor tagged ${tag}" never happens.`)

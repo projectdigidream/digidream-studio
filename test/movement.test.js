@@ -62,6 +62,18 @@ check(!/^(movestate|transition|meter|move) /m.test(moduleTxt({ ...blank(), name:
   check(v2?.owner?.kind === 'move' && /needs to last/.test(v2.why), `a move that holds for no time: refused, of the move (${v2?.why})`)
 }
 
+// --- switched off at the start (engine 318e003) ------------------------------------------
+{
+  const m = blank(); addRecipe(m, 'glide'); addRecipe(m, 'dash')
+  movementOf(m).states[0].flags.push('off'); movementOf(m).moves[0].off = true
+  const { lines } = movementLines(m)
+  check(lines.some((l) => /^movestate glide .* flags off$/.test(l)) && lines.some((l) => /^move dash set facing 18 for 0\.2 cost stamina 20 off when pressed use$/.test(l)), 'a state and a move that start switched off are written so')
+  const v = checkMovement(world, m)
+  check(v === null, `and the engine reads them (${v?.why ?? 'ok'})`)
+  movementOf(m).moves[0].when = []; movementOf(m).moves[0].cost = { meter: 'stamina', n: 5 }
+  check(checkMovement(world, m) === null, 'a switched-off move with no condition, after its cost, too')
+}
+
 // --- renames ----------------------------------------------------------------------------
 {
   const m = blank(); addRecipe(m, 'swimming'); addRecipe(m, 'dash')

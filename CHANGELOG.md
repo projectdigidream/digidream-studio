@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Player → movement: a state or a move can start switched off ("starts switched off" among a state's flags, "at the start" on a move), for a graph's "enable movement state" / "enable move" or a script to switch on per player -- a glide found on a ledge, a dash learnt. The page says when one starts off and no graph ever switches it on. The two graph nodes offer the module's names.
+
 - Bundles stable tools: ThreeSprite 0.2.4, qPainter 0.2.1, the DAW of DigidreamSynth 0.2.1 and the sound tool of DigidreamSound 0.2.1 (the same files as the dev builds it had).
 
 - Filled volumes: how much of the surface picture shows is the fill's own "surface" (0 to 1, among its settings); the surface's "see-through" rows are gone from a fill's panel, and a see-through set on one before is folded into its surface, looking the same. A monster or prop drawn on the map now sorts with the game's sprites, before water, so it no longer appears or vanishes in water as the view turns.
