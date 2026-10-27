@@ -227,6 +227,8 @@ class Workshop {
     const details = el('div', { class: 'wk-details' })
     const keep = this.root.querySelector('.wk-details')?.scrollTop ?? 0
     this.root.dataset.nograph = sp.graph === false ? '1' : '0'
+    // the movement tab has nothing to show in the picture: its forms take the width
+    this.root.dataset.wide = this.kind === 'player' && this.tab === 'movement' ? '1' : '0'
     this.root.replaceChildren(top, this.#previewPane(), ...(sp.graph === false ? [] : [this.#graphPane(problems)]), details)
     this.#fillDetails(details, problems)
     details.scrollTop = keep
@@ -690,7 +692,7 @@ class Workshop {
     else if (this.tab === 'arsenal') body.push(...arsenalRows(S, { ...ctx, changed }))
     else if (this.tab === 'skin') body.push(...avatarRows(S, { changed }))
     else if (this.tab === 'sounds') body.push(...playerSoundRows(S, { changed }))
-    else if (this.tab === 'movement') body.push(...movementRows(S, { changed }))
+    else if (this.tab === 'movement') body.push(...movementRows(S, { changed, render: () => this.render() }))
     else if (this.tab === 'size' || this.tab === 'moves' || this.tab === 'kit') {
       // Module-wide or this map's override: a module change re-bakes through
       // moduleChanged, a map's through commit (so it is undoable with the map).

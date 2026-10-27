@@ -199,6 +199,9 @@ input.st-val:hover,input.st-val:focus{border-color:var(--dnp-color-line-main);op
   grid-template-rows:auto 1fr;grid-template-columns:340px 1fr 400px;grid-template-areas:"top top top" "preview graph details";
   font-size:14px;line-height:1.4;font-family:var(--dnp-font-ui);padding-top:env(safe-area-inset-top)}
 .wk[hidden]{display:none}
+.wk[data-wide="1"]{grid-template-columns:1fr!important;grid-template-areas:"top" "details"!important}
+.wk[data-wide="1"] .wk-preview{display:none!important}
+.wk[data-wide="1"] .wk-details{display:flex!important;grid-area:details!important;border:0}
 .wk-top{grid-area:top;display:flex;gap:8px;align-items:center;height:auto;padding:8px 12px;flex-wrap:wrap}
 .wk-top button:where(:not(.ui-switch):not(.ui-help)),.wk-bar button:where(:not(.ui-switch):not(.ui-help)),.wk-details button:where(:not(.ui-switch):not(.ui-help)),.wk-preview button:where(:not(.ui-switch):not(.ui-help)){min-width:44px;height:40px;font-size:12px;line-height:1;cursor:pointer;padding:0 12px}
 .wk-tabs{display:flex;gap:4px}
