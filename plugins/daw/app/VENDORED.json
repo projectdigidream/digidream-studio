@@ -11,6 +11,9 @@
   "midisynth/content/drums/gm_kit.json"
  ],
  "base": "midisynth",
+ "commits": {
+  "midisynth": "3fd8c0c"
+ },
  "tree": "79fd05681e0e13b1bc6b91a5598e8782a47fdda47b1448170cae9f12af7f51a8",
  "files": 27
 }

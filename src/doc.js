@@ -25,11 +25,12 @@ export const RES = 256            // grid resolution: coordinates are multiples 
 export const MIN_GRID = 1 / RES
 export const DEFAULT_GRID = 0.25
 
-// The engine's capacities (core/include/dnp/geom/mapstore.hpp), so a document
-// is refused here with a sentence instead of by mapc with a count.
+// The engine's capacities (core/include/dnp/geom/mapstore.hpp, map.hpp,
+// triangulate.hpp), so a document is refused here with a sentence instead of by
+// mapc with a count. test/caps.test.js reads each from its header: a copy rots.
 export const CAP = {
-  sectors: 512, points: 4096, sides: 4096, spawns: 64, lights: 128,
-  textures: 256, scripts: 16, loopPoints: 192, holesPerSector: 64, textureName: 24,
+  sectors: 16384, points: 65535, sides: 65535, spawns: 64, lights: 128,
+  textures: 1024, scripts: 16, loopPoints: 192, holesPerSector: 64, textureName: 24,
   // Camera paths (core/include/dnp/geom/mapstore.hpp). Deliberately small: a
   // map has a handful of scripted shots, not a network of track.
   paths: 16, pathPoints: 256,

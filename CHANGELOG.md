@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Big maps are no longer refused before Play or Export: the studio's limits were the engine's of a month ago (512 rooms, 4096 corners and sides, 256 textures), and are its current ones again (16384 rooms, 65535 corners and sides, 1024 textures). A test now reads each limit from the engine's own headers.
+- The studio asks the browser to keep its storage (modules, snapshots, drafts), so a phone short of space does not clear it.
+- The tools bundled by copying (the DAW, the sound tool, the packager) are refused while their source has uncommitted changes, each copy records its source's commit, and the check copies them again and compares. It found the packager's copy a version behind; it is current now.
+- The starter's key hint says "F punch": it has no weapon, and F swings bare hands.
+
 - Player → movement: a state or a move can start switched off ("starts switched off" among a state's flags, "at the start" on a move), for a graph's "enable movement state" / "enable move" or a script to switch on per player -- a glide found on a ledge, a dash learnt. The page says when one starts off and no graph ever switches it on. The two graph nodes offer the module's names.
 
 - Bundles stable tools: ThreeSprite 0.2.4, qPainter 0.2.1, the DAW of DigidreamSynth 0.2.1 and the sound tool of DigidreamSound 0.2.1 (the same files as the dev builds it had).

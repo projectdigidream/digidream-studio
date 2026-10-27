@@ -23,6 +23,11 @@ export const BAKES = 'bakecache'
 
 let opening = null
 export function openDb () {
+  // KEPT, NOT EVICTED: every module, snapshot and draft lives in this one
+  // database, and a browser short of space (a phone's above all) may clear a
+  // site's storage unless it was asked to keep it. Asked once, as it opens;
+  // a browser that says no, or has no such call, still works as before.
+  if (!opening) globalThis.navigator?.storage?.persist?.().catch(() => {})
   opening ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 3)
     req.onupgradeneeded = () => {
