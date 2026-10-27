@@ -40,6 +40,7 @@ import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
 import { keyLines } from './keys_emit.js'
 import { animationsTxt } from './texsheet.js'
 import { playerLines, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
+import { movementLines } from './movement.js'
 import { emitProps } from './props_emit.js'
 import { CAP } from './doc.js'
 import { toLua } from './lua.js'
@@ -303,6 +304,8 @@ export function moduleTxt (module, docs = [], { debug } = {}) {
   L.push(...skyLines(module, docs))
   // How the player moves (docs/PLAYER.md): the module's, then each map's own.
   L.push(...playerLines(module, docs))
+  // Its own movement states, meters and moves (docs/MOVEMENT.md).
+  L.push(...movementLines(module).lines)
   return L.join('\n') + '\n'
 }
 

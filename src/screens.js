@@ -21,6 +21,7 @@
 import { el, row, number, text, select, toggle, button, muted, withIcon, icon, ask, confirmDialog } from './ui.js'
 import { newLayout, anchorFor } from './ui_emit.js'
 import { DEFAULT_LAYOUT, DEFAULT_MARKERS, ANCHORS, TOUCH_IDS, CLIENT_BINDINGS, STANDARD_HUD_NAMES, HudView, parseLayout, place, uiScale } from '/src/render/layout.js'
+import { meterNames } from './movement.js'
 import { touchLayout } from '/src/render/touchui.js'
 import { UiView } from '/src/render/ui.js'
 import { UI_KIND } from '/src/proto.js'
@@ -289,7 +290,9 @@ class Screens {
 
   #bindings () {
     const pools = Object.keys(this.S.module.weapons?.ammo ?? {}).map((p) => `hud.ammo_${p}`)
-    return [...CLIENT_BINDINGS.map((b) => b.name), ...STANDARD_HUD_NAMES.map((b) => b.name).filter((n) => !n.includes('<')), ...pools]
+    // each meter of the module's movement (docs/MOVEMENT.md, "The HUD")
+    const meters = meterNames(this.S.module).flatMap((n) => [`meter.${n}`, `meter.${n}_max`])
+    return [...CLIENT_BINDINGS.map((b) => b.name), ...STANDARD_HUD_NAMES.map((b) => b.name).filter((n) => !n.includes('<')), ...pools, ...meters]
   }
 
   #hudRows (hits, frame, dev) {

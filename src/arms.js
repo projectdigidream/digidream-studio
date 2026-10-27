@@ -18,6 +18,7 @@ import { CONDITIONS, defaultStates } from '/src/render/animstate.js'
 import { artRows, STATE_NAMES, sheetAnims } from './brain.js'
 import { nextPropId } from './props_emit.js'
 import { guessStates } from './sheets.js'
+import { movementAnims, optNum } from './movement.js'
 
 // A body of the player's own, never a monster's: a prop named `player` (or
 // player2 ...), drawn with the first sheet, its states guessed from the
@@ -96,6 +97,17 @@ export function avatarRows (S, ctx) {
       else player.when[cond] = Math.round(v)
       ctx.changed()
     }))
+  }
+  // The module's movement states (docs/MOVEMENT.md, "Animation"): one named
+  // here draws while the player is in that state, over the motion's own
+  // conditions; one not named animates by the motion, as before.
+  for (const a of movementAnims(module)) {
+    const cur = player.when?.[a]
+    rows.push(optNum(`${a} (movement state)`, cur, 'by its motion', (v) => {
+      player.when ??= {}
+      if (v === undefined) delete player.when[a]; else player.when[a] = Math.round(v)
+      ctx.changed()
+    }, { lo: 0, hi: 31 }))
   }
   rows.push(muted(`The conditions are the engine's closed list, most specific first: the first that holds wins, which is why attacking while walking is an attack. A number in brackets is the default and is not written.${anims.length ? ` This sheet draws ${anims.join(', ')}.` : ''}`))
   return rows

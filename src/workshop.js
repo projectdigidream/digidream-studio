@@ -30,6 +30,7 @@ import { slashRows } from './slashform.js'
 import { viewRows } from './viewform.js'
 import { avatarRows, weaponRows, arsenalRows } from './arms.js'
 import { bodyRows as playerBodyRows, moveRows, kitRows, newPlayer, soundRows as playerSoundRows } from './player.js'
+import { movementRows } from './movement.js'
 
 /** Pointer capture that does not throw for a pointer the browser has already let go of. */
 function capture (node, e) {
@@ -112,7 +113,7 @@ const SPECS = {
     make: () => null,
     remove: () => {},
     prop: (S) => (S.module.props ?? []).find((p) => p.name === S.module.player?.prop),
-    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds'], ['slash', 'slash', 'sfx.whoosh']]
+    tabs: [['skin', 'skin', 'workshop.skin'], ['size', 'size', 'workshop.size'], ['moves', 'moves', 'workshop.moves'], ['movement', 'movement', 'workshop.state'], ['kit', 'kit', 'workshop.arsenal'], ['sounds', 'sounds', 'workshop.sounds'], ['slash', 'slash', 'sfx.whoosh']]
   }
 }
 
@@ -689,6 +690,7 @@ class Workshop {
     else if (this.tab === 'arsenal') body.push(...arsenalRows(S, { ...ctx, changed }))
     else if (this.tab === 'skin') body.push(...avatarRows(S, { changed }))
     else if (this.tab === 'sounds') body.push(...playerSoundRows(S, { changed }))
+    else if (this.tab === 'movement') body.push(...movementRows(S, { changed }))
     else if (this.tab === 'size' || this.tab === 'moves' || this.tab === 'kit') {
       // Module-wide or this map's override: a module change re-bakes through
       // moduleChanged, a map's through commit (so it is undoable with the map).

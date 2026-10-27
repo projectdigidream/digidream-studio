@@ -71,6 +71,7 @@ import { hasWeapons } from './weapons_emit.js'
 import { inspector, titleFor, texturePicker, placePalette } from './inspector.js'
 import { triggersSheet } from './cards.js'
 import { openWorkshop, openArsenal, openPlayer } from './workshop.js'
+import { checkMovement, stateNames, meterNames, moveNames } from './movement.js'
 import { openMonsters, openWeapons } from './editors/editor.js'
 import { openMissiles } from './editors/missiles.js'
 import { arsenalRows } from './arms.js'
@@ -284,6 +285,9 @@ S.animGroups = () => {
   return [...S.servedAnim.groups.filter((g) => !own.has(g.frames[0])), ...parseAnimations(animationsTxt(S.module) ?? '').groups]
 }
 S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {}, sheetOf: (n) => S.sheetOf(n), groups: () => S.animGroups() })
+// The module's movement lines through the core's own parser, the server's
+// (movement.js): null when it reads them, else why and which card.
+S.checkMovement = () => { try { S.moveWorld ??= S.core.createWorld(); return checkMovement(S.moveWorld, S.module) } catch { return null } }
 S.preview = new Preview({ core: S.core, bake: S.bake, runtime: S.runtime, viewport: S.viewport, textures: S.textures,
                           hooks: S.vocab.trigger.events.map((e) => e.name) })
 // Placed things are drawn as their own pictures, once those have loaded.
@@ -1649,6 +1653,10 @@ S.spriteNames = () => [...new Set([...S.spriteUrls.keys(), ...(S.servedSprites ?
  * insists, because another module loaded beside this one has names too.
  */
 S.suggest = (arg, owner) => {
+  // the module's movement (docs/MOVEMENT.md): its states, meters and moves by name
+  if (arg === 'state' && /movement_state/.test(owner ?? '')) return ['default', ...stateNames(S.module)]
+  if (arg === 'meter' && /meter/.test(owner ?? '')) return meterNames(S.module)
+  if (arg === 'move' && owner === 'start_move') return moveNames(S.module)
   if (arg === 'sound' || (arg === 'name' && owner === 'sound')) return S.soundNames()
   if (arg === 'icon' || arg === 'frame') return S.spriteNames()
   if (arg === 'item') return S.propNames()

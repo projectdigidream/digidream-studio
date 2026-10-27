@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Player → movement: the module's own movement states (swimming, sliding, gliding, a stun), the ways between them, meters (breath, stamina) and layered moves (a dash, a jump pad), written as module.txt `movestate`, `transition`, `meter` and `move` lines (engine docs/MOVEMENT.md). Seven starting points; every card is checked live by the engine's own parser, and a line it refuses is outlined on its card and listed among the module's problems. Renaming a state, meter or move follows it everywhere. The graph's movement nodes offer the module's names, the HUD's bindings list `meter.<name>` and `meter.<name>_max`, and Player → skin gives each state's animation a state of the avatar.
+
 - Map editor: an effect area can be water -- "liquid (water)" on its panel, written as `sector type liquid` (map version 18). Its top is the surface; the game measures how deep a body stands in it for the module's movement.
 
 - Map editor: an FX button beside PLAN/GAME (and the X key) hides or shows the sector effects -- fog, rain, snow, dust, embers -- in the map view, so they are not in the way while building. It shows on a map that has effects, is struck through while they are hidden, and is remembered on the device; the game draws them all the same.
