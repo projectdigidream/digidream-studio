@@ -13,7 +13,7 @@ import { thumbCanvas } from '../thumbs.js'
 import { lookCard } from './look.js'
 import { STUDIO_VERSION } from '../version.js'
 import { startMapOf } from '../startmap.js'
-import { checkForUpdate, skipped, skipVersion, assetUrl } from '../updates.js'
+import { checkForUpdate, skipped, skipVersion, assetUrl, TUTORIALS_URL } from '../updates.js'
 import { shell } from '../bridge.js'
 import { choose } from '../plugins/frame.js'
 import { giveWeaponLook } from '../placeholders.js'
@@ -117,6 +117,7 @@ async function showHome () {
       el('div', { class: 'st-row sd-version-row' }, [
         el('span', { class: 'st-muted sd-version', 'data-version': STUDIO_VERSION, text: `studio ${STUDIO_VERSION}` }),
         el('button', { class: 'sd-check-update', 'data-action': 'check-update', onclick: (e) => checkNow(e.currentTarget) }, 'check for updates'),
+        el('button', { class: 'sd-check-update', 'data-action': 'tutorials', onclick: () => shell.openUrl(TUTORIALS_URL) }, 'tutorials'),
         // A plugin's word on this module (a sync's state), kept current by main.js.
         syncBadge(m.id)
       ]),

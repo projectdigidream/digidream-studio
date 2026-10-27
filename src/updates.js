@@ -19,6 +19,8 @@ export const RELEASES_API = `${REPO_API}/releases?per_page=20`
 /** Is the tag on main? GitHub's compare of main with it: 'identical' or 'behind' means main holds it. */
 export const COMPARE_API = (tag) => `${REPO_API}/compare/main...${encodeURIComponent(tag)}`
 export const RELEASES_PAGE = 'https://github.com/projectdigidream/digidream-studio/releases/latest'
+// The tutorials, on the public site (tutorials/): the help the studio points to.
+export const TUTORIALS_URL = 'https://projectdigidream.github.io/tutorials/'
 const KEY = 'dnp.studio.update'
 const EVERY_MS = 6 * 3600 * 1000
 

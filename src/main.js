@@ -51,7 +51,7 @@ import { copyRooms, pasteRooms, turnRooms, middleOf } from './rooms.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf, cleanId } from './module_emit.js'
 import { showPlayScreen } from './playscreen.js'
 import { recordFromEntries, recordToEntries } from './record.js'
-import { checkForUpdate } from './updates.js'
+import { checkForUpdate, compareVersions, TUTORIALS_URL } from './updates.js'
 import { Vocab } from './vocab.js'
 import { Viewport, COLORS, ALPHA, FILL, WIDTH, wearSkin as wearCanvasSkin } from './viewport.js'
 import { Preview } from './preview.js'
@@ -791,6 +791,14 @@ async function openModule (id, { show = true } = {}) {
   // Documents from earlier studios, brought up to date (migrate.js).
   // What a studio update is about to change, kept first.
   const before = JSON.parse(JSON.stringify({ id: rec.id, module: rec.module, docs: rec.docs, assets: rec.assets }))
+  // SAVED BY A NEWER STUDIO (a module synced from another device, one shared):
+  // this one may not know all of it, and what it does not know it does not write.
+  // The newest studio that saved it (store.js; record.js reads a synced file's onto it).
+  const by = rec.savedBy
+  if (by && compareVersions(by, STUDIO_VERSION) > 0) {
+    S.newerModule = by
+    setTimeout(() => S.say(`${rec.module.name ?? rec.id} has been saved by studio ${by}, newer than this one (${STUDIO_VERSION}): update the studio before changing it, or what this one does not know may be lost.`, 'warn'), 1500)
+  }
   const did = migrateModule(rec)
   const moved = migratePlayer(S.module, S.docs)
   if (moved || did.length) {
@@ -1796,7 +1804,7 @@ async function play ({ start = null } = {}) {
   if (!hasShell()) {
     // SAID IN A DIALOG: the status strip is hidden under a page (Home's own Play buttons were silent)
     // and clipped on a phone beside the map's sheet.
-    S.status('Play needs the app. In a browser, export a pack and run it with the engine (docs/STUDIO.md).', 'warn')
+    S.status('Play needs the app (the studio for your computer or phone). In a browser, export a pack and run it with the engine: the tutorials say how.', 'warn')
     if (await confirmDialog('Playing needs the Digidream app (desktop or Android): a browser cannot run the game. Export this module as a pack now, to open it in the app?')) exportPack()
     return
   }
@@ -1954,6 +1962,15 @@ S.toggleFreePlace = () => {
   S.refreshSheet?.()   // the open panel's heights take the new step
 }
 
+// ONE STUDIO AT A TIME: a second tab or window on the same studio saves over
+// the first (the last save wins), so the second is told as it opens. The tab
+// that holds the name keeps it until it closes.
+globalThis.navigator?.locks?.request?.('dnp-studio-open', { ifAvailable: true }, (lock) => {
+  if (lock) return new Promise(() => {})
+  S.otherTab = true
+  setTimeout(() => S.say('The studio is open in another tab or window too: work in one of them, or each saves over the other.', 'warn'), 1200)
+})?.catch?.(() => {})
+
 // THE SECTOR EFFECTS DRAWN in the map view, or not (the FX button): fog and
 // weather over a room being built get in the way. Only the view: the game
 // draws them all the same. Per device, remembered.
@@ -1989,6 +2006,7 @@ function showMenu () {
     ['Import texture (PNG)', () => S.importTexture()],
     ['Fit view', frameToDoc],
     ['Help', () => S.ui.showSheet('Help', [
+      button(withIcon('action.help', 'the tutorials (opens the browser)'), () => shell.openUrl(TUTORIALS_URL)),
       muted('Room: tap corners and close on the first, or drag a rectangle. Rooms that touch share a wall; a room inside a room is a platform when its floor is higher and a pit when it is lower.'),
       muted('Select: tap a room, a wall or a corner. Drag corners to reshape, drag a selected room to move it. Long-press a wall to add a corner, a corner to remove it.'),
       muted('Place: monsters, props, spawns and lights, on the floor you tap.'),

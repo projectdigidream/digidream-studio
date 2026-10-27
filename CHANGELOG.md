@@ -9,6 +9,9 @@ anything not released yet is under **Unreleased**.
 - The studio asks the browser to keep its storage (modules, snapshots, drafts), so a phone short of space does not clear it.
 - The tools bundled by copying (the DAW, the sound tool, the packager) are refused while their source has uncommitted changes, each copy records its source's commit, and the check copies them again and compares. It found the packager's copy a version behind; it is current now.
 - The starter's key hint says "F punch": it has no weapon, and F swings bare hands.
+- A module a newer studio has saved (synced from another device, or opened there) says so as it opens, until this studio is updated; the newest studio to save a module travels with it, beside the module document.
+- A second tab or window on the same studio is told the first is open, since each saves over the other.
+- "tutorials" on Home and in the map's Help opens the tutorials site; messages no longer point at documents only the workspace has.
 
 - Player → movement: a state or a move can start switched off ("starts switched off" among a state's flags, "at the start" on a move), for a graph's "enable movement state" / "enable move" or a script to switch on per player -- a glide found on a ledge, a dash learnt. The page says when one starts off and no graph ever switches it on. The two graph nodes offer the module's names.
 

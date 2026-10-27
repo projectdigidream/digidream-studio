@@ -26,6 +26,7 @@ for (const t of ['starter', 'gemhollow', 'cinderfall']) {
         Object.keys(again.docs).sort().join() === Object.keys(rec.docs).sort().join() &&
         Object.keys(again.assets).sort().join() === Object.keys(rec.assets).sort().join(),
         `${t}: the files read back as the same record (${files.length} files, ${Object.keys(rec.docs).length} maps, ${Object.keys(rec.assets).length} assets)`)
+  check(again.savedBy && !('savedBy' in again.module), `${t}: the studio that wrote it travels with the files, beside the module, not in it (${again.savedBy})`)
   const twice = await recordToEntries(again)
   check(sameEntries(files, twice), `${t}: written again, the same bytes, file for file`)
   check(files.every((f, i) => i === 0 || files[i - 1].path < f.path), `${t}: files in path order`)

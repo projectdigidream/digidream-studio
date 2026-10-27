@@ -139,7 +139,7 @@ function showStyle (open = null) {
   rows.push(el('div', { class: sup?.fonts && sup?.skins ? 'st-muted' : 'st-warn-box', 'data-style-support': sup ? JSON.stringify(sup) : 'none',
     text: sup?.fonts && sup?.skins
       ? 'The game draws all of this: fonts, pictures, named styles, subtitles.'
-      : 'This game client draws the colours and sizes here, and the subtitles\' colours. Fonts, panel pictures and the subtitle\'s font, outline and backdrop are written into the module now and show once the client draws them (docs/UI_STYLES.md).' }))
+      : 'This game client draws the colours and sizes here, and the subtitles\' colours. Fonts, panel pictures and the subtitle\'s font, outline and backdrop are written into the module now and show once the client draws them.' }))
   for (const p of styleProblems(style, Object.keys(S.rec.assets ?? {}))) rows.push(el('div', { class: 'st-danger', text: p }))
 
   // FONTS

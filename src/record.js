@@ -19,6 +19,8 @@
 //
 // Pure apart from Blob, which every page and Node have.
 
+import { STUDIO_VERSION } from './version.js'
+
 /**
  * What emitModule writes into assets/ from the documents, and must not be read
  * back as if it were the module's own: the merged sound bank, the screens.
@@ -38,6 +40,9 @@ export function recordFromEntries (entries) {
   const modEntry = entries.find((e) => e.path === 'module.studio.json')
   if (!modEntry) return null
   const module = JSON.parse(dec.decode(modEntry.bytes))
+  // which studio wrote it: the record's, not the module document's (main.js says so of a newer one)
+  const savedBy = module.savedBy
+  delete module.savedBy
   const docs = {}
   const assets = {}
   for (const e of entries) {
@@ -47,7 +52,7 @@ export function recordFromEntries (entries) {
     // Sources (sound packs) are kept under their own path, as written.
     else if (e.path.startsWith('sources/')) assets[e.path] = new Blob([e.bytes])
   }
-  return Object.keys(docs).length ? { id: module.id, module, docs, assets } : null
+  return Object.keys(docs).length ? { id: module.id, module, docs, assets, ...(savedBy ? { savedBy } : {}) } : null
 }
 
 /** JSON with every object's keys in order, two-space indent, a final newline: one text per content. */
@@ -71,7 +76,8 @@ export function stableJson (value) {
  */
 export async function recordToEntries (rec) {
   const enc = new TextEncoder()
-  const out = [{ path: 'module.studio.json', bytes: enc.encode(stableJson(rec.module)) }]
+  // the studio that saved it travels with it (a sync, another device): main.js says so of a newer one
+  const out = [{ path: 'module.studio.json', bytes: enc.encode(stableJson({ ...rec.module, savedBy: rec.savedBy ?? STUDIO_VERSION })) }]
   for (const [name, doc] of Object.entries(rec.docs ?? {})) out.push({ path: `maps/${name}.studio.json`, bytes: enc.encode(stableJson(doc)) })
   for (const [key, blob] of Object.entries(rec.assets ?? {})) {
     const path = key.startsWith('sources/') ? key : `assets/${key}`

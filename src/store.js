@@ -8,6 +8,9 @@
 // Export from what is here, deterministically, and never read back except to
 // import a pack. One direction, so the two cannot disagree.
 //
+import { STUDIO_VERSION } from './version.js'
+import { compareVersions } from './updates.js'
+
 const DB = 'dnp-studio'
 // The suite's, when it was a fork of the studio beside it (0.2.0 absorbed it):
 // its modules are brought over once (importSuite).
@@ -78,6 +81,10 @@ export class Store {
    */
   async save (rec) {
     rec.opened = Date.now()
+    // the newest studio that ever saved it, beside the module rather than in
+    // it (its history is the module's), never lowered: a module a newer one
+    // touched, opened here, is said so (main.js) until this studio is as new
+    if (!rec.savedBy || compareVersions(rec.savedBy, STUDIO_VERSION) < 0) rec.savedBy = STUDIO_VERSION
     return new Promise((resolve, reject) => {
       const t = this.db.transaction(STORE, 'readwrite')
       const o = t.objectStore(STORE)
