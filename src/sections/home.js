@@ -186,14 +186,16 @@ export function syncBadge (id) {
 function updateRows () {
   const u = S.update
   if (!u || u.state !== 'newer' || skipped() === u.latest) return []
+  const bar = updateBar()
   return [el('div', { class: 'st-card sd-update', 'data-update': u.latest }, [
     el('div', { class: 'lbl', text: `Studio ${u.latest} is out (you have ${u.current})` }),
     u.notes.length ? el('ul', { class: 'sd-update-notes' }, u.notes.map((n) => el('li', { class: 'st-muted', text: n }))) : null,
     el('div', { class: 'st-row' }, [
-      selfUpdateButton(u),
+      selfUpdateButton(u, bar),
       button(withIcon('action.export', 'download'), () => shell.openUrl(u.url)),
       button('not now', () => { skipVersion(u.latest); S.router?.remount?.() })
-    ])
+    ]),
+    bar
   ].filter(Boolean))]
 }
 
@@ -202,21 +204,49 @@ function updateRows () {
 // stable release, a dev build the newest of either. The first time, Android's
 // "install unknown apps" switch opens instead, and the button asks to be
 // pressed again.
-function selfUpdateButton (u) {
+// HOW FAR THE UPDATE IS (the skin's progress bar): the shells call
+// window.__dnpSelfUpdateProgress(phase, got, total) as it goes -- the
+// download's bytes of the whole (0 when the server does not say), then
+// unpacking (a desktop) or Android's installer, then the restart. A shell
+// from before that says nothing, and the bar runs without a measure.
+export function updateBar () {
+  const fill = el('div', { class: 'ui-progress__fill' })
+  const label = el('div', { class: 'ui-progress__label st-muted' })
+  const bar = el('div', { class: 'ui-progress sd-update-progress', 'data-update-progress': '1' }, [el('div', { class: 'ui-progress__track' }, [fill]), label])
+  bar.hidden = true
+  const mb = (n) => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0)
+  bar.show = (phase, got = 0, total = 0) => {
+    const sized = phase === 'download' && total > 0
+    bar.hidden = false
+    bar.dataset.phase = phase
+    bar.classList.toggle('ui-progress--loop', !sized)
+    fill.style.width = sized ? `${Math.min(100, (got / total) * 100).toFixed(1)}%` : ''
+    label.textContent = phase === 'download'
+      ? (sized ? `downloading ${mb(got)} of ${mb(total)} MB (${Math.floor((got / total) * 100)}%)` : got ? `downloading ${mb(got)} MB` : 'downloading…')
+      : ({ unpack: 'unpacking…', install: 'installing: Android takes it from here…', restart: 'restarting into the new one…' })[phase] ?? phase
+  }
+  bar.hide = () => { bar.hidden = true }
+  return bar
+}
+
+function selfUpdateButton (u, bar = null) {
   const n = globalThis.dnp?.studio
   // A desktop shell says what it runs on (darwin-arm64, win32-x64, ...); the Android one does not.
   const url = assetUrl(u, S.bundledPlugins > 0, n?.platform ?? 'android')
   if (!n?.selfUpdate || !url) return null
   const b = button(withIcon('action.export', 'update now'), async () => {
     b.disabled = true
-    b.textContent = 'downloading…'
+    b.textContent = 'updating…'
+    bar?.show('download')
     // On a desktop the app quits to be replaced: nothing waiting to be saved is left behind.
     await S.settleSave?.()
-    globalThis.__dnpSelfUpdateFailed = (msg) => { b.disabled = false; b.textContent = `update failed: ${msg} (try again)` }
+    globalThis.__dnpSelfUpdateProgress = (phase, got, total) => bar?.show(phase, got, total)
+    globalThis.__dnpSelfUpdateFailed = (msg) => { bar?.hide(); b.disabled = false; b.textContent = `update failed: ${msg} (try again)` }
     try {
       const r = await n.selfUpdate(url)
       b.disabled = r === 'installing'
       b.textContent = r === 'settings' ? 'allow installs, then press again' : 'installing…'
+      if (r === 'settings') bar?.hide()
     } catch (e) {
       const m = String(e?.message ?? e)
       // An app it may not replace (macOS runs one opened from Downloads from a
@@ -226,7 +256,7 @@ function selfUpdateButton (u) {
       const why = /EACCES|EPERM|EROFS|read-only/i.test(m) ? 'this app cannot replace itself where it is (move it to Applications, or a folder of yours)'
         : /holds other files/i.test(m) ? 'the studio shares its folder with other files: unpack it into a folder of its own to update it here'
           : null
-      if (why) { b.disabled = true; b.textContent = `${why}; "download" gets it by hand` } else globalThis.__dnpSelfUpdateFailed(m)
+      if (why) { bar?.hide(); b.disabled = true; b.textContent = `${why}; "download" gets it by hand` } else globalThis.__dnpSelfUpdateFailed(m)
     }
   })
   b.dataset.action = 'self-update'

@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Updating the studio shows a progress bar under "update now": the download in MB and percent, then unpacking or installing, then the restart; a failure hides it and says why. It needs an app whose shell reports progress (engine 4e6bba5 and after); an older one shows the bar running without a measure.
+
 ## 0.4.2.11 -- 2026-10-27
 
 A development release (the dev branch), built on engine 0.2.3.11 (water, the module's
