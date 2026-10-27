@@ -43,6 +43,7 @@ const STYLE = `
   font-size:12px;white-space:pre-wrap;max-height:30vh;overflow:auto;min-height:20px}
 
 .st-side{display:flex;gap:6px;pointer-events:auto}
+.st-side .st-fx-btn[aria-pressed=false]{text-decoration:line-through;opacity:.6}
 .st-side button,.st-sheet button:where(:not(.ui-switch):not(.ui-help)),.st-row button:where(:not(.ui-switch):not(.ui-help)){min-width:44px;height:44px;
   font-size:13px;line-height:1;cursor:pointer;padding:0 12px}
 
@@ -415,11 +416,12 @@ export class Ui {
     this.undoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'undo', onclick: () => on.undo() }, [icon('action.undo')])
     this.redoBtn = el('button', { class: 'ui-button ui-button--icon', title: 'redo', onclick: () => on.redo() }, [icon('action.redo')])
     this.viewBtn = el('button', { text: 'PLAN', title: 'plan / game view', onclick: () => { if (!this.#justClosed()) on.view() } })
+    this.fxBtn = el('button', { class: 'st-fx-btn st-hidden', text: 'FX', onclick: () => { if (!this.#justClosed()) on.fx?.() } })
     this.rotL = el('button', { class: 'ui-button ui-button--icon', title: 'rotate', onclick: () => on.rotate(-1) }, [icon('action.rotateleft')])
     this.rotR = el('button', { class: 'ui-button ui-button--icon', title: 'rotate', onclick: () => on.rotate(1) }, [icon('action.rotate')])
     // Back to the module, on a phone held upright where there is no rail.
     this.homeBtn = el('button', { class: 'st-home-btn ui-button ui-button--icon', title: 'the module', onclick: () => on.home?.() }, [icon('action.back')])
-    this.side = el('div', { class: 'st-side' }, [this.homeBtn, this.undoBtn, this.redoBtn, this.rotL, this.rotR, this.viewBtn])
+    this.side = el('div', { class: 'st-side' }, [this.homeBtn, this.undoBtn, this.redoBtn, this.rotL, this.rotR, this.fxBtn, this.viewBtn])
     this.top = el('div', { class: 'st-top' }, [this.status, this.side])
     this.bar = el('div', { class: 'st-bar ui-toolbar' })
     this.buttons = {}
@@ -453,6 +455,13 @@ export class Ui {
   setHistory (canUndo, canRedo) {
     this.undoBtn.disabled = !canUndo
     this.redoBtn.disabled = !canRedo
+  }
+
+  /** The FX button: shown on a map with effects, struck through while they are hidden. */
+  setFx (has, on) {
+    this.fxBtn.classList.toggle('st-hidden', !has)
+    this.fxBtn.setAttribute('aria-pressed', on ? 'true' : 'false')
+    this.fxBtn.title = on ? 'the sector effects (fog, rain, snow …) are drawn: hide them' : 'the sector effects are hidden: draw them'
   }
 
   setView (mode) {

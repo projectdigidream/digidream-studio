@@ -292,13 +292,13 @@ export class Viewport {
     const squash = this.mode === 'iso' ? Math.cos(this.elevation) : 1
     for (const m of this.markers.children) if (m.userData.h) m.scale.y = m.userData.h * squash
     this.#keepFurnitureSize()
-    if (this.fx && this.view) {
+    if (this.fx && this.view && this.showFx) {
       const o = this.view.root.position
       this.fx.setOrigin(o.x, o.y, o.z)
       this.fx.update(performance.now() / 1000)
     }
     this.renderer.render(this.scene, this.camera)
-    if (this.fx?.hasFog) this.fx.renderFog(this.renderer, this.scene, this.camera)
+    if (this.showFx && this.fx?.hasFog) this.fx.renderFog(this.renderer, this.scene, this.camera)
     this.dirty = false
   }
 
@@ -375,7 +375,16 @@ export class Viewport {
     this.fx = (view?.map?.fx?.length ?? 0) > 0
       ? new SectorFx({ THREE, map: view.map, touch: matchMedia('(pointer: coarse)').matches })
       : null
-    if (this.fx) this.scene.add(this.fx.root)
+    if (this.fx) { this.fx.root.visible = this.showFx; this.scene.add(this.fx.root) }
+    this.onFx?.(!!this.fx)
+    this.dirty = true
+  }
+
+  /** The map's weather and fog drawn, or not (the FX button): out of the way while building. */
+  showFx = true
+  setShowFx (on) {
+    this.showFx = on
+    if (this.fx) this.fx.root.visible = on
     this.dirty = true
   }
 
@@ -394,7 +403,7 @@ export class Viewport {
   }
 
   /** Something on screen moves by itself (rain, fog), so every frame is drawn. */
-  get animating () { return !!this.fx || !!this.texAnimator }
+  get animating () { return (!!this.fx && this.showFx) || !!this.texAnimator }
 
   /** The world distance one screen pixel covers on the plane at height z. */
   worldPerPixel (z = 0) {

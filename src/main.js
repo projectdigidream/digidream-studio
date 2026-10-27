@@ -318,6 +318,7 @@ S.ui = new Ui({
   redo: () => restore(S.history.redo()),
   view: () => { S.viewport.setMode(S.viewport.mode === 'plan' ? 'iso' : 'plan'); S.ui.setView(S.viewport.mode) },
   rotate: (dir) => S.viewport.rotate(dir * Math.PI / 4),
+  fx: () => S.toggleShowFx(),
   home: () => S.go('home')
 })
 S.ui.setView(S.viewport.mode)
@@ -1410,6 +1411,7 @@ function onKey (e) {
     case 'e': S.viewport.rotate(Math.PI / 4); break
     case 'v': S.ui.on.view(); break
     case 'g': S.toggleFreePlace(); break
+    case 'x': S.toggleShowFx(); break
     case 'ArrowLeft': S.viewport.panBy(40, 0); break
     case 'ArrowRight': S.viewport.panBy(-40, 0); break
     case 'ArrowUp': S.viewport.panBy(0, 40); break
@@ -1944,6 +1946,19 @@ S.toggleFreePlace = () => {
   S.refreshSheet?.()   // the open panel's heights take the new step
 }
 
+// THE SECTOR EFFECTS DRAWN in the map view, or not (the FX button): fog and
+// weather over a room being built get in the way. Only the view: the game
+// draws them all the same. Per device, remembered.
+try { S.viewport.setShowFx(localStorage.getItem('dnp.studio.showFx') !== '0') } catch {}
+S.viewport.onFx = (has) => S.ui.setFx(has, S.viewport.showFx)
+S.ui.setFx(!!S.viewport.fx, S.viewport.showFx)
+S.toggleShowFx = () => {
+  S.viewport.setShowFx(!S.viewport.showFx)
+  try { localStorage.setItem('dnp.studio.showFx', S.viewport.showFx ? '1' : '0') } catch {}
+  S.ui.setFx(!!S.viewport.fx, S.viewport.showFx)
+  S.status(S.viewport.showFx ? 'sector effects drawn (fog, rain, snow …)' : 'sector effects hidden here; the game still draws them', 'ok')
+}
+
 // PLAY WITH THE COLLIDERS DRAWN (engine 0.2.3.7): every body's and wall's
 // collider over the frame, to see why something hits or misses. Per device;
 // in the game F4 turns them on and off too.
@@ -1971,7 +1986,7 @@ function showMenu () {
       muted('Place: monsters, props, spawns and lights, on the floor you tap.'),
       muted('Triggers: doors, lifts, switches, teleports, ambushes and exits in one tap, then change any detail on the card.'),
       muted('Graph: node scripting for this map. The module\'s monsters, player, weapons and everything else are in the rail on the left (or ‹ on a phone).'),
-      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Shift+click (or holding a room) adds it to the selection, Shift+drag takes a box of them · ⌘/Ctrl+C, V, D copy, paste, duplicate rooms · ⌘/Ctrl+A every room · Q/E rotate · V plan/game view · G snap to grid on/off · +/- zoom · arrows pan.')
+      muted('Keys: 1-6 tools · Enter closes a room · Esc cancels · Del deletes · Shift+click (or holding a room) adds it to the selection, Shift+drag takes a box of them · ⌘/Ctrl+C, V, D copy, paste, duplicate rooms · ⌘/Ctrl+A every room · Q/E rotate · V plan/game view · G snap to grid on/off · X sector effects shown/hidden · +/- zoom · arrows pan.')
     ])]
   ])
 }
