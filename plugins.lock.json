@@ -2,7 +2,7 @@
   "plugins": {
     "threesprite": {
       "path": "threesprite",
-      "commit": "8322d0c",
+      "commit": "9e0c2ff",
       "install": "pnpm install --frozen-lockfile --prefer-offline",
       "build": "pnpm build:web",
       "out": "dist-web"
