@@ -61,7 +61,7 @@ function texButton (label, value, ctx, onPick, shown = null) {
  * in world units (the same distance whatever the scale), and the scale is how
  * many times LARGER the tile is drawn.
  */
-function styleRows (label, owner, key, ctx) {
+function styleRows (label, owner, key, ctx, { alpha = true } = {}) {
   owner[key] ??= newStyle()
   const st = owner[key]
   const rows = [el('div', { class: 'st-section-head' }, withIcon('section.textures', `${label} pattern`))]
@@ -72,7 +72,7 @@ function styleRows (label, owner, key, ctx) {
   rows.push(select('painted in', st.anchor ?? 'world',
                    [['world', "the world: patterns line up across sectors"], ['sector', 'the sector: the pattern rides it when it moves']],
                    (v) => { st.anchor = v; ctx.commit() }))
-  rows.push(...alphaRows(st, ctx, `${label} is`))
+  if (alpha) rows.push(...alphaRows(st, ctx, `${label} is`))
   return rows
 }
 
@@ -146,14 +146,23 @@ function effectForm (s, doc, ctx) {
 // fill wears its ceiling picture as the top -- water's ripples, lava's crust
 // -- painted as a ceiling is, its opacity the picture's; lit by its light.
 function fillRows (s, ctx) {
-  if (!(s.fx ?? []).some((e) => e.kind === 'fill')) return []
+  const fill = (s.fx ?? []).find((e) => e.kind === 'fill')
+  if (!fill) return []
+  // How much of the picture shows is the fill's own `surface` (engine
+  // 830d62e) now: a see-through ceiling set before it is folded into it, the
+  // same opacity (surface multiplies ceilalpha), so there is one knob.
+  if (s.ceilStyle?.alpha !== undefined && s.ceilStyle.alpha !== 255) {
+    fill.params ??= {}
+    fill.params.surface = Number(((fill.params.surface ?? 1) * s.ceilStyle.alpha / 255).toFixed(3))
+    delete s.ceilStyle.alpha
+  }
   const rows = [
     el('div', { class: 'st-section-head' }, withIcon('section.textures', 'its surface')),
     texButton('surface picture', s.ceilTex ?? null, ctx, (n) => { s.ceilTex = n || null; ctx.commit(); ctx.refreshSheet?.() }),
     slider('light', Number.isFinite(s.light) ? s.light : 255, { min: 0, max: 255, step: 1 }, (v, done) => { s.light = Math.round(v); done ? ctx.commit() : ctx.preview() })
   ]
-  if (s.ceilTex) rows.push(...styleRows('surface', s, 'ceilStyle', ctx))
-  rows.push(muted(s.ceilTex ? 'The fill\'s top wears the picture; "surface is see-through" sets how much of the fill shows through it. The light lights the fill, unless its glow is 1.' : 'No picture: the fill\'s top is its colour alone. The light lights the fill, unless its glow is 1.'))
+  if (s.ceilTex) rows.push(...styleRows('surface', s, 'ceilStyle', ctx, { alpha: false }))
+  rows.push(muted(s.ceilTex ? 'The fill\'s top wears the picture; the fill\'s "surface" (above, with its colour) is how much of it shows, 0 to 1. The light lights the fill, unless its glow is 1.' : 'No picture: the fill\'s top is its colour alone. The light lights the fill, unless its glow is 1.'))
   return rows
 }
 

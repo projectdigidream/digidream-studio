@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Filled volumes: how much of the surface picture shows is the fill's own "surface" (0 to 1, among its settings); the surface's "see-through" rows are gone from a fill's panel, and a see-through set on one before is folded into its surface, looking the same. A monster or prop drawn on the map now sorts with the game's sprites, before water, so it no longer appears or vanishes in water as the view turns.
+
 - Updating the studio shows a progress bar under "update now": the download in MB and percent, then unpacking or installing, then the restart; a failure hides it and says why. It needs an app whose shell reports progress (engine 4e6bba5 and after); an older one shows the bar running without a measure.
 
 ## 0.4.2.11 -- 2026-10-27

@@ -110,6 +110,17 @@ if (native.ok) {
     const fill = readEffects(c.loadMap(new Uint8Array(pb.dnpm)).map).find((e) => e.kind === 6)
     check(fill && fill.params.color === 0x2c6a90 && Math.abs(fill.params.alpha - 0.45) < 1e-4, `the runtime reads the fill back (${JSON.stringify(fill?.params)})`)
   }
+  // the picture's own opacity, a fill key (engine 830d62e): one knob, not ceilalpha
+  const glass = build((doc, a) => { addSector(doc, rect(4, 4, 10, 10), { kind: 'effect', liquid: true, floor: 0, ceil: 1.5, ceilTex: 'WATER', fx: [{ kind: 'fill', params: { color: '2c6a90', alpha: 0.45, surface: 0.55 } }] }) })
+  check(/^  fx fill color 2c6a90 alpha 0\.45 surface 0\.55$/m.test(glass.text) && !/ceilalpha/.test(glass.text), 'a fill\'s surface opacity is its own key, with no ceilalpha')
+  const gb = bakeNative(glass.text, 'glass')
+  check(gb.ok, `and mapc takes it (${gb.stderr})`)
+  if (gb.ok) {
+    const c = await core()
+    const { readEffects } = await import(join(ROOT, 'engine', 'client', 'src', 'mapdata.js'))
+    const f = readEffects(c.loadMap(new Uint8Array(gb.dnpm)).map).find((e) => e.kind === 6)
+    check(f && Math.abs(f.params.surface - 0.55) < 1e-4, `the runtime reads the surface back (${JSON.stringify(f?.params)})`)
+  }
   const plain = build((doc, a) => { addSector(doc, rect(4, 4, 10, 10), { kind: 'effect', floor: 0, ceil: 1.5, light: 220, ceilTex: 'WATER', fx: [{ kind: 'fog', params: {} }] }) })
   check(/^sector type effect floor 0 ceil 1\.5$/m.test(plain.text), 'CONTROL: an area without a fill is written as before, no light or picture')
 }

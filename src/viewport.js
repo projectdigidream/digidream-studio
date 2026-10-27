@@ -557,7 +557,10 @@ export class Viewport {
         sprite.position.set(toThreeX(m.x), toThreeY(m.z) + h / 2, toThreeZ(m.y))
         sprite.userData = { kind: m.kind, id: m.id, own: true, label: m.label, badgeH: h, y0: toThreeY(m.z), at: furnitureScale(this.viewHeight) }
       }
-      sprite.renderOrder = 11
+      // A thing's own picture sorts with the game's sprites (-1, engine props.js),
+      // before water (-0.5), which then lies over what is under it; a badge is
+      // the editor's, over everything.
+      sprite.renderOrder = m.icon ? -1 : 11
       this.markers.add(sprite)
       // WHICH WAY IT FACES: a short arrow on the ground from its foot, in its
       // colour (0° is +x, counter-clockwise, as the engine's angles). Never
