@@ -5,6 +5,11 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.2.11 -- 2026-10-27
+
+A development release (the dev branch), built on engine 0.2.3.11 (water, the module's
+own movement states, filled volumes; map version 18).
+
 - Filled volumes: "+ fill" among a sector's effects (a colour, how much it hides, its band, its glow), and on an effect area or a liquid with one, "its surface": a picture for its top, painted and made see-through as a ceiling is, and the light that lights it (written as `fx fill`, `ceiltex`, `ceilalpha`, `light`; an area without a fill is written as before). The map view draws the picture on the top and tints the view with the camera inside.
 
 - Player → movement: the module's own movement states (swimming, sliding, gliding, a stun), the ways between them, meters (breath, stamina) and layered moves (a dash, a jump pad), written as module.txt `movestate`, `transition`, `meter` and `move` lines (engine docs/MOVEMENT.md). An overview in plain words -- each state a line with its ways out under it, in the order the engine tries them, then the meters and the moves -- and a line opens its editor in place, one at a time; the tab takes the whole width (no picture beside it), so a phone shows a module's movement in a screen or two. Seven starting points; every change is checked by the engine's own parser, and a line it refuses is outlined, opened and listed among the module's problems. It says when no map has water yet, or no floor has the tag a way waits for. Deleting a state takes the ways that used it (undo brings them back); renaming follows it everywhere. The graph's movement nodes offer the module's names, the HUD's bindings list `meter.<name>` and `meter.<name>_max`, and Player → skin gives each state's animation a state of the avatar.
