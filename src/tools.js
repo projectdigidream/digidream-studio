@@ -8,7 +8,7 @@
 // only turns pixels into ground coordinates and back.
 //
 import { addSector, addSpawn, addLight, addEntity, addPathPoint, snap, newId, newEdge } from './doc.js'
-import { sectorAt, snapToMap, normalize, sideKinds } from './topology.js'
+import { sectorAt, snapToMap, normalize, sideKinds, openWalls } from './topology.js'
 import { withInner, thingsIn } from './rooms.js'
 
 // A finger covers more than a mouse pointer: on a touch screen closing a room
@@ -302,12 +302,9 @@ function placeRoom (S, corners) {
   const s = addSector(S.doc, corners, style, { ...S.style.edge })
   // A WALL THAT BECAME AN OPENING into this room keeps no middle texture: the
   // one a solid wall carried (or the new room took from the last) bricked the
-  // doorway up, on both sides.
+  // doorway up, on both sides. It is kept aside for when it is a wall again.
   normalize(S.doc)
-  for (const [id, kind] of sideKinds(S.doc)) {
-    if (kind !== 'neighbor' || before.get(id) === 'neighbor') continue
-    for (const sec of Object.values(S.doc.sectors)) for (const v of sec.verts) if (v.edge.id === id) v.edge.middle = null
-  }
+  openWalls(S.doc, before)
   // selected, but its panel opened only if one was open: it came up over the
   // spot being drawn, after every rectangle
   S.select({ kind: 'sector', id: s.id }, { quiet: true })

@@ -46,7 +46,7 @@ import { parseAtlas } from '/src/render/atlas.js'
 import { loadMapcBinary, bake as bakeWith } from './bake.js'
 import { newDoc, addSector, addSpawn, validate, findEdge, newEdge, CAP, removeSector, graphsNaming, snap } from './doc.js'
 import { climbSides, climbProblems } from './climb.js'
-import { normalize } from './topology.js'
+import { normalize, restoreWalls } from './topology.js'
 import { copyRooms, pasteRooms, turnRooms, middleOf } from './rooms.js'
 import { newModule, emitModule, RUNTIME_SCRIPTS, scriptDecls, gameScripts, gameFileOf, cleanId } from './module_emit.js'
 import { showPlayScreen } from './playscreen.js'
@@ -1050,7 +1050,7 @@ S.commit = ({ geometry = true } = {}) => {
   badgesSoon?.()
   // An edit that leaves the map's shape alone (a graph's nodes) is not
   // normalized, drawn or baked again: those cost far more than the edit did.
-  if (geometry) normalize(S.doc)
+  if (geometry) { normalize(S.doc); restoreWalls(S.doc) }
   S.history.commit(S.doc)
   // The module's history follows the maps without making a step of its own.
   S.moduleHistory?.replace({ module: S.module, docs: S.docs })

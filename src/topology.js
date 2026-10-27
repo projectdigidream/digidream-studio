@@ -203,6 +203,36 @@ export function sideKinds (doc) {
   return out
 }
 
+/**
+ * A WALL THAT BECAME AN OPENING into a room drawn over it (`before` is
+ * sideKinds from before the drawing) keeps no middle texture -- it would brick
+ * the doorway up -- but keeps it aside, in `middleWas`, for restoreWalls.
+ */
+export function openWalls (doc, before) {
+  for (const [id, kind] of sideKinds(doc)) {
+    if (kind !== 'neighbor' || before.get(id) === 'neighbor') continue
+    for (const sec of Object.values(doc.sectors)) {
+      for (const v of sec.verts) if (v.edge.id === id) { if (v.edge.middle) v.edge.middleWas = v.edge.middle; v.edge.middle = null }
+    }
+  }
+}
+
+/**
+ * ...and once it is a solid wall again (the room over it deleted, or made an
+ * effect area, which opens nothing) it takes its middle back. A wall keeps no
+ * `middleWas`, so a middle cleared on a wall stays cleared.
+ */
+export function restoreWalls (doc) {
+  const kept = Object.values(doc.sectors).flatMap((s) => s.verts).filter((v) => v.edge.middleWas !== undefined)
+  if (!kept.length) return
+  const kinds = sideKinds(doc)
+  for (const v of kept) {
+    if (kinds.get(v.edge.id) !== 'wall') continue
+    v.edge.middle ??= v.edge.middleWas
+    delete v.edge.middleWas
+  }
+}
+
 export function derive (doc) {
   const warnings = []
   const order = doc.order.filter((sid) => doc.sectors[sid]?.verts.length >= 3)

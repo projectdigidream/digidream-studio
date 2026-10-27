@@ -9,8 +9,8 @@
 // and a body walking through the half that borders the second room would hit
 // a wall the author never drew.
 //
-import { newDoc, addSector, addSpawn, validate, RES } from '../src/doc.js'
-import { normalize, derive, sectorAt, snapToMap, nearestEdgePoint } from '../src/topology.js'
+import { newDoc, addSector, addSpawn, removeSector, validate, RES } from '../src/doc.js'
+import { normalize, derive, sectorAt, snapToMap, nearestEdgePoint, sideKinds, openWalls, restoreWalls } from '../src/topology.js'
 import { emitMap } from '../src/mapfmt.js'
 import { requireOracles, bakeNative, readBaked, sideBetween } from './oracle.js'
 import { SIDE_FLAG, NO_SECTOR } from '../../engine/client/src/mapdata.js'
@@ -321,6 +321,41 @@ async function bake (doc, opts) {
   const p = validate(doc)
   check(p.some((x) => /at least 3/.test(x.msg)), 'a two-corner sector is named')
   check(p.some((x) => /'start'/.test(x.msg)), 'a missing start spawn is named')
+}
+
+// --- a room drawn over rooms, then made an effect area or deleted ---------------------------
+// Its inner walls became openings and gave their middles up (tools.js
+// placeRoom); a wall again, they take them back. The user's report: an
+// effect area drawn over rooms left their walls untextured, deleted or not.
+{
+  const over = () => {
+    const doc = newDoc('over')
+    const inner = addSector(doc, rect(8, 4, 16, 12), { floor: 0, ceil: 4 }, { middle: 'STONE2' })
+    normalize(doc)
+    const before = sideKinds(doc)
+    const big = addSector(doc, rect(4, 0, 20, 16), { floor: 0, ceil: 4 }, { middle: 'STONE2' })
+    normalize(doc)
+    openWalls(doc, before)
+    return { doc, inner, big }
+  }
+  const textured = (s) => s.verts.filter((v) => v.edge.middle === 'STONE2').length
+  const a = over()
+  check(textured(a.inner) === 0, `drawn over, the inner room's walls are openings with no middle (${textured(a.inner)}/4)`)
+  a.big.kind = 'effect'; normalize(a.doc)
+  check(textured(a.inner) === 0, 'CONTROL: made an effect area, normalize alone gives nothing back')
+  restoreWalls(a.doc)
+  check(textured(a.inner) === 4, `made an effect area, the inner walls take their middles back (${textured(a.inner)}/4)`)
+  check(a.inner.verts.every((v) => v.edge.middleWas === undefined), 'and keep nothing aside once they are walls')
+  a.inner.verts[0].edge.middle = null; normalize(a.doc); restoreWalls(a.doc)
+  check(a.inner.verts[0].edge.middle === null, 'a middle cleared on a wall afterwards stays cleared')
+
+  const b = over()
+  removeSector(b.doc, b.big.id); normalize(b.doc); restoreWalls(b.doc)
+  check(textured(b.inner) === 4, `the room over them deleted, the walls take their middles back (${textured(b.inner)}/4)`)
+
+  const c = over()
+  normalize(c.doc); restoreWalls(c.doc)
+  check(textured(c.inner) === 0, 'CONTROL: while they are openings, an edit gives nothing back')
 }
 
 console.log(`\ntopology: ${checks} checks, ${fails} failures`)

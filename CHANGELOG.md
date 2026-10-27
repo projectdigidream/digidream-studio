@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Map editor: a room drawn over other rooms no longer throws their wall textures away. The walls it turned into openings keep them aside, and take them back once they are solid walls again: the room made an effect area, or deleted. Drawing an effect area over rooms used to leave their walls untextured, deleted or not.
+
 ## 0.4.2.10 -- 2026-10-26
 
 A development release (the dev branch), built on engine 0.2.3.10 (props, monsters
