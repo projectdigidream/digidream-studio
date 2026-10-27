@@ -39,7 +39,7 @@ export const CAP = {
 
 // The effect kinds mapc parses (sector_fx.hpp). Their keys and defaults come
 // from the engine at run time: studio/src/fxlib.js.
-export const FX_KIND_NAMES = ['rain', 'snow', 'dust', 'embers', 'fog']
+export const FX_KIND_NAMES = ['rain', 'snow', 'dust', 'embers', 'fog', 'fill']
 
 export const EDGE_FLAGS = ['climbable', 'grapple', 'blocking', 'trigger', 'usable']
 

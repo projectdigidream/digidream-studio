@@ -133,12 +133,28 @@ function effectForm (s, doc, ctx) {
     toggle('liquid (water)', !!s.liquid, (v) => { if (v) s.liquid = true; else delete s.liquid; ctx.commit(); ctx.refreshSheet?.() }),
     s.liquid ? muted('Its top is the surface. The game measures how deep a body stands in it -- to the feet, the waist, the eyes -- for the module\'s movement (swimming, wading).') : null,
     ...fxRows(s, ctx.fxSchema?.() ?? null, ctx),
+    ...fillRows(s, ctx),
     number('tag', s.tag, { min: 0, max: 65535, step: 1 }, (v) => { s.tag = Math.round(v); ctx.commit() }),
     el('div', { class: 'st-row' }, [
       button('duplicate', () => { ctx.duplicateSector(s.id) }),
       button('delete', () => { const gone = removeSector(doc, s.id); ctx.select(null); ctx.commit(); ctx.roomDeleted?.(s.id, gone) }, 'st-danger')
     ])
   ]
+}
+
+// A FILL'S SURFACE (SECTOR_FX.md 1.3): an effect area or a liquid with a
+// fill wears its ceiling picture as the top -- water's ripples, lava's crust
+// -- painted as a ceiling is, its opacity the picture's; lit by its light.
+function fillRows (s, ctx) {
+  if (!(s.fx ?? []).some((e) => e.kind === 'fill')) return []
+  const rows = [
+    el('div', { class: 'st-section-head' }, withIcon('section.textures', 'its surface')),
+    texButton('surface picture', s.ceilTex ?? null, ctx, (n) => { s.ceilTex = n || null; ctx.commit(); ctx.refreshSheet?.() }),
+    slider('light', Number.isFinite(s.light) ? s.light : 255, { min: 0, max: 255, step: 1 }, (v, done) => { s.light = Math.round(v); done ? ctx.commit() : ctx.preview() })
+  ]
+  if (s.ceilTex) rows.push(...styleRows('surface', s, 'ceilStyle', ctx))
+  rows.push(muted(s.ceilTex ? 'The fill\'s top wears the picture; "surface is see-through" sets how much of the fill shows through it. The light lights the fill, unless its glow is 1.' : 'No picture: the fill\'s top is its colour alone. The light lights the fill, unless its glow is 1.'))
+  return rows
 }
 
 // HEIGHTS IN FINER STEPS when the grid is switched off (the map menu, G): a

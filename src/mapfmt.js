@@ -123,10 +123,15 @@ export function emitMap (derived, doc, scripts = [], { body = doc.body ?? DEFAUL
     L.push('')
     // AN EFFECT SECTOR (docs/SECTOR_FX.md 7, map version 17): a volume for its
     // effects and events, over the map -- bottom and top, its tag, its fx and
-    // plain corners; nothing drawn, no light, textures or thickness.
+    // plain corners; no textures or thickness. A FILL in it (SECTOR_FX.md
+    // 1.3) is lit by its light and wears its ceiling picture as the top --
+    // written only then, so an area without one stays the bytes it was.
     if (s.effect) {
+      const filled = (s.fx ?? []).some((e) => e.kind === 'fill')
+      const surface = filled && s.ceilTex ? [`ceiltex ${s.ceilTex}`, ...styleWords('ceil', s.ceilStyle)] : []
       // a liquid (map version 18) is one that is water: its top is the surface
-      L.push([`sector type ${s.liquid ? 'liquid' : 'effect'} floor ${num(s.floor)} ceil ${num(s.ceil)}`, ...(s.tag ? [`tag ${s.tag}`] : [])].join(' '))
+      L.push([`sector type ${s.liquid ? 'liquid' : 'effect'} floor ${num(s.floor)} ceil ${num(s.ceil)}`, ...(s.tag ? [`tag ${s.tag}`] : []),
+        ...(filled && Number.isFinite(s.light) ? [`light ${Math.round(s.light)}`] : []), ...surface].join(' '))
       const firstE = L.length
       for (const line of fxLines(s.fx)) L.push(`  ${line}`)
       if (area2(s.verts) < 0) throw new Error(`${s.id}: derive() handed a clockwise loop; normalize() first`)

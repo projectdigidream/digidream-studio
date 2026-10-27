@@ -92,5 +92,27 @@ if (native.ok) {
   check(rain && fog && rain.sector === fog.sector && snow.sector !== rain.sector, 'each on the sector it was written in')
 }
 
+// --- a FILL (SECTOR_FX.md 1.3): a liquid's body, its top wearing a picture ---------------
+{
+  const pool = build((doc, a) => {
+    addSector(doc, rect(4, 4, 10, 10), { kind: 'effect', liquid: true, floor: 0, ceil: 1.5, light: 220, ceilTex: 'WATER', ceilStyle: { alpha: 140, scale: 2 }, fx: [{ kind: 'fill', params: { color: '2c6a90', alpha: 0.45 } }] })
+  })
+  check(/^sector type liquid floor 0 ceil 1\.5 light 220 ceiltex WATER ceilscale 2 ceilalpha 140$/m.test(pool.text) && /^  fx fill color 2c6a90 alpha 0\.45$/m.test(pool.text), `a filled liquid is written with its light and its surface picture (${pool.text.split('\n').find((l) => /type liquid/.test(l))})`)
+  const pb = bakeNative(pool.text, 'pool')
+  check(pb.ok, `and native mapc takes it (${pb.stderr})`)
+  if (existsSync(WASM)) {
+    const w = await bake({ mapPath: 'modules/t/maps/pool.map', mapText: pool.text })
+    check(w.ok && pb.ok && Buffer.compare(Buffer.from(w.dnpm), Buffer.from(pb.dnpm)) === 0, `the studio's own mapc too, to the same bytes (${w.errors.map((e) => e.msg).join('; ')})`)
+  }
+  if (pb.ok) {
+    const c = await core()
+    const { readEffects } = await import(join(ROOT, 'engine', 'client', 'src', 'mapdata.js'))
+    const fill = readEffects(c.loadMap(new Uint8Array(pb.dnpm)).map).find((e) => e.kind === 6)
+    check(fill && fill.params.color === 0x2c6a90 && Math.abs(fill.params.alpha - 0.45) < 1e-4, `the runtime reads the fill back (${JSON.stringify(fill?.params)})`)
+  }
+  const plain = build((doc, a) => { addSector(doc, rect(4, 4, 10, 10), { kind: 'effect', floor: 0, ceil: 1.5, light: 220, ceilTex: 'WATER', fx: [{ kind: 'fog', params: {} }] }) })
+  check(/^sector type effect floor 0 ceil 1\.5$/m.test(plain.text), 'CONTROL: an area without a fill is written as before, no light or picture')
+}
+
 console.log(`fx: ${checks} checks, ${fails} failures`)
 process.exit(fails ? 1 : 0)

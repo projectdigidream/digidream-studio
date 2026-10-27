@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Filled volumes: "+ fill" among a sector's effects (a colour, how much it hides, its band, its glow), and on an effect area or a liquid with one, "its surface": a picture for its top, painted and made see-through as a ceiling is, and the light that lights it (written as `fx fill`, `ceiltex`, `ceilalpha`, `light`; an area without a fill is written as before). The map view draws the picture on the top and tints the view with the camera inside.
+
 - Player → movement: the module's own movement states (swimming, sliding, gliding, a stun), the ways between them, meters (breath, stamina) and layered moves (a dash, a jump pad), written as module.txt `movestate`, `transition`, `meter` and `move` lines (engine docs/MOVEMENT.md). Seven starting points; every card is checked live by the engine's own parser, and a line it refuses is outlined on its card and listed among the module's problems. Renaming a state, meter or move follows it everywhere. The graph's movement nodes offer the module's names, the HUD's bindings list `meter.<name>` and `meter.<name>_max`, and Player → skin gives each state's animation a state of the avatar.
 
 - Map editor: an effect area can be water -- "liquid (water)" on its panel, written as `sector type liquid` (map version 18). Its top is the surface; the game measures how deep a body stands in it for the module's movement.

@@ -295,7 +295,8 @@ export class Viewport {
     if (this.fx && this.view && this.showFx) {
       const o = this.view.root.position
       this.fx.setOrigin(o.x, o.y, o.z)
-      this.fx.update(performance.now() / 1000)
+      // and a camera inside a fill sees the whole view tinted by it
+      this.fx.update(performance.now() / 1000, this.camera.position)
     }
     this.renderer.render(this.scene, this.camera)
     if (this.showFx && this.fx?.hasFog) this.fx.renderFog(this.renderer, this.scene, this.camera)
@@ -373,7 +374,8 @@ export class Viewport {
     // (docs/SECTOR_FX.md): what the level view shows is what the game draws.
     this.fx?.dispose()
     this.fx = (view?.map?.fx?.length ?? 0) > 0
-      ? new SectorFx({ THREE, map: view.map, touch: matchMedia('(pointer: coarse)').matches })
+      // a fill's top wears its picture from the map's own materials
+      ? new SectorFx({ THREE, map: view.map, touch: matchMedia('(pointer: coarse)').matches, surfaces: (i) => view.materials?.[i]?.uniforms })
       : null
     if (this.fx) { this.fx.root.visible = this.showFx; this.scene.add(this.fx.root) }
     this.onFx?.(!!this.fx)
