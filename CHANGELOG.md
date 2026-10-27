@@ -5,7 +5,7 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
-- Bundles ThreeSprite 0.2.4 (stable; the same as the dev 0.2.3.1 it had).
+- Bundles stable tools: ThreeSprite 0.2.4, qPainter 0.2.1, the DAW of DigidreamSynth 0.2.1 and the sound tool of DigidreamSound 0.2.1 (the same files as the dev builds it had).
 
 - Filled volumes: how much of the surface picture shows is the fill's own "surface" (0 to 1, among its settings); the surface's "see-through" rows are gone from a fill's panel, and a see-through set on one before is folded into its surface, looking the same. A monster or prop drawn on the map now sorts with the game's sprites, before water, so it no longer appears or vanishes in water as the view turns.
 
