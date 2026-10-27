@@ -5,7 +5,7 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
-## 0.4.2.12 -- 2026-10-27
+## 0.4.2.12 -- 2026-10-28
 
 A development release (the dev branch), built on engine 0.2.3.12: the last before the
 stable 0.4.3.
