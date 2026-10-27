@@ -125,7 +125,8 @@ export function emitMap (derived, doc, scripts = [], { body = doc.body ?? DEFAUL
     // effects and events, over the map -- bottom and top, its tag, its fx and
     // plain corners; nothing drawn, no light, textures or thickness.
     if (s.effect) {
-      L.push([`sector type effect floor ${num(s.floor)} ceil ${num(s.ceil)}`, ...(s.tag ? [`tag ${s.tag}`] : [])].join(' '))
+      // a liquid (map version 18) is one that is water: its top is the surface
+      L.push([`sector type ${s.liquid ? 'liquid' : 'effect'} floor ${num(s.floor)} ceil ${num(s.ceil)}`, ...(s.tag ? [`tag ${s.tag}`] : [])].join(' '))
       const firstE = L.length
       for (const line of fxLines(s.fx)) L.push(`  ${line}`)
       if (area2(s.verts) < 0) throw new Error(`${s.id}: derive() handed a clockwise loop; normalize() first`)

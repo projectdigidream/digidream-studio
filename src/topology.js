@@ -323,7 +323,7 @@ export function derive (doc) {
         }
       }
     }
-    return { id: sid, effect: kinds[sid] === 'effect', floor: s.floor, ceil: s.ceil, tag: s.tag, light: s.light, thickness: s.thickness,
+    return { id: sid, effect: kinds[sid] === 'effect', liquid: kinds[sid] === 'effect' && !!s.liquid, floor: s.floor, ceil: s.ceil, tag: s.tag, light: s.light, thickness: s.thickness,
              floorTex: s.floorTex, ceilTex: s.ceilTex,
              // How each flat is painted travels with the sector: the emitter
              // writes from what derive hands it, so a style left behind here

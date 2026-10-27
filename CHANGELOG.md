@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- Map editor: an effect area can be water -- "liquid (water)" on its panel, written as `sector type liquid` (map version 18). Its top is the surface; the game measures how deep a body stands in it for the module's movement.
+
 - Map editor: an FX button beside PLAN/GAME (and the X key) hides or shows the sector effects -- fog, rain, snow, dust, embers -- in the map view, so they are not in the way while building. It shows on a map that has effects, is struck through while they are hidden, and is remembered on the device; the game draws them all the same.
 
 - Map editor: a room drawn over other rooms no longer throws their wall textures away. The walls it turned into openings keep them aside, and take them back once they are solid walls again: the room made an effect area, or deleted. Drawing an effect area over rooms used to leave their walls untextured, deleted or not.

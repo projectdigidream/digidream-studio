@@ -128,6 +128,10 @@ function effectForm (s, doc, ctx) {
     select('kind', s.kind, KINDS, (v) => { s.kind = v; ctx.commit(); ctx.refreshSheet?.() }),
     slider('bottom', s.floor, range, (v, done) => { s.floor = v; if (s.ceil <= v) s.ceil = v + 0.25; done ? ctx.commit() : ctx.preview() }),
     slider('top', s.ceil, range, (v, done) => { s.ceil = v; if (s.floor >= v) s.floor = v - 0.25; done ? ctx.commit() : ctx.preview() }),
+    // WATER (map version 18): its top is the surface, and the
+    // game knows how deep a body stands in it (feet, waist, eyes)
+    toggle('liquid (water)', !!s.liquid, (v) => { if (v) s.liquid = true; else delete s.liquid; ctx.commit(); ctx.refreshSheet?.() }),
+    s.liquid ? muted('Its top is the surface. The game measures how deep a body stands in it -- to the feet, the waist, the eyes -- for the module\'s movement (swimming, wading).') : null,
     ...fxRows(s, ctx.fxSchema?.() ?? null, ctx),
     number('tag', s.tag, { min: 0, max: 65535, step: 1 }, (v) => { s.tag = Math.round(v); ctx.commit() }),
     el('div', { class: 'st-row' }, [

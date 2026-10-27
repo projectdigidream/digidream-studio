@@ -250,6 +250,15 @@ async function bake (doc, opts) {
     const bytes = baked.dnpm
     check(new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true) === 17, `as map version 17 (${new DataView(bytes.buffer, bytes.byteOffset).getUint32(4, true)})`)
   }
+  // A LIQUID (map version 18): the same area as water, written type liquid
+  doc.sectors[fog.id].liquid = true
+  const wet = emitMap(derive(doc), doc).text
+  check(/^sector type liquid floor 0 ceil 6 tag 5$/m.test(wet) && !/^sector type effect/m.test(wet), 'made water, it is written as a type liquid block')
+  const wb = bakeNative(wet)
+  check(wb.ok, `and it bakes (${wb.stderr})`)
+  if (wb.ok) check(new DataView(wb.dnpm.buffer, wb.dnpm.byteOffset).getUint32(4, true) === 18, `as map version 18 (${new DataView(wb.dnpm.buffer, wb.dnpm.byteOffset).getUint32(4, true)})`)
+  delete doc.sectors[fog.id].liquid
+  check(/^sector type effect /m.test(emitMap(derive(doc), doc).text), 'CONTROL: not water, it is an effect area again')
   // CONTROL: the same rooms with no effect sector are no version 17
   const plain = newDoc('plain'); addSector(plain, r(0, 0, 10, 10)); addSector(plain, r(10, 0, 20, 10)); addSpawn(plain, 'start', 2, 2); normalize(plain)
   const pb = bakeNative(emitMap(derive(plain), plain).text)
