@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.3.3 -- 2026-10-28
+
+A development release (the dev branch), built on engine 0.2.4.3.
+
+- The camera's "keep in view" turns round corners instead of being pressed against walls, with the camera on a lead too, and "turn rate for walls" now also caps how fast that turn goes, easing in and out (engine 0.2.4.3).
+
 ## 0.4.3.2 -- 2026-10-28
 
 A development release (the dev branch), built on engine 0.2.4.2.
