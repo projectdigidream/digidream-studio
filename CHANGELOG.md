@@ -5,6 +5,38 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.3 -- 2026-10-28
+
+The stable release of what the development releases 0.4.2.1 to 0.4.2.12 brought,
+built on engine 0.2.4.
+
+### Added
+
+- **Your own ways of moving** (Player → movement): swimming, sliding, gliding, a sprint, a stun -- states with their own speed and gravity, the ways between them, meters such as breath and stamina, and short moves such as a dash or a jump pad. Seven starting points; the engine checks every change as you make it; a state or a move can start switched off for a graph to give later.
+- **Water**: an effect area can be water -- its top is the surface -- for wading and swimming.
+- **Effect areas**: a room can be only effects (rain, snow, fog), laid over other rooms; graphs hear someone enter or leave it.
+- **Filled volumes**: "+ fill" tints a volume (water, lava, coloured glass), with a picture on its surface and the surface's own opacity.
+- **Map editor**: several rooms at once (Shift+click, hold on a phone, Shift+drag a box) to move, copy, paste, turn, mirror, raise or delete; the grid can be switched off (G) for exact corners and heights; platforms reach across rooms; the metamap's grid covers each map's tile; an FX button hides fog and weather while you build.
+- **Player and camera**: ledge grab, coyote time, a variable jump; a camera that follows behind the player at a height you set; Play can draw every collider.
+- **Its own light**: props, monsters and missiles can be drawn at full light instead of lit by their room.
+- **The studio updates itself** on macOS, Windows and Linux as well as Android, with a progress bar. A stable studio is offered stable releases only.
+- A plain PNG imports as a sprite sheet; a new module shows its keys as a panel you can edit or delete; "tutorials" on Home and in Help.
+
+### Fixed
+
+- Big maps are no longer refused before Play or Export (the studio's map limits were a month out of date).
+- A room drawn over others no longer loses their wall textures.
+- Undo survives Play.
+- Monsters and props in water no longer appear and vanish as the view turns.
+- Graphs: a despawn after "when prop touched" no longer removes the player; graph errors show beside the graph, not only in the Play log; a second wire from an output no longer silently replaces the first.
+- Phones: weather no longer slows the Room tool; small rooms are easier to tap.
+- A deleted map is no longer played; the starter's hint says "F punch", since it has no weapon.
+- The studio asks the browser to keep its storage, warns when a module was saved by a newer studio, and when it is open in a second tab.
+
+### Bundled
+
+ThreeSprite 0.2.4, qPainter 0.2.1, the DAW of DigidreamSynth 0.2.1, the sound tool of DigidreamSound 0.2.1 and Packager 0.1.3, all stable.
+
 ## 0.4.2.12 -- 2026-10-28
 
 A development release (the dev branch), built on engine 0.2.3.12: the last before the
