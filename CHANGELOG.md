@@ -5,6 +5,10 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.3.2 -- 2026-10-28
+
+A development release (the dev branch), built on engine 0.2.4.2.
+
 - The automatic camera keeps the player in view: with "turns by itself" on, the Camera panel's "keep in view" turns the camera round the player when a wall, a ceiling or a floor comes between them, by how wide a cone it keeps clear and how fast it turns to (`cone`, `cone_rate`, engine a9d768f).
 
 ## 0.4.3.1 -- 2026-10-28
