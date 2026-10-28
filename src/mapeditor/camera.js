@@ -235,6 +235,14 @@ function showCamera () {
       (v, done) => { if (done) { c.autoRate = v; S.commit() } }), 'How quickly it swings round.') : null,
     addHelp(toggle('walls pull it in', !!c.collide, (v) => { if (v) c.collide = true; else delete c.collide; S.commit() }),
       'A wall (or a ceiling) between the camera and the player brings it closer, so it never looks through one. Best with a low camera behind the player.'),
+    // THE CONE (engine a9d768f, CAMERA_SET 25-26): with either automatic
+    // camera, it turns round the player to keep a cone to them clear of walls.
+    // `cone` in degrees across, 0 or unset none; `coneRate` its turn, default 4.
+    c.autoTurn ? addHelp(slider('keep in view (°)', c.cone ?? 0, { min: 0, max: 60, step: 1 },
+      (v, done) => { if (done) { if (v > 0) c.cone = v; else { delete c.cone; delete c.coneRate } S.commit(); showCamera() } }),
+      'Keeps the player in view: when a wall, a ceiling or a floor starts to come between the camera and the player, the camera turns round them to where the view is clear. This is how wide a cone it keeps clear, in degrees across: wider turns it sooner. 0: it never turns for walls. Best with "walls pull it in" on.') : null,
+    c.autoTurn && c.cone ? addHelp(slider(`turn rate for walls${c.coneRate != null ? ' (own)' : ''}`, c.coneRate ?? 4, { min: 0.5, max: 20, step: 0.5 },
+      (v, done) => { if (done) { c.coneRate = v; S.commit() } }), 'How quickly it turns round the player to keep the view clear.') : null,
     // BY HEIGHT over the player (engine 0.2.3.8, CAMERA_SET 23-24): where it
     // sits and what it looks at, rather than an angle down.
     addHelp(toggle('set its height over the player', c.cameraHeight != null, (v) => { if (v) { c.cameraHeight = 3; c.aimHeight ??= 1 } else { delete c.cameraHeight; delete c.aimHeight } S.commit(); showCamera() }),

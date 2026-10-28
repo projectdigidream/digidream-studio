@@ -107,6 +107,9 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   if (cam.autoTurn === true && cam.autoDelay != null) camFields.push(`auto_delay = ${milli(cam.autoDelay)} / 1000`)
   if (cam.autoTurn === true && cam.autoRate != null) camFields.push(`auto_rate = ${milli(cam.autoRate)} / 1000`)
   if (cam.collide) camFields.push('collide = 1')
+  // The cone works with either automatic camera only (engine a9d768f).
+  if (cam.autoTurn && cam.cone) camFields.push(`cone = ${milli(cam.cone)} / 1000`)
+  if (cam.autoTurn && cam.cone && cam.coneRate != null) camFields.push(`cone_rate = ${milli(cam.coneRate)} / 1000`)
   // By height over the player (engine 0.2.3.8, CAMERA_SET 23-24): where it sits, what it looks at.
   if (cam.cameraHeight != null) camFields.push(`camera_height = ${milli(cam.cameraHeight)} / 1000`)
   if (cam.cameraHeight != null && cam.aimHeight != null) camFields.push(`aim_height = ${milli(cam.aimHeight)} / 1000`)

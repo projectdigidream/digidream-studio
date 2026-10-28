@@ -172,6 +172,16 @@ if (!existsSync(TRIGGERCHECK)) {
   writeFileSync(lfile, leadLua.text)
   const rl = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), lfile], { encoding: 'utf8' })
   check(rl.status === 0, `the runtime takes a map with the camera on a lead:\n${rl.stderr}`)
+  // THE CONE (engine a9d768f): cone and cone_rate by the server's names and the client's, taken by the runtime
+  const coneLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: null, autoTurn: 2, collide: true, cone: 15, coneRate: 6 } }, emitted)
+  const coneLine = coneLua.text.split('\n').find((l) => /level_camera\{/.test(l)) ?? ''
+  check(names.includes('cone') && names.includes('cone_rate') && CAMERA_FIELD[names.indexOf('cone')] === 'cone' && CAMERA_FIELD[names.indexOf('cone_rate')] === 'coneRate'
+    && /cone = 15000 \/ 1000/.test(coneLine) && /cone_rate = 6000 \/ 1000/.test(coneLine), `the camera's cone is written by the engine's names (${coneLine.trim()})`)
+  const kfile = join(dir, 'camera_cone.lua')
+  writeFileSync(kfile, coneLua.text)
+  const rk = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), kfile], { encoding: 'utf8' })
+  check(rk.status === 0, `the runtime takes a map with the camera's cone:\n${rk.stderr}`)
+  check(!/cone/.test(emitMapLua({ ...doc, camera: { yaw: 0.1, pitch: null, distance: null, cone: 15, coneRate: 6 } }, emitted).text), 'CONTROL: with no automatic camera, the cone is not written')
   // THE CAMERA BY HEIGHT (engine 0.2.3.8): camera_height and aim_height, by the server's names, taken by the runtime
   const hLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: 6, cameraHeight: 3, aimHeight: 1.25 } }, emitted)
   const hLine = hLua.text.split('\n').find((l) => /level_camera\{/.test(l)) ?? ''
