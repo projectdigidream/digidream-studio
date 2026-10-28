@@ -5,6 +5,14 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.3.1 -- 2026-10-28
+
+A development release (the dev branch), built on engine 0.2.4.1.
+
+- The camera on a lead: the Camera panel's "turns by itself" can follow the way the player goes without ever swinging round behind them (`auto_turn = 2`, engine 683417c), beside the swing round behind and off.
+
+- The map editor keeps up with big maps: every edit re-read the whole map's topology by comparing every corner with every wall and every room with every room, which grew with the square of the map. Indexed, an edit on a map of 1920 rooms is checked and baked in about 0.2 s where it took 4 s (and 0.04 s at 480 rooms, from 0.4 s), with the same result to the byte.
+
 ## 0.4.3 -- 2026-10-28
 
 The stable release of what the development releases 0.4.2.1 to 0.4.2.12 brought,
