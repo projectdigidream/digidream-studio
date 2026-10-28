@@ -164,6 +164,14 @@ if (!existsSync(TRIGGERCHECK)) {
   const ra = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), afile], { encoding: 'utf8' })
   check(ra.status === 0, `the runtime takes a map with the automatic camera:\n${ra.stderr}`)
   check(!/auto_/.test(emitMapLua({ ...doc, camera: { yaw: 0.1, pitch: null, distance: null, autoDelay: 3 } }, emitted).text), 'CONTROL: with the swing off, its delay is not written')
+  // ON A LEAD (engine 683417c): auto_turn 2, and the swing's delay and rate are not its
+  const leadLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: null, autoTurn: 2, autoDelay: 3, autoRate: 2 } }, emitted)
+  const leadLine = leadLua.text.split('\n').find((l) => /level_camera\{/.test(l)) ?? ''
+  check(/auto_turn = 2/.test(leadLine) && !/auto_delay|auto_rate/.test(leadLine), `the camera on a lead is auto_turn 2, without the swing's delay and rate (${leadLine.trim()})`)
+  const lfile = join(dir, 'camera_lead.lua')
+  writeFileSync(lfile, leadLua.text)
+  const rl = spawnSync(TRIGGERCHECK, [join(ROOT, 'engine'), lfile], { encoding: 'utf8' })
+  check(rl.status === 0, `the runtime takes a map with the camera on a lead:\n${rl.stderr}`)
   // THE CAMERA BY HEIGHT (engine 0.2.3.8): camera_height and aim_height, by the server's names, taken by the runtime
   const hLua = emitMapLua({ ...doc, camera: { yaw: null, pitch: null, distance: 6, cameraHeight: 3, aimHeight: 1.25 } }, emitted)
   const hLine = hLua.text.split('\n').find((l) => /level_camera\{/.test(l)) ?? ''

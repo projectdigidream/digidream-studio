@@ -102,9 +102,10 @@ export function emitMapLua (doc, emitted, { guards = true, panels = doc.panels ?
   // How the following camera moves (CAMERA_MOTION): only what the map sets.
   for (const f of CAMERA_MOTION) if (cam[f.key] != null) camFields.push(`${f.wire} = ${milli(cam[f.key])} / 1000`)
   // The automatic camera (engine 0.2.3.7, CAMERA_SET 19-22): behind the player, walls pulling it in.
-  if (cam.autoTurn) camFields.push('auto_turn = 1')
-  if (cam.autoTurn && cam.autoDelay != null) camFields.push(`auto_delay = ${milli(cam.autoDelay)} / 1000`)
-  if (cam.autoTurn && cam.autoRate != null) camFields.push(`auto_rate = ${milli(cam.autoRate)} / 1000`)
+  // 1 swings round behind the player; 2 follows on a lead, never behind (engine 683417c); the delay and rate are 1's
+  if (cam.autoTurn) camFields.push(`auto_turn = ${cam.autoTurn === 2 ? 2 : 1}`)
+  if (cam.autoTurn === true && cam.autoDelay != null) camFields.push(`auto_delay = ${milli(cam.autoDelay)} / 1000`)
+  if (cam.autoTurn === true && cam.autoRate != null) camFields.push(`auto_rate = ${milli(cam.autoRate)} / 1000`)
   if (cam.collide) camFields.push('collide = 1')
   // By height over the player (engine 0.2.3.8, CAMERA_SET 23-24): where it sits, what it looks at.
   if (cam.cameraHeight != null) camFields.push(`camera_height = ${milli(cam.cameraHeight)} / 1000`)

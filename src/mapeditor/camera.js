@@ -224,11 +224,14 @@ function showCamera () {
     // player unless they turned it lately, and walls can pull it in -- a low
     // camera behind the player rather than the high overhead one.
     el('div', { class: 'st-section-head' }, withIcon('maptool.camera', 'behind the player')),
-    addHelp(toggle('swing round behind the player', !!c.autoTurn, (v) => { if (v) c.autoTurn = true; else delete c.autoTurn; S.commit(); showCamera() }),
-      'The camera turns to look along where the player faces, unless they turned it themselves in the last few seconds. Its distance and its angle down above are where it settles.'),
-    c.autoTurn ? addHelp(slider(`after (s)${c.autoDelay != null ? ' (own)' : ''}`, c.autoDelay ?? 2, { min: 0, max: 10, step: 0.25 },
+    // `autoTurn`: true (1, the swing round behind) or 2 (on a lead, engine 683417c)
+    addHelp(select('turns by itself', c.autoTurn === 2 ? 'lead' : c.autoTurn ? 'behind' : 'off',
+      [['off', 'no: stays where it is turned'], ['behind', 'swings round behind them'], ['lead', 'on a lead: follows the way they go']],
+      (v) => { if (v === 'behind') c.autoTurn = true; else if (v === 'lead') c.autoTurn = 2; else delete c.autoTurn; S.commit(); showCamera() }),
+      'Behind: the camera turns to look along where the player faces, unless they turned it themselves in the last few seconds. On a lead: it turns with the way they move, as if pulled along, and never swings round behind their back. Its distance and its angle down above are where it settles.'),
+    c.autoTurn === true ? addHelp(slider(`after (s)${c.autoDelay != null ? ' (own)' : ''}`, c.autoDelay ?? 2, { min: 0, max: 10, step: 0.25 },
       (v, done) => { if (done) { c.autoDelay = v; S.commit() } }), 'How long after the player last turned the camera it starts swinging back.') : null,
-    c.autoTurn ? addHelp(slider(`how fast (turns/s)${c.autoRate != null ? ' (own)' : ''}`, c.autoRate ?? 1.5, { min: 0.1, max: 6, step: 0.1 },
+    c.autoTurn === true ? addHelp(slider(`how fast (turns/s)${c.autoRate != null ? ' (own)' : ''}`, c.autoRate ?? 1.5, { min: 0.1, max: 6, step: 0.1 },
       (v, done) => { if (done) { c.autoRate = v; S.commit() } }), 'How quickly it swings round.') : null,
     addHelp(toggle('walls pull it in', !!c.collide, (v) => { if (v) c.collide = true; else delete c.collide; S.commit() }),
       'A wall (or a ceiling) between the camera and the player brings it closer, so it never looks through one. Best with a low camera behind the player.'),
