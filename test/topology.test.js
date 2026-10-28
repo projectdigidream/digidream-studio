@@ -367,5 +367,21 @@ async function bake (doc, opts) {
   check(textured(c.inner) === 0, 'CONTROL: while they are openings, an edit gives nothing back')
 }
 
+// --- a big map stays quick: the passes index their corners and boxes -----------------------
+// Every corner against every edge, every room against every room, was seconds
+// an edit at two thousand rooms; indexed it is a tenth of that. Generous, so a
+// slow machine passes; quadratic again would not.
+{
+  const big = newDoc('big')
+  const r = (x0, y0, x1, y1) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+  for (let i = 0; i < 1600; i++) {
+    const x = (i % 40) * 6; const y = Math.floor(i / 40) * 6
+    addSector(big, r(x, y, x + 6, y + 6), { floor: 0, ceil: 4 })
+    if (i % 5 === 0) addSector(big, r(x + 2, y + 2, x + 4, y + 4), { floor: -1, ceil: 4 })
+  }
+  const t0 = performance.now(); normalize(big); const d = derive(big); const ms = performance.now() - t0
+  check(Object.values(d.kinds).filter((k) => k === 'cut').length === 320 && ms < 2000, `1920 rooms normalized and derived in ${Math.round(ms)} ms (under 2000), their 320 pits found`)
+}
+
 console.log(`\ntopology: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

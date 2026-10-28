@@ -104,11 +104,29 @@ export function normalize (doc, { split = true } = {}) {
   for (const l of doc.lights) { l.x = snap(l.x, 1 / RES); l.y = snap(l.y, 1 / RES); l.z = snap(l.z, 1 / RES) }
 
   if (split) {
-    // Every corner of every sector, once, against every edge of every other
-    // sector. Corners sharing coordinates split the same edge once.
-    // ponytail: O(corners x edges); a grid index if maps get big.
-    const corners = []
-    for (const sid of doc.order) if (!isEffect(doc.sectors[sid])) for (const v of doc.sectors[sid].verts) corners.push({ sid, x: I(v.x), y: I(v.y) })
+    // Every corner of every sector against the edges of every other sector,
+    // through a grid of the corners by cell: an edge asks only the cells its
+    // box covers, not every corner of the map (that was corners x edges, and
+    // seconds an edit on a map of a thousand rooms). Corners sharing
+    // coordinates split the same edge once.
+    const CELL = 8 * RES
+    const cellOf = (v) => Math.floor(v / CELL)
+    const grid = new Map()
+    for (const sid of doc.order) {
+      if (isEffect(doc.sectors[sid])) continue
+      for (const v of doc.sectors[sid].verts) {
+        const c = { sid, x: I(v.x), y: I(v.y) }
+        const key = cellOf(c.x) + ',' + cellOf(c.y)
+        let list = grid.get(key)
+        if (!list) grid.set(key, (list = []))
+        list.push(c)
+      }
+    }
+    const near = function * (px, py, qx, qy) {
+      for (let cx = cellOf(Math.min(px, qx)); cx <= cellOf(Math.max(px, qx)); cx++) {
+        for (let cy = cellOf(Math.min(py, qy)); cy <= cellOf(Math.max(py, qy)); cy++) yield * (grid.get(cx + ',' + cy) ?? [])
+      }
+    }
     for (const sid of doc.order) {
       const s = doc.sectors[sid]
       if (isEffect(s)) continue
@@ -119,7 +137,7 @@ export function normalize (doc, { split = true } = {}) {
         out.push(p)
         const hits = []
         const seen = new Set()
-        for (const c of corners) {
+        for (const c of near(px, py, qx, qy)) {
           if (c.sid === sid) continue
           const key = c.x + ',' + c.y
           if (seen.has(key) || !onSegmentStrict(px, py, qx, qy, c.x, c.y)) continue
@@ -149,17 +167,36 @@ export function normalize (doc, { split = true } = {}) {
  */
 export const isEffect = (s) => s?.kind === 'effect'
 
+/**
+ * Each sector's box and area, once for a whole derive, in lattice units: a
+ * room whose box cannot hold another's (or meet it) is passed over before its
+ * polygon is asked, which is most of them on a big map.
+ */
+function shapes (doc, order) {
+  const out = new Map()
+  for (const sid of order) {
+    const vs = doc.sectors[sid].verts
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
+    for (const v of vs) { const x = I(v.x); const y = I(v.y); if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    out.set(sid, { x0, y0, x1, y1, area: Math.abs(area2(vs)) })
+  }
+  return out
+}
+
 /** The sector immediately containing s, or null. Smallest by area wins. */
-function parentOf (doc, s, order) {
+function parentOf (doc, s, order, geo = shapes(doc, [...order, s.id])) {
   let best = null
   let bestArea = Infinity
-  const mine = Math.abs(area2(s.verts))
+  const g = geo.get(s.id)
+  const mine = g.area
   for (const oid of order) {
     if (oid === s.id) continue
+    const go = geo.get(oid)
+    if (go.area <= mine || go.area >= bestArea) continue
+    // a room that holds s holds its box
+    if (go.x0 > g.x0 || go.y0 > g.y0 || go.x1 < g.x1 || go.y1 < g.y1) continue
     const o = doc.sectors[oid]
-    const oa = Math.abs(area2(o.verts))
-    if (oa <= mine || oa >= bestArea) continue
-    if (s.verts.every((v) => classify(o.verts, I(v.x), I(v.y)) >= 0)) { best = o; bestArea = oa }
+    if (s.verts.every((v) => classify(o.verts, I(v.x), I(v.y)) >= 0)) { best = o; bestArea = go.area }
   }
   return best
 }
@@ -170,10 +207,14 @@ function parentOf (doc, s, order) {
  * ponytail: corners only; a cross with no corner inside the other (an X of
  * two thin strips) is not seen -- add edge crossings if that shape matters.
  */
-function overlapping (doc, s, order) {
+function overlapping (doc, s, order, geo = shapes(doc, [...order, s.id])) {
   const out = []
+  const g = geo.get(s.id)
   for (const oid of order) {
     if (oid === s.id) continue
+    // a corner strictly inside the other is inside its box: boxes that only meet, or miss, cannot overlap
+    const go = geo.get(oid)
+    if (go.x1 <= g.x0 || go.x0 >= g.x1 || go.y1 <= g.y0 || go.y0 >= g.y1) continue
     const o = doc.sectors[oid]
     const mineIn = s.verts.some((v) => classify(o.verts, I(v.x), I(v.y)) > 0)
     const theirsIn = o.verts.filter((v) => classify(s.verts, I(v.x), I(v.y)) > 0).length
@@ -256,16 +297,17 @@ export function derive (doc) {
   // open edges all round. 'cut' means nothing without a container.
   const parents = {}
   const kinds = {}
+  const geo = shapes(doc, rooms)
   for (const sid of order) {
     const s = doc.sectors[sid]
     if (isEffect(s)) { parents[sid] = null; kinds[sid] = 'effect'; continue }
-    const p = parentOf(doc, s, rooms)
+    const p = parentOf(doc, s, rooms, geo)
     parents[sid] = p ? p.id : null
     // ACROSS A BORDER: an 'auto' sector inside no single room, over two or
     // more, is a platform when its floor is above every room it reaches over
     // (mapc takes that partial overlap since engine 8c813aa). A level or sunk
     // one stays as it was, and mapc says why.
-    const over = p || s.kind !== 'auto' ? [] : overlapping(doc, s, rooms)
+    const over = p || s.kind !== 'auto' ? [] : overlapping(doc, s, rooms, geo)
     kinds[sid] = s.kind === 'auto' ? (p ? (s.floor > p.floor ? 'platform' : 'cut') : over.length && over.every((o) => s.floor > o.floor) ? 'platform' : null)
       : s.kind === 'cut' && !p ? null : s.kind
     if (p && s.verts.some((v) => classify(p.verts, I(v.x), I(v.y)) === 0)) {
