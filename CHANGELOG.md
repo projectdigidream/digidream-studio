@@ -5,6 +5,12 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+## 0.4.3.4 -- 2026-11-03
+
+A development release (the dev branch), built on engine 0.2.4.3.
+
+- Bundles ThreeSprite 0.2.4.1 (dev): copy, cut and paste the selection (the whole image when nothing is selected) across views, parts, variants and projects, with Ctrl+C / X / V or the buttons that show while Select or Move is picked; pasted into a view with no image, it makes one.
+
 ## 0.4.3.3 -- 2026-10-28
 
 A development release (the dev branch), built on engine 0.2.4.3.
