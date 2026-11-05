@@ -16,7 +16,7 @@ import { useStroke } from '../../vendor/uikit/runtime.js'
 import { shell } from '../bridge.js'
 import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, slider, pictureBackground, withIcon, icon } from '../ui.js'
 import { guessSheet, frameRect, frameSize, sheetProblems, MAX_FRAMES, DEFAULT_FPS } from '../texsheet.js'
-import { newComposite, compositeLine, renameInComposites, dropFromComposites, compositesUsing, shuffleSeed,
+import { newComposite, compositeLine, renameInComposites, dropFromComposites, compositesUsing, shuffleSeed, greyName,
   COMPOSITE_MAX, DEFAULT_PATCH, DEFAULT_OVERLAY_SCALE, DEFAULT_OVERLAY_STRENGTH } from '../composites.js'
 import { texturePicker } from '../inspector.js'
 import { duplicateTexture } from '../assetcopy.js'
@@ -217,6 +217,33 @@ async function addComposite () {
   pickStill(`${n}: its first texture`, n, (t) => { c.members.push({ name: t, weight: 1 }); S.moduleChanged(); showTextures(n) })
 }
 
+/**
+ * "Make a grey copy" for a composite's overlay, when its picture has colour:
+ * the copy is a texture of the module's own (so it ships in the pack), and the
+ * overlay from then on. Hidden until the picture is read, and for a grey one.
+ */
+function greyOffer (name, c, changed) {
+  const from = c.overlay.name
+  const box = el('div', { class: 'cp-grey', 'data-composite-grey': from, hidden: '' }, [
+    muted(`${from} has colour in it, so it tints the whole surface. A grey copy only shades it: lighter brightens, darker darkens, its average moved to mid-grey so it does both evenly.`),
+    el('div', { class: 'st-row' }, [button('make a grey copy', async () => {
+      const g = await S.greyCopy(from)
+      if (!g) { S.status(`${from}'s picture could not be read`, 'error'); return }
+      const to = greyName(from, taken)
+      S.module.textures ??= {}
+      S.module.textures[to] = { w: g.w, h: g.h }
+      S.rec.assets ??= {}
+      S.rec.assets[`textures/${to}.png`] = g.blob
+      S.imageUrls.set(to, URL.createObjectURL(g.blob))
+      c.overlay.name = to
+      S.status(`${to}: a grey copy of ${from}, now ${name}'s overlay`, 'ok')
+      changed()
+    })])
+  ])
+  S.isGreyPicture(from).then((grey) => { box.hidden = grey !== false })
+  return box
+}
+
 /** The card of one composite: its textures and weights, how they are laid out, and the surface drawn live. */
 function compositeCard (name) {
   const c = S.module.composites[name]
@@ -296,6 +323,8 @@ function compositeCard (name) {
           pictureBackground(el('div', { class: 'sd-sheet-thumb cp-thumb' }), S.imageFor(c.overlay.name)),
           el('span', { class: 'cp-member-name', text: c.overlay.name }),
           button('change…', () => pickStill(`${name}: its overlay`, name, (t) => { c.overlay.name = t; changed() }))]) : null,
+        // A picture with colour in it tints the whole surface: offered a grey copy (shown once its pixels are read).
+        c.overlay ? greyOffer(name, c, changed) : null,
         c.overlay ? slider('its size (times its own)', c.overlay.scale ?? DEFAULT_OVERLAY_SCALE, { min: 1, max: 16, step: 0.5 }, live((v) => { c.overlay.scale = v })) : null,
         c.overlay ? slider('how strong', c.overlay.strength ?? DEFAULT_OVERLAY_STRENGTH, { min: 0, max: 1, step: 0.05 }, live((v) => { c.overlay.strength = v })) : null,
         ...advice.map((a) => el('div', { class: 'st-muted cp-advice', text: a }))
@@ -482,5 +511,7 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 .cp-weight{width:64px;min-height:44px;box-sizing:border-box}
 .cp-icon{min-width:44px;min-height:44px}
 .cp-advice{font-size:12px;margin-top:4px}
+.cp-grey{display:flex;flex-direction:column;gap:4px;margin:2px 0 6px}
+.cp-grey[hidden]{display:none}
 .cp-line{font-family:var(--dnp-font-mono,monospace);font-size:12px;overflow-wrap:anywhere;margin:6px 0}
 ` }))

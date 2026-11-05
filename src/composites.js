@@ -128,6 +128,63 @@ export function compositesUsing (composites, name) {
   return Object.entries(composites ?? {}).filter(([, c]) => compositeTextures(c).includes(name)).map(([n]) => n)
 }
 
+// --- a grey overlay --------------------------------------------------------------------------
+//
+// An overlay multiplies the surface by twice its colour (render/composite.js
+// compositeTexel), so a picture with colour in it tints the whole surface. Its
+// grey copy shades it only: each pixel its luminance, and the average moved to
+// mid-grey -- the overlay's "no change" -- so it brightens and darkens the
+// surface evenly rather than darkening (or lightening) all of it.
+
+const MID = 127.5
+
+/** True when every pixel's three channels agree (a grey picture), to within PNG's rounding. */
+export function isGrey (data) {
+  for (let i = 0; i < data.length; i += 4) if (Math.abs(data[i] - data[i + 1]) > 1 || Math.abs(data[i + 1] - data[i + 2]) > 1) return false
+  return true
+}
+
+/**
+ * RGBA in, the same in greys: each pixel's luminance (Rec. 601), alpha kept;
+ * with `centre`, shifted so the average over the pixels that show is mid-grey,
+ * the contrast untouched. A shift clamps some pixels at black or white, which
+ * moves the average back, so the shift is the one whose CLAMPED average is
+ * mid-grey (found by halving: the average only grows with it).
+ */
+export function greyscale (data, { centre = true } = {}) {
+  const lum = new Float32Array(data.length / 4)
+  const shows = new Uint8Array(data.length / 4)
+  let n = 0
+  for (let k = 0, i = 0; i < data.length; k++, i += 4) {
+    lum[k] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    if (data[i + 3] > 0) { shows[k] = 1; n++ }
+  }
+  const meanAt = (d) => { let t = 0; for (let k = 0; k < lum.length; k++) if (shows[k]) t += Math.min(255, Math.max(0, lum[k] + d)); return t / n }
+  let shift = 0
+  if (centre && n) {
+    let lo = -255
+    let hi = 255
+    for (let it = 0; it < 24; it++) { const mid = (lo + hi) / 2; if (meanAt(mid) < MID) lo = mid; else hi = mid }
+    shift = (lo + hi) / 2
+  }
+  const out = new Uint8ClampedArray(data.length)
+  for (let k = 0, i = 0; i < data.length; k++, i += 4) {
+    const v = lum[k] + shift
+    out[i] = out[i + 1] = out[i + 2] = v
+    out[i + 3] = data[i + 3]
+  }
+  return out
+}
+
+/** A name for a grey copy: NAME_GREY, cut to the 24 characters a texture name may have, numbered while taken. */
+export function greyName (name, taken) {
+  for (let k = 1; ; k++) {
+    const tail = k === 1 ? '_GREY' : `_GREY${k}`
+    const n = `${name.slice(0, 24 - tail.length)}${tail}`
+    if (!taken(n)) return n
+  }
+}
+
 /** A seed for "Shuffle": 24 bits, as the client keeps it. */
 export const shuffleSeed = (rand = Math.random) => Math.floor(rand() * SEED_SPAN) % SEED_SPAN
 

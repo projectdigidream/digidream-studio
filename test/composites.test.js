@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { newComposite, compositeLine, compositeProblems, compositeTextures, renameInComposites, dropFromComposites, compositesUsing,
-  renderComposite, shuffleSeed, COMPOSITE_MAX, DEFAULT_PATCH } from '../src/composites.js'
+  renderComposite, shuffleSeed, greyscale, isGrey, greyName, COMPOSITE_MAX, DEFAULT_PATCH } from '../src/composites.js'
 import { animationsTxt } from '../src/texsheet.js'
 import * as cp from '../../engine/client/src/render/composite.js'
 import { parseAnimations } from '../../engine/client/src/render/animtex.js'
@@ -148,6 +148,50 @@ for (const [label, words] of Object.entries(modes)) {
   const grey = renderComposite(cp, def, [base], { ...flat(0), data: new Uint8ClampedArray(8 * 8 * 4).fill(127.5) }, { tilesX: 2, tilesY: 2 })
   const white = renderComposite(cp, def, [base], flat(255), { tilesX: 2, tilesY: 2 })
   check(none.data[0] === 100 && Math.abs(grey.data[0] - 100) <= 1 && white.data[0] === 200 && white.data[3] === 100, `an overlay: grey neutral, white doubling, alpha untouched (${none.data[0]}, ${grey.data[0]}, ${white.data[0]})`)
+}
+
+// --- a grey copy for an overlay -----------------------------------------------------------------
+{
+  // A dark green picture, half of it see-through at the edges.
+  const N = 16
+  const col = new Uint8ClampedArray(N * 4)
+  for (let k = 0; k < N; k++) col.set([20 + k, 90 + 3 * k, 30, k < 2 ? 0 : 255], k * 4)
+  const g = greyscale(col)
+  let grey = true; let sum = 0; let n = 0; let alpha = true
+  for (let k = 0; k < N; k++) {
+    const [r, gg, b, a] = g.subarray(k * 4, k * 4 + 4)
+    if (r !== gg || gg !== b) grey = false
+    if (a !== col[k * 4 + 3]) alpha = false
+    if (a > 0) { sum += r; n++ }
+  }
+  check(grey && isGrey(g) && !isGrey(col), 'a grey copy is grey, and the coloured picture is told from it')
+  check(Math.abs(sum / n - 127.5) <= 0.5 && alpha, `its average over the pixels that show is mid-grey, the overlay's no-change (${(sum / n).toFixed(2)}), alpha kept`)
+  const flat = greyscale(col, { centre: false })
+  const lum = (i) => 0.299 * col[i] + 0.587 * col[i + 1] + 0.114 * col[i + 2]
+  check([0, 5, 15].every((k) => Math.abs(flat[k * 4] - lum(k * 4)) <= 0.5) && Math.abs((g[60] - g[20]) - (flat[60] - flat[20])) <= 1,
+    'uncentred it is each pixel\'s luminance; centred, the contrast between pixels is the same')
+  check(isGrey(new Uint8ClampedArray([10, 11, 10, 255, 200, 200, 201, 255])), 'a grey picture is grey to within PNG\'s rounding')
+  // A dark picture with a white strip: shifted up, the strip clamps at white, and the average must still land on mid-grey.
+  const strip = new Uint8ClampedArray(32 * 4)
+  for (let k = 0; k < 32; k++) strip.set(k < 2 ? [255, 255, 255, 255] : [64, 80, 128, 255], k * 4)
+  const sg = greyscale(strip)
+  let st = 0; for (let k = 0; k < 32; k++) st += sg[k * 4]
+  const naive = 255 / 16 + (0.299 * 64 + 0.587 * 80 + 0.114 * 128) * 15 / 16
+  check(Math.abs(st / 32 - 127.5) <= 0.6 && sg[0] === 255, `with pixels clamped at white, the average is still mid-grey (${(st / 32).toFixed(2)}; a plain shift by ${(127.5 - naive).toFixed(1)} would give less)`)
+  const taken = new Set(['MOSS_GREY', 'ABCDEFGHIJKLMNOPQRS_GREY'])
+  check(greyName('MOSS', (n) => taken.has(n)) === 'MOSS_GREY2' && greyName('ABCDEFGHIJKLMNOPQRSTUVWX', (n) => taken.has(n)) === 'ABCDEFGHIJKLMNOPQR_GREY2' &&
+    greyName('DIRT', () => false) === 'DIRT_GREY' && greyName('ABCDEFGHIJKLMNOPQRSTUVWX', () => false).length === 24, 'its name: NAME_GREY, cut to 24, numbered while taken')
+  // Through the client's own sums: a surface shaded by the centred copy at full strength keeps its average.
+  const { def } = cp.parseCompositeLine('composite T A overlay O strength 1'.split(' '))
+  const base = { data: new Uint8ClampedArray(8 * 8 * 4).fill(100), w: 8, h: 8 }
+  const oc = new Uint8ClampedArray(8 * 8 * 4)
+  for (let k = 0; k < 64; k++) oc.set([(k * 37) % 120, 60 + (k % 9) * 10, 40, 255], k * 4)
+  const shaded = renderComposite(cp, def, [base], { data: greyscale(oc), w: 8, h: 8 }, { tilesX: 4, tilesY: 4 })
+  const tinted = renderComposite(cp, def, [base], { data: oc, w: 8, h: 8 }, { tilesX: 4, tilesY: 4 })
+  const avg = (d, c) => { let t = 0; for (let i = c; i < d.length; i += 4) t += d[i]; return t / (d.length / 4) }
+  check(Math.abs(avg(shaded.data, 0) - 100) < 3 && avg(shaded.data, 0) === avg(shaded.data, 1),
+    `shaded by its grey copy, the surface keeps its brightness on average and gains no tint (${avg(shaded.data, 0).toFixed(1)})`)
+  check(Math.abs(avg(tinted.data, 0) - avg(tinted.data, 1)) > 20, 'CONTROL: the coloured picture itself tints it')
 }
 
 // --- the module's files ------------------------------------------------------------------------

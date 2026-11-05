@@ -4732,6 +4732,32 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(/composite CP_YARD CP_A 6 CP_B CP_C flip x shift overlay CP_GRIME$/.test(made.line) && made.read?.members === 'CP_A:6,CP_B:1,CP_C:1' && made.read.flipX && !made.read.flipY && made.read.shift && made.read.overlay === 'CP_GRIME',
     `the card says its line, and the client reads it back from animations.txt (${made.line})`)
   check(made.cv > 0 && made.colours >= 3 && made.tile && made.thumb, `its surface is drawn live, all three pictures in it, and its tile shows it (${made.cv} px, ${made.colours} colours)`)
+  // A COLOURED OVERLAY is offered a grey copy (the grey one was not): made, it is a texture of the module's own and the overlay.
+  const offered = await page.evaluate(() => !document.querySelector('.sd-page [data-composite-grey="CP_GRIME"]') || document.querySelector('.sd-page [data-composite-grey="CP_GRIME"]').hidden)
+  await click('.sd-page [data-open-composite] button', 'change…'); await pause(300); await click('.st-sheet .st-tile', 'CP_B'); await pause(600)
+  const grey = await page.evaluate(async () => {
+    const S = window.__studio
+    const until = async (ok) => { for (let i = 0; i < 150 && !ok(); i++) await new Promise((r) => setTimeout(r, 20)) }
+    await until(() => document.querySelector('.sd-page [data-composite-grey="CP_B"]') && !document.querySelector('.sd-page [data-composite-grey="CP_B"]').hidden)
+    const shown = !!document.querySelector('.sd-page [data-composite-grey="CP_B"]:not([hidden])')
+    ;[...document.querySelectorAll('.sd-page [data-composite-grey="CP_B"] button')].find((b) => b.textContent.trim() === 'make a grey copy')?.click()
+    await until(() => S.module.composites.CP_YARD.overlay?.name === 'CP_B_GREY')
+    const blob = S.rec.assets['textures/CP_B_GREY.png']
+    let px = null
+    // its average over every pixel, and whether every pixel is grey
+    if (blob) {
+      const bmp = await createImageBitmap(blob); const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height
+      const g = c.getContext('2d'); g.drawImage(bmp, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data
+      let sum = 0; let allGrey = true
+      for (let i = 0; i < d.length; i += 4) { sum += d[i]; if (d[i] !== d[i + 1] || d[i + 1] !== d[i + 2]) allGrey = false }
+      px = { mean: Math.round(sum / (d.length / 4) * 10) / 10, allGrey }
+    }
+    return { shown, overlay: S.module.composites.CP_YARD.overlay?.name, own: !!S.module.textures.CP_B_GREY, px, line: document.querySelector('.sd-page [data-composite-line]')?.textContent ?? '',
+      offerAfter: !!document.querySelector('.sd-page [data-composite-grey]:not([hidden])') }
+  })
+  check(offered && grey.shown, `a grey overlay is offered no grey copy, a coloured one is (${JSON.stringify({ offered, shown: grey.shown })})`)
+  check(grey.overlay === 'CP_B_GREY' && grey.own && grey.px?.allGrey && Math.abs(grey.px.mean - 127.5) <= 1 && / overlay CP_B_GREY$/.test(grey.line) && !grey.offerAfter,
+    `"make a grey copy" makes one of the module's own, mid-grey on average, and the overlay (${JSON.stringify(grey)})`)
   // On a floor: the bake's material is a composite one, its atlas the three pictures.
   const floor = await page.evaluate(async () => {
     const S = window.__studio
@@ -4809,7 +4835,7 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
     const S = window.__studio
     S.doc.sectors[S.doc.order[0]].floorTex = null
     delete S.module.composites
-    for (const n of ['CP_A', 'CP_B', 'CP_BLUE', 'CP_C', 'CP_GRIME']) { delete S.module.textures?.[n]; delete S.rec.assets?.[`textures/${n}.png`] }
+    for (const n of ['CP_A', 'CP_B', 'CP_BLUE', 'CP_C', 'CP_GRIME', 'CP_B_GREY']) { delete S.module.textures?.[n]; delete S.rec.assets?.[`textures/${n}.png`] }
     S.commit(); S.moduleChanged()
   })
 }

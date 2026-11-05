@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- A composite's overlay picture with colour in it tints the whole surface; its card now offers "make a grey copy": the picture in greys, its average moved to mid-grey so it brightens and darkens the surface evenly, kept as a texture of the module's own (NAME_GREY) and made the overlay. Not offered for a picture that is grey already.
+
 ## 0.4.3.6 -- 2026-11-05
 
 A development release (the dev branch), built on engine 0.2.4.4.

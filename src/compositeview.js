@@ -15,7 +15,7 @@ import { MapView } from '/src/render/scene.js'
 import * as cp from '/src/render/composite.js'
 import { parseAnimations } from '/src/render/animtex.js'
 import { animationsTxt } from './texsheet.js'
-import { compositeProblems, renderComposite } from './composites.js'
+import { compositeProblems, renderComposite, greyscale, isGrey } from './composites.js'
 
 let S = null
 
@@ -119,6 +119,18 @@ export function install (s) {
   // back from Play is one -- drew every composite as a missing picture until
   // the next edit.
   if (S.module) S.refreshComposites()
+  /** Whether a texture's picture is grey already: null when it cannot be read. */
+  S.isGreyPicture = async (n) => { const p = await pixelsOf(urlOf(n)); return p ? isGrey(p.data) : null }
+  /** A texture's picture in greys, centred on mid-grey, as a PNG: { blob, w, h }, or null when it cannot be read. */
+  S.greyCopy = async (n) => {
+    const p = await pixelsOf(urlOf(n))
+    if (!p) return null
+    const c = document.createElement('canvas')
+    c.width = p.w; c.height = p.h
+    c.getContext('2d').putImageData(new ImageData(greyscale(p.data), p.w, p.h), 0, 0)
+    const blob = await new Promise((resolve) => c.toBlob(resolve, 'image/png'))
+    return blob && { blob, w: p.w, h: p.h }
+  }
   /** What the client would leave out or refuse, for the page and the problems list. */
   S.compositeProblems = (n, c) => compositeProblems(n, c, {
     sizeOf: (t) => S.module?.textures?.[t] ?? (S.textureSizes?.[t] ? { w: S.textureSizes[t][0], h: S.textureSizes[t][1] } : null),
