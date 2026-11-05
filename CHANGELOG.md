@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- A composite texture is drawn again after a reload -- coming back from Play is one: the module the studio opens at boot came before its composites were read, so every surface wearing one showed a missing picture until the next edit.
+
 ## 0.4.3.5 -- 2026-11-05
 
 A development release (the dev branch), built on engine 0.2.4.4.

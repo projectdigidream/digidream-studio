@@ -4779,6 +4779,20 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(follow.dropped === 'CP_A,CP_BLUE', `deleting one takes it out of them (${follow.dropped})`)
   check(follow.moved.floor === 'CP_COURT' && follow.moved.has === 'CP_COURT' && follow.undone.floor === 'CP_YARD' && follow.undone.has === 'CP_YARD',
     `renaming the composite follows it onto the floor, and undo brings both back (${JSON.stringify(follow)})`)
+  // A RELOAD -- the way back from Play is one: the module opened at boot, before
+  // the composites were installed, still draws its floor as a composite (it
+  // used to wait for the next edit, and showed a missing picture until then).
+  await page.evaluate(() => window.__studio.save.flush())
+  await page.reload({ waitUntil: 'networkidle0' })
+  await page.waitForFunction(() => window.__studio?.doc, { timeout: 60000 })
+  const reloaded = await page.evaluate(async () => {
+    const S = window.__studio
+    if (S.route() !== 'map') await S.go('map')
+    const at = () => { const v = S.preview?.view; return v?.materials[v.map.textures.indexOf('CP_YARD')] }
+    for (let i = 0; i < 100 && !at()?.uniforms.cpCount?.value; i++) await new Promise((r) => setTimeout(r, 100))
+    return { floor: S.doc.sectors[S.doc.order[0]].floorTex, composite: at()?.defines?.COMPOSITE !== undefined, count: at()?.uniforms.cpCount?.value ?? null, defs: [...S.compositeDefs.keys()].join() }
+  })
+  check(reloaded.floor === 'CP_YARD' && reloaded.composite && reloaded.count === 2 && reloaded.defs === 'CP_YARD', `after a reload the floor is drawn as the composite again, with no edit first (${JSON.stringify(reloaded)})`)
   // ON A PHONE: its card's rows stay inside it.
   await page.setViewport({ ...was, width: 390, height: 844 })
   await pause(300)

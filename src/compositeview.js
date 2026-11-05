@@ -113,6 +113,12 @@ export function install (s) {
   }
   /** A composite's flat picture's URL, once drawn; '' before (or with no pictures). */
   S.compositeThumb = (n) => thumbs.get(n)?.url ?? ''
+  // THE MODULE OPENED AT BOOT came before this (main.js opens it first), so
+  // its refresh at the end of rebuildAssetCaches found nothing to call: filled
+  // now, before the first map view is built. Without it a reload -- the way
+  // back from Play is one -- drew every composite as a missing picture until
+  // the next edit.
+  if (S.module) S.refreshComposites()
   /** What the client would leave out or refuse, for the page and the problems list. */
   S.compositeProblems = (n, c) => compositeProblems(n, c, {
     sizeOf: (t) => S.module?.textures?.[t] ?? (S.textureSizes?.[t] ? { w: S.textureSizes[t][0], h: S.textureSizes[t][1] } : null),
