@@ -5,6 +5,8 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
+- **Composite textures** (engine 5a1d95a, docs/COMPOSITE_TEXTURES.md): "+ composite" on the Textures page makes one texture name of up to eight pictures, laid out tile by tile so a big floor or wall stops showing its repeat. Each picture has a weight; tiles can be mirrored (both ways, or left-right only for walls) and turned; the grid can be hidden by shifting each tile or by irregular patches, dithered or blended where they meet; an overlay picture can shade the whole surface; Shuffle gives another layout. The surface is drawn live as the game will lay it out, and a map's rooms and walls name it like any texture. Renaming or deleting a texture follows it into the composites made with it, and the problems list says what the game would leave out (a missing or animated picture, more than eight, a turn on a picture that is not square). Written as `composite` lines in `animations.txt`, with its pictures' sizes in `index.json`.
+
 ## 0.4.3.4 -- 2026-11-03
 
 A development release (the dev branch), built on engine 0.2.4.3.

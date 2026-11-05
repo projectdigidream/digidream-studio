@@ -35,8 +35,10 @@ export class Preview {
    * @param viewport  where the picture goes
    * @param textures  a TextureCache
    */
-  constructor ({ core, bake, runtime, viewport, textures , hooks = [] }) {
+  constructor ({ core, bake, runtime, viewport, textures , hooks = [], levelOf = () => 0 }) {
     this.core = core
+    // A map's level number in the game, which turns its composite textures' layout.
+    this.levelOf = levelOf
     this.bake = bake
     this.hooks = hooks
     this.runtime = runtime
@@ -99,7 +101,7 @@ export class Preview {
     const data = readMap(loaded.map)
     const view = new MapView(data)
     view.setDynamicSectors([])
-    const animator = await this.textures.apply(view, doc.texscale)
+    const animator = await this.textures.apply(view, doc.texscale, { level: this.levelOf(doc.name) })
     if (this.map) this.map.destroy()
     this.map = loaded.map
     this.data = data

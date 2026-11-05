@@ -26,6 +26,7 @@ import { install as installScripts } from './sections/scripts.js'
 import { install as installGraphs } from './sections/graphs.js'
 import { install as installStyle } from './sections/style.js'
 import { install as installSky } from './mapeditor/sky.js'
+import { install as installComposites } from './compositeview.js'
 import { install as installSkySection } from './sections/sky.js'
 import { install as installCamera } from './mapeditor/camera.js'
 import { install as installNeighbours } from './mapeditor/neighbours.js'
@@ -270,7 +271,8 @@ S.skin.onChange(() => {
   for (const fn of S.skinListeners) { try { fn(S.skin) } catch (e) { console.warn('[studio] a drawing did not take the skin:', e) } }
 })
 /** Where a texture's picture is: the module's own, else the app's. */
-S.imageFor = (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`
+// A composite texture has no picture: its flat drawing, once made (compositeview.js).
+S.imageFor = (n) => S.imageUrls.get(n) ?? (S.isComposite?.(n) ? S.compositeThumb(n) : `/textures/${n}.png`)
 // (Before the sky: it loads its pictures through this the moment it is installed.)
 // The sky, before any map is drawn: a sky flat takes its material when it is built.
 installSky(S)
@@ -284,12 +286,19 @@ S.animGroups = () => {
   const own = new Set(Object.keys(S.module?.textures ?? {}))
   return [...S.servedAnim.groups.filter((g) => !own.has(g.frames[0])), ...parseAnimations(animationsTxt(S.module) ?? '').groups]
 }
-S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {}, sheetOf: (n) => S.sheetOf(n), groups: () => S.animGroups() })
+// Composite textures (compositeview.js): before any map view, which builds a
+// composite's material as one from the start.
+installComposites(S)
+S.textures = new TextureCache({ urlFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, cutout: texIndex.cutout ?? {}, sheetOf: (n) => S.sheetOf(n), groups: () => S.animGroups(),
+                                compositeOf: (n) => S.compositeDefs.get(n) ?? null })
+// A map's level number in the game: its place among the module's maps by file
+// name, the order the server declares them in. It turns a composite's layout.
+S.levelOf = (name) => Math.max(0, Object.keys(S.docs ?? {}).map((n) => `${n}.dnpm`).sort().indexOf(`${name}.dnpm`))
 // The module's movement lines through the core's own parser, the server's
 // (movement.js): null when it reads them, else why and which card.
 S.checkMovement = () => { try { S.moveWorld ??= S.core.createWorld(); return checkMovement(S.moveWorld, S.module) } catch { return null } }
 S.preview = new Preview({ core: S.core, bake: S.bake, runtime: S.runtime, viewport: S.viewport, textures: S.textures,
-                          hooks: S.vocab.trigger.events.map((e) => e.name) })
+                          hooks: S.vocab.trigger.events.map((e) => e.name), levelOf: (n) => S.levelOf(n) })
 // Placed things are drawn as their own pictures, once those have loaded.
 S.sprites = new SpriteLibrary({ sheets: S.sheets, kinds: S.kinds, moduleProps: () => S.module?.props ?? [], onLoad: () => redraw(), imageFor: (n) => S.spriteUrls.get(n) ?? null })
 S.preview.onResult = (r) => {
@@ -764,6 +773,8 @@ async function rebuildAssetCaches (rec) {
       if (png) S.sheets.set(m[1], { atlas: parseAtlas(json, m[1]), imageUrl: URL.createObjectURL(png) })
     } catch (e) { console.warn('[studio] sheet', path, e.message) }
   }
+  // Its composite textures, drawn from the pictures just read.
+  await S.refreshComposites?.()
 }
 
 async function openModule (id, { show = true } = {}) {
@@ -1154,9 +1165,10 @@ S.raiseRooms = (by, ids = S.selectedRooms()) => { for (const id of ids) { const 
 S.roomsMiddle = (ids = S.selectedRooms()) => middleOf(S.doc, ids)
 S.pickTexture = (current, onPick) => {
   // once each: the module's own are among the ones the app serves too
-  const names = [...new Set([...Object.keys(S.module.textures ?? {}), ...S.textureNames])]
+  // its composites with them, which a map names as it names a texture
+  const names = [...new Set([...Object.keys(S.module.textures ?? {}), ...Object.keys(S.module.composites ?? {}), ...S.textureNames])]
   S.ui.showSheet('Texture', texturePicker(names, current, (name) => { onPick(name); showInspector() },
-    { imageFor: (n) => S.imageUrls.get(n) ?? `/textures/${n}.png`, sheetOf: (n) => S.sheetOf(n) }))
+    { imageFor: (n) => S.imageFor(n), sheetOf: (n) => S.sheetOf(n) }))
 }
 S.openPalette = () => S.ui.showSheet('Place', placePalette({
   mobs: Object.keys(S.module.mobs?.mobs ?? {}), props: [...moduleProps(S.module).map((p) => p.name), ...S.catalogue], armed: S.place,
@@ -1210,6 +1222,8 @@ S.reopen = (title, body, onClose = null) => S.ui.showSheet(title, body, onClose)
 // module's mobs.lua the map declares is current.
 S.moduleChanged = () => {
   save()
+  // before the bake, which builds composites' materials from these
+  S.refreshComposites?.()
   previewNow()
   badgesSoon()
   S.moduleHistory?.commit({ module: S.module, docs: S.docs, assets: S.rec.assets ?? {} })
@@ -1229,6 +1243,7 @@ async function restoreModule (snap) {
   S.rec.module = m
   S.docs = snap.docs
   S.rec.docs = snap.docs
+  S.refreshComposites?.()
   // The pictures, packs and sources an edit replaced come back with it.
   if (snap.assets) { S.rec.assets = snap.assets; await rebuildAssetCaches(S.rec) }
   if (!S.docs[S.docName]) S.docName = Object.keys(S.docs)[0]

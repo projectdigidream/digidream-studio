@@ -41,7 +41,7 @@ async function bakeNeighbour (name, doc) {
   if (!loaded.ok) return null
   const view = new MapView(readMap(loaded.map))
   view.setDynamicSectors([])
-  await S.textures.apply(view, copy.texscale)
+  await S.textures.apply(view, copy.texscale, { level: S.levelOf?.(name) ?? 0 })
   hit?.view?.root.removeFromParent()
   const out = { key, view, polys, sides: outerSides(derived) }
   cache.set(name, out)

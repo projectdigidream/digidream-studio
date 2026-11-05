@@ -39,6 +39,7 @@ import { emitMobsLua } from './mobs_emit.js'
 import { emitWeaponsLua, hasWeapons } from './weapons_emit.js'
 import { keyLines } from './keys_emit.js'
 import { animationsTxt } from './texsheet.js'
+import { compositeTextures } from './composites.js'
 import { playerLines, playerFor, hasMoveSounds, emitPlayerSoundsLua, emitPlayerHurtLua, emitPickupSoundsLua } from './player.js'
 import { movementLines } from './movement.js'
 import { emitProps } from './props_emit.js'
@@ -515,6 +516,14 @@ export async function emitModule (module, docs, { bake, runtime, hooks = [], ass
     }
   }
 
+  // A composite has no picture: its textures and overlay are what the client
+  // sizes (composites.js; docs/COMPOSITE_TEXTURES.md).
+  for (const name of [...used]) {
+    const c = module.composites?.[name]
+    if (!c) continue
+    used.delete(name)
+    for (const t of compositeTextures(c)) used.add(t)
+  }
   const index = { sizes: {}, cutout: {} }
   for (const name of [...used].sort()) {
     const size = module.textures?.[name] ?? textureSizes(name)

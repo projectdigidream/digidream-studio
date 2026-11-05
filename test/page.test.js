@@ -4669,6 +4669,137 @@ check(errors.length === 0, `no page errors at all (${errors.slice(0, 3).join(' |
   check(r.tab.length === 1 && r.tab[0][1] === '_blank' && /releases\/latest$/.test(r.tab[0][0]), `openUrl without a shell opens a new tab (${JSON.stringify(r.tab)})`)
 }
 
+// COMPOSITE TEXTURES (composites.js, docs/COMPOSITE_TEXTURES.md): one made on
+// the Textures page by clicks -- its textures picked, weighed and laid out --
+// is the line the client reads, a composite material on the floor that names
+// it, and follows a texture's rename and delete; its card fits a phone.
+{
+  // Sizes only: a change of isMobile or hasTouch makes puppeteer reload the page.
+  const was = page.viewport() ?? { width: 1440, height: 900 }
+  await page.setViewport({ ...was, width: 1440, height: 900 })
+  // FIXTURE: three 32 px pictures and an overlay, as an import adds them.
+  await page.evaluate(async () => {
+    const S = window.__studio
+    const make = async (name, size, colour) => {
+      const c = document.createElement('canvas'); c.width = c.height = size
+      const g = c.getContext('2d'); g.fillStyle = colour; g.fillRect(0, 0, size, size); g.fillStyle = '#ffffff'; g.fillRect(0, 0, size, 2)
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'))
+      S.module.textures ??= {}; S.module.textures[name] = { w: size, h: size }
+      S.rec.assets ??= {}; S.rec.assets[`textures/${name}.png`] = blob
+      S.imageUrls.set(name, URL.createObjectURL(blob))
+    }
+    await make('CP_A', 32, '#806040'); await make('CP_B', 32, '#405080'); await make('CP_C', 32, '#408040'); await make('CP_GRIME', 64, '#808080')
+    S.moduleChanged()
+    await S.go('textures')
+  })
+  await new Promise((r) => setTimeout(r, 500))
+  const click = (sel, text) => page.evaluate((sel, text) => {
+    const b = [...document.querySelectorAll(sel)].find((e) => e.textContent.trim() === text || e.title === text)
+    b?.click(); return !!b
+  }, sel, text)
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms))
+  await click('.sd-page button', '+ composite'); await pause(200)
+  await page.evaluate(() => { const i = document.querySelector('dialog[open] input'); i.value = 'CP_YARD'; document.querySelector('dialog[open] button[type=submit]').click() })
+  await pause(400)
+  const picking = await page.evaluate(() => ({ sheet: window.__studio.ui.sheetOpen, tiles: [...document.querySelectorAll('.st-sheet .st-tile')].map((t) => t.title) }))
+  check(picking.sheet && picking.tiles.includes('CP_A') && !picking.tiles.includes('CP_YARD'), `a new composite asks for its first texture, from the still pictures, not itself (${picking.tiles.slice(0, 6).join()})`)
+  await click('.st-sheet .st-tile', 'CP_A'); await pause(500)
+  for (const t of ['CP_B', 'CP_C']) { await click('.sd-page [data-open-composite] button', 'texture'); await pause(300); await click('.st-sheet .st-tile', t); await pause(400) }
+  await page.evaluate(() => { const i = document.querySelector('[data-composite-weight="CP_A"]'); i.value = 6; i.dispatchEvent(new Event('change')) }); await pause(300)
+  const choose = (label, value) => page.evaluate((label, value) => {
+    const s = [...document.querySelectorAll('.sd-page [data-open-composite] .st-row')].find((x) => x.querySelector('label')?.textContent.trim() === label)?.querySelector('select')
+    if (s) { s.value = value; s.dispatchEvent(new Event('change')) }
+    return !!s
+  }, label, value)
+  await choose('mirrored', 'x'); await pause(300)
+  await choose('hide the grid', 'shift'); await pause(300)
+  await page.evaluate(() => [...document.querySelectorAll('.sd-page [data-open-composite] .st-row')].find((x) => /an overlay picture/.test(x.textContent))?.querySelector('.ui-switch')?.click())
+  await pause(300); await click('.st-sheet .st-tile', 'CP_GRIME'); await pause(700)
+  const made = await page.evaluate(async () => {
+    const S = window.__studio
+    const { animationsTxt } = await import('/studio/src/texsheet.js')
+    const { parseAnimations } = await import('/src/render/animtex.js')
+    const cv = document.querySelector('.sd-page [data-composite-preview="CP_YARD"]')
+    const px = cv?.width ? cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data : []
+    const colours = new Set(); for (let i = 0; i < px.length; i += 4 * 7) colours.add(`${px[i] >> 4},${px[i + 1] >> 4},${px[i + 2] >> 4}`)
+    const read = parseAnimations(animationsTxt(S.module)).composites.get('CP_YARD')
+    return { c: S.module.composites?.CP_YARD, sheet: S.ui.sheetOpen, line: document.querySelector('.sd-page [data-composite-line]')?.textContent ?? '',
+      read: read && { members: read.members.map((m) => `${m.name}:${m.weight}`).join(), flipX: read.flipX, flipY: read.flipY, shift: read.shift, overlay: read.overlay?.name },
+      cv: cv?.width ?? 0, colours: colours.size, tile: !!document.querySelector('.sd-page [data-composite-tile="CP_YARD"]'), thumb: !!S.compositeThumb('CP_YARD') }
+  })
+  check(made.c?.members.map((m) => `${m.name}:${m.weight}`).join() === 'CP_A:6,CP_B:1,CP_C:1' && made.c.flipX && !made.c.flipY && made.c.shift && made.c.overlay?.name === 'CP_GRIME' && !made.sheet,
+    `picked, weighed and laid out by clicks, the picker closing after each pick (${JSON.stringify(made.c)})`)
+  check(/composite CP_YARD CP_A 6 CP_B CP_C flip x shift overlay CP_GRIME$/.test(made.line) && made.read?.members === 'CP_A:6,CP_B:1,CP_C:1' && made.read.flipX && !made.read.flipY && made.read.shift && made.read.overlay === 'CP_GRIME',
+    `the card says its line, and the client reads it back from animations.txt (${made.line})`)
+  check(made.cv > 0 && made.colours >= 3 && made.tile && made.thumb, `its surface is drawn live, all three pictures in it, and its tile shows it (${made.cv} px, ${made.colours} colours)`)
+  // On a floor: the bake's material is a composite one, its atlas the three pictures.
+  const floor = await page.evaluate(async () => {
+    const S = window.__studio
+    await S.go('map')
+    S.doc.sectors[S.doc.order[0]].floorTex = 'CP_YARD'
+    S.commit()
+    for (let i = 0; i < 60 && !(S.preview.view?.map.textures.includes('CP_YARD') && S.preview.view.materials[S.preview.view.map.textures.indexOf('CP_YARD')]?.uniforms.cpCount?.value === 3); i++) await new Promise((r) => setTimeout(r, 100))
+    const v = S.preview.view
+    const m = v?.materials[v.map.textures.indexOf('CP_YARD')]
+    S.pickTexture(null, () => {})
+    const listed = [...document.querySelectorAll('.st-sheet .st-tile')].some((t) => t.title === 'CP_YARD')
+    S.ui.hideSheet()
+    return { composite: m?.defines?.COMPOSITE !== undefined, count: m?.uniforms.cpCount?.value, flags: m?.uniforms.cpFlags?.value, overlay: !!m?.uniforms.cpOverlay?.value, listed, level: S.levelOf(S.doc.name) }
+  })
+  check(floor.composite && floor.count === 3 && floor.flags === (1 | 8 | 64) && floor.overlay, `a floor that names it is drawn with a composite material: three pictures, flip x, shift, an overlay (${JSON.stringify(floor)})`)
+  check(floor.listed, 'the room\'s texture picker lists it')
+  // A texture's rename follows into it; its delete takes it out; the composite's rename follows onto the floor; undo brings it back.
+  const follow = await page.evaluate(async () => {
+    const S = window.__studio
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms))
+    // Until it holds (a dialog's close may take its time on a loaded page), at most 3 s.
+    const until = async (ok) => { for (let i = 0; i < 150 && !ok(); i++) await pause(20) }
+    const answer = async (value) => {
+      await until(() => document.querySelector('dialog[open] button[type=submit]'))
+      const i = document.querySelector('dialog[open] input'); if (i && value != null) i.value = value
+      document.querySelector('dialog[open] button[type=submit]').click()
+      await until(() => !document.querySelector('dialog[open]'))
+    }
+    const press = (sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim() === text)?.click()
+    const names = () => S.module.composites.CP_YARD?.members.map((m) => m.name).join()
+    await S.go('textures'); await S.showTextures('CP_B')
+    press('.sd-page [data-open-texture] button', 'rename'); await answer('CP_BLUE'); await until(() => S.module.textures.CP_BLUE)
+    const renamed = names()
+    await S.showTextures('CP_C')
+    press('.sd-page [data-open-texture] button', 'delete'); await answer(); await until(() => !S.module.textures.CP_C)
+    const dropped = names()
+    await S.showTextures('CP_YARD')
+    press('.sd-page [data-open-composite] button', 'rename'); await answer('CP_COURT'); await until(() => S.module.composites.CP_COURT)
+    const moved = { floor: S.doc.sectors[S.doc.order[0]].floorTex, has: Object.keys(S.module.composites).join() }
+    // (the module comes back at once, the open map once the pictures are read again)
+    document.querySelector('.sd-head [data-action="undo"]').click(); await until(() => S.module.composites.CP_YARD && S.doc.sectors[S.doc.order[0]].floorTex === 'CP_YARD')
+    return { renamed, dropped, moved, undone: { floor: S.doc.sectors[S.doc.order[0]].floorTex, has: Object.keys(S.module.composites).join() } }
+  })
+  check(follow.renamed === 'CP_A,CP_BLUE,CP_C', `renaming a texture follows it into the composites made with it (${follow.renamed})`)
+  check(follow.dropped === 'CP_A,CP_BLUE', `deleting one takes it out of them (${follow.dropped})`)
+  check(follow.moved.floor === 'CP_COURT' && follow.moved.has === 'CP_COURT' && follow.undone.floor === 'CP_YARD' && follow.undone.has === 'CP_YARD',
+    `renaming the composite follows it onto the floor, and undo brings both back (${JSON.stringify(follow)})`)
+  // ON A PHONE: its card's rows stay inside it.
+  await page.setViewport({ ...was, width: 390, height: 844 })
+  await pause(300)
+  const phone = await page.evaluate(async () => {
+    await window.__studio.showTextures('CP_YARD'); await new Promise((r) => setTimeout(r, 400))
+    const card = document.querySelector('.sd-page [data-open-composite]')
+    const r = card?.getBoundingClientRect()
+    return { card: !!card, out: card ? [...card.querySelectorAll('select,input,button,canvas')].filter((e) => { const b = e.getBoundingClientRect(); return b.width && (b.right > r.right + 1 || b.left < r.left - 1) }).length : -1,
+      rows: [...(card?.querySelectorAll('[data-composite-member]') ?? [])].map((x) => Math.round(x.getBoundingClientRect().height)) }
+  })
+  check(phone.card && phone.out === 0 && phone.rows.every((h) => h < 100), `on a phone the card's controls stay inside it, each texture one row (${JSON.stringify(phone)})`)
+  await page.setViewport(was)
+  await page.evaluate(() => {
+    const S = window.__studio
+    S.doc.sectors[S.doc.order[0]].floorTex = null
+    delete S.module.composites
+    for (const n of ['CP_A', 'CP_B', 'CP_BLUE', 'CP_C', 'CP_GRIME']) { delete S.module.textures?.[n]; delete S.rec.assets?.[`textures/${n}.png`] }
+    S.commit(); S.moduleChanged()
+  })
+}
+
 await browser.close()
 console.log(`\n${name}: ${checks} checks, ${fails} failures`)
 process.exit(fails === 0 ? 0 : 1)

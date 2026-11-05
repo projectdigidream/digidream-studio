@@ -7,10 +7,18 @@
 // in their floor and ceiling and walls in their three bands, so renaming one
 // follows every reference in every map, and deleting one in use asks first.
 //
+// COMPOSITES (composites.js) are here too: one texture name made of up to
+// eight of these pictures, laid out tile by tile so a big surface stops showing
+// its repeat. A map names one as it names a texture; renaming or deleting a
+// texture follows it into them.
+//
 import { useStroke } from '../../vendor/uikit/runtime.js'
 import { shell } from '../bridge.js'
-import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, pictureBackground, withIcon, icon } from '../ui.js'
+import { el, button, muted, row, text, toggle, confirmDialog, ask, select, number, slider, pictureBackground, withIcon, icon } from '../ui.js'
 import { guessSheet, frameRect, frameSize, sheetProblems, MAX_FRAMES, DEFAULT_FPS } from '../texsheet.js'
+import { newComposite, compositeLine, renameInComposites, dropFromComposites, compositesUsing, shuffleSeed,
+  COMPOSITE_MAX, DEFAULT_PATCH, DEFAULT_OVERLAY_SCALE, DEFAULT_OVERLAY_STRENGTH } from '../composites.js'
+import { texturePicker } from '../inspector.js'
 import { duplicateTexture } from '../assetcopy.js'
 import { exportButtons, askCopyName } from './assetbuttons.js'
 
@@ -175,14 +183,167 @@ function uses (name) {
 }
 
 const valid = (n) => /^[A-Z0-9_]{1,24}$/.test(n)
+const clean = (raw) => String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
+/** A name a texture or a composite already has: the module's own, or the app's. */
+const taken = (n) => !!S.module.textures?.[n] || !!S.module.composites?.[n] || S.textureNames.includes(n)
+
+// --- composites ---------------------------------------------------------------------------
+
+/**
+ * The still pictures a composite can be made of -- the module's and the app's,
+ * no sheet, no composite -- in the panel beside the page, which closes on a
+ * pick or on back, leaving the composite's card where it was.
+ */
+function pickStill (title, back, onPick) {
+  const names = [...new Set([...Object.keys(S.module.textures ?? {}), ...S.textureNames])].filter((n) => !S.sheetOf(n) && !S.isComposite(n))
+  const leave = () => { S.ui.hideSheet(); showTextures(back) }
+  S.ui.showSheet(title, [
+    el('div', { class: 'st-row' }, [button(withIcon('action.back', 'back'), leave)]),
+    muted('A still picture: an animated one (a sheet) cannot be one of a composite\'s textures.'),
+    ...texturePicker(names, null, (n) => { if (!n) { leave(); return } S.ui.hideSheet(); onPick(n) }, { imageFor: (n) => S.imageFor(n) })
+  ], () => {})
+}
+
+async function addComposite () {
+  let suggest = 'COMPOSITE1'
+  for (let k = 2; taken(suggest); k++) suggest = `COMPOSITE${k}`
+  const n = clean(await ask('the composite\'s name (A-Z, 0-9, _; up to 24)', suggest))
+  if (!n) return
+  if (!valid(n) || taken(n)) { S.status(`${n} is taken or not a usable name`, 'warn'); return }
+  S.module.composites ??= {}
+  const c = S.module.composites[n] = newComposite()
+  S.moduleChanged()
+  // Straight on to its first texture, which sets the tile size.
+  pickStill(`${n}: its first texture`, n, (t) => { c.members.push({ name: t, weight: 1 }); S.moduleChanged(); showTextures(n) })
+}
+
+/** The card of one composite: its textures and weights, how they are laid out, and the surface drawn live. */
+function compositeCard (name) {
+  const c = S.module.composites[name]
+  const u = uses(name)
+  const maps = [...new Set(u.map((x) => x.map))]
+  const changed = () => { S.moduleChanged(); S.redraw(); showTextures(name) }
+  // THE SURFACE, as the game lays it out (the client's JS twin of its shader).
+  const cv = el('canvas', { class: 'cp-preview', 'data-composite-preview': name })
+  const info = el('div', { class: 'st-muted', 'data-composite-info': name })
+  let painting = 0
+  const repaint = async () => {
+    const n = ++painting
+    const def = S.compositeDefOf(name)
+    const tmp = document.createElement('canvas')
+    const out = def && await S.drawComposite(tmp, def, { maxPx: 640, maxTiles: 8, minTiles: 3, level: 0 })
+    if (n !== painting) return
+    cv.hidden = !out
+    if (!out) { info.textContent = def ? 'None of its textures has a picture yet.' : 'Add a texture to see it.'; return }
+    cv.width = tmp.width; cv.height = tmp.height
+    cv.getContext('2d').drawImage(tmp, 0, 0)
+    const cell = S.module.textures?.[def.members[0].name] ?? (S.textureSizes[def.members[0].name] && { w: S.textureSizes[def.members[0].name][0], h: S.textureSizes[def.members[0].name][1] })
+    info.textContent = cell ? `${out.w / cell.w}×${out.h / cell.h} tiles of ${cell.w}×${cell.h}, as a floor of it shows them` : ''
+  }
+  // A slider being dragged redraws the surface; letting go saves.
+  const live = (set) => (v, done) => { set(v); if (done) changed(); else repaint() }
+  const total = c.members.reduce((a, m) => a + (m.weight > 0 ? m.weight : 0), 0) || 1
+  const members = c.members.map((m, k) => {
+    const w = el('input', { type: 'number', class: 'cp-weight', min: 0.1, max: 100, step: 1, value: m.weight, 'data-composite-weight': m.name, title: 'weight: how often it shows, against the others' })
+    w.addEventListener('change', () => { const v = Number(w.value); if (v > 0) { m.weight = v; changed() } else w.value = m.weight })
+    return el('div', { class: 'st-row cp-member', 'data-composite-member': m.name }, [
+      pictureBackground(el('div', { class: 'sd-sheet-thumb cp-thumb' }), S.imageFor(m.name)),
+      el('div', { class: 'cp-member-name' }, [el('span', { text: m.name }),
+        el('span', { class: 'st-muted', text: `${Math.round((100 * m.weight) / total)}% of tiles${k === 0 ? ' · sets the tile size' : ''}` })]),
+      el('label', { class: 'cp-weight-label' }, [el('span', { class: 'st-muted', text: 'weight' }), w]),
+      // the first stays first unless another is moved up: it sets the tile size
+      k > 0 ? button(withIcon('action.up'), () => { c.members.splice(k - 1, 0, c.members.splice(k, 1)[0]); changed() }, 'cp-icon') : el('span'),
+      button(withIcon('action.delete'), () => { c.members.splice(k, 1); changed() }, 'cp-icon')
+    ])
+  })
+  const flip = c.flipX && c.flipY ? 'both' : c.flipX ? 'x' : c.flipY ? 'y' : 'none'
+  const hide = c.patches ? 'patches' : c.shift ? 'shift' : 'none'
+  const advice = []
+  if (c.flipY) advice.push('On walls, mirror left-right only: up-down puts a brick\'s lit top edge underneath.')
+  if (c.turn) advice.push('Turning suits only a square picture with no up, whose four edges all match; otherwise stones are cut along the tile lines and bricks stand on end.')
+  if (hide === 'none' && c.members.length > 1) advice.push('The textures should tile with each other: change only pixels away from the edges (cracks, moss, a missing brick), so any two sit side by side without a seam.')
+  if (hide === 'shift') advice.push('Shift hides the grid even with a single texture; the price is a ragged band where tiles meet.')
+  if (hide === 'patches') advice.push('Patches suit ground -- grass, dirt, rock -- where no grid should show. On bricks they break the courses.')
+  if ((c.shift || c.patches) && c.seam === 'blend') advice.push('Blended bands mix two pictures, which looks smeared beside the engine\'s sharp pixels.')
+  if (c.overlay) advice.push('An overlay is the cheapest way to break up a big surface: a 128 px grime or moss picture at scale 6 to 8. Grey changes nothing, lighter brightens, darker darkens.')
+  const card = el('div', { class: 'st-card cp-card', 'data-open-composite': name }, [
+    el('div', { class: 'st-entry', text: name }),
+    muted(`a composite of ${c.members.length} texture${c.members.length === 1 ? '' : 's'} · used ${u.length} time${u.length === 1 ? '' : 's'}${maps.length ? ` on ${maps.join(', ')}` : ''}`),
+    el('div', { class: 'cp-body' }, [
+      el('div', { class: 'cp-pic' }, [cv, info,
+        el('div', { class: 'st-row' }, [
+          button('shuffle', () => { c.seed = shuffleSeed(); changed() }),
+          c.seed != null ? button('its name\'s own layout', () => { delete c.seed; changed() }) : null].filter(Boolean))]),
+      el('div', { class: 'cp-ctl' }, [
+        el('div', { class: 'st-section-head', text: `its textures (${c.members.length} of at most ${COMPOSITE_MAX})` }),
+        ...members,
+        c.members.length < COMPOSITE_MAX ? el('div', { class: 'st-row' }, [button(withIcon('action.add', 'texture'), () => pickStill(`${name}: another texture`, name, (t) => { c.members.push({ name: t, weight: 1 }); changed() }))]) : null,
+        el('div', { class: 'st-section-head', text: 'each tile' }),
+        select('mirrored', flip, [['none', 'no'], ['both', 'at random, both ways'], ['x', 'at random, left-right only (walls)'], ['y', 'at random, up-down only']],
+          (v) => { c.flipX = v === 'both' || v === 'x'; c.flipY = v === 'both' || v === 'y'; changed() }),
+        toggle('turned a quarter at random (square pictures)', !!c.turn, (v) => { c.turn = v; changed() }),
+        select('hide the grid', hide, [['none', 'no: a texture per tile'], ['shift', 'shift: each tile at its own offset'], ['patches', 'patches: no grid, irregular patches']],
+          (v) => { c.shift = v === 'shift'; c.patches = v === 'patches' ? (c.patches || DEFAULT_PATCH) : 0; changed() }),
+        c.patches ? slider('patch size (tiles)', c.patches, { min: 1, max: 8, step: 0.5 }, live((v) => { c.patches = v })) : null,
+        c.shift || c.patches ? select('where they meet', c.seam === 'blend' ? 'blend' : 'dither', [['dither', 'dithered: sharp pixels'], ['blend', 'blended: faded into each other']],
+          (v) => { c.seam = v; changed() }) : null,
+        el('div', { class: 'st-section-head', text: 'over the whole surface' }),
+        toggle('an overlay picture', !!c.overlay, (v) => {
+          if (!v) { c.overlay = null; changed(); return }
+          pickStill(`${name}: its overlay`, name, (t) => { c.overlay = { name: t, scale: DEFAULT_OVERLAY_SCALE, strength: DEFAULT_OVERLAY_STRENGTH }; changed() })
+        }),
+        c.overlay ? el('div', { class: 'st-row cp-overlay', 'data-composite-overlay': c.overlay.name }, [
+          pictureBackground(el('div', { class: 'sd-sheet-thumb cp-thumb' }), S.imageFor(c.overlay.name)),
+          el('span', { class: 'cp-member-name', text: c.overlay.name }),
+          button('change…', () => pickStill(`${name}: its overlay`, name, (t) => { c.overlay.name = t; changed() }))]) : null,
+        c.overlay ? slider('its size (times its own)', c.overlay.scale ?? DEFAULT_OVERLAY_SCALE, { min: 1, max: 16, step: 0.5 }, live((v) => { c.overlay.scale = v })) : null,
+        c.overlay ? slider('how strong', c.overlay.strength ?? DEFAULT_OVERLAY_STRENGTH, { min: 0, max: 1, step: 0.05 }, live((v) => { c.overlay.strength = v })) : null,
+        ...advice.map((a) => el('div', { class: 'st-muted cp-advice', text: a }))
+      ].filter(Boolean))
+    ]),
+    ...S.compositeProblems(name, c).map((p) => el('div', { class: 'st-danger', text: p })),
+    el('div', { class: 'st-muted cp-line', 'data-composite-line': name, text: `written: ${compositeLine(name, c) ?? 'nothing yet -- it needs a texture'}` }),
+    el('div', { class: 'st-row' }, [
+      button(withIcon('action.duplicate', 'duplicate'), async () => {
+        const to = await askCopyName(S, name, (n) => !valid(n) || taken(n))
+        if (!to) return
+        S.module.composites[to] = JSON.parse(JSON.stringify(c))
+        S.moduleChanged()
+        S.status(`${to}: a copy of ${name}`, 'ok')
+        showTextures(to)
+      }),
+      button('rename', async () => {
+        const n = clean(await ask('new name (A-Z, 0-9, _; up to 24)', name))
+        if (!n || n === name) return
+        if (!valid(n) || taken(n)) { S.status(`${n} is taken or not a usable name`, 'warn'); return }
+        S.module.composites[n] = c; delete S.module.composites[name]
+        for (const x of u) x.set(n)
+        S.moduleChanged(); S.redraw()
+        S.status(`${name} is ${n} now, on ${u.length} surface${u.length === 1 ? '' : 's'}`, 'ok')
+        showTextures(n)
+      }),
+      button('delete', async () => {
+        if (u.length && !await confirmDialog(`${name} is on ${u.length} surface${u.length === 1 ? '' : 's'} (${maps.join(', ')}). Delete it and leave those bare?`)) return
+        for (const x of u) x.set(null)
+        delete S.module.composites[name]
+        S.moduleChanged(); S.redraw()
+        showTextures()
+      }, 'st-danger')
+    ])
+  ])
+  repaint()
+  return card
+}
 
 function showTextures (open = null) {
   const own = Object.keys(S.module.textures ?? {}).sort()
+  const comps = Object.keys(S.module.composites ?? {}).sort()
   const served = S.textureNames.filter((n) => !own.includes(n))
   const tile = (n, mine) => {
     const t = el('button', { class: 'st-tile', 'data-texture': n, 'data-on': n === open ? '1' : '0', title: n, onclick: () => showTextures(mine ? n : null) },
       [el('span', { text: n })])
-    pictureBackground(t, S.imageUrls.get(n) ?? `/textures/${n}.png`, S.sheetOf?.(n))
+    pictureBackground(t, S.imageFor(n), S.sheetOf?.(n))
+    if (S.isComposite(n)) t.dataset.compositeTile = n
     return t
   }
   const body = [
@@ -192,14 +353,19 @@ function showTextures (open = null) {
         const raw = await ask('the new texture\'s name (A-Z, 0-9, _; up to 24)', 'NEWTEX')
         const n = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
         if (!n) return
-        if (S.module.textures?.[n] || S.textureNames.includes(n)) { S.status(`${n} is taken`, 'warn'); return }
+        if (taken(n)) { S.status(`${n} is taken`, 'warn'); return }
         S.editInPlugin('file:texture', n)
       })] : []),
-      button('+ import texture (PNG)', () => importTexture())
+      button('+ import texture (PNG)', () => importTexture()),
+      button('+ composite', () => addComposite())
     ]),
     el('div', { class: 'st-section-head' }, withIcon('section.textures', `the module's own (${own.length})`)),
-    own.length ? el('div', { class: 'st-grid' }, own.map((n) => tile(n, true))) : muted('None yet. A PNG imported here is the module\'s, and ships in its pack.')
+    own.length ? el('div', { class: 'st-grid' }, own.map((n) => tile(n, true))) : muted('None yet. A PNG imported here is the module\'s, and ships in its pack.'),
+    el('div', { class: 'st-section-head' }, withIcon('section.textures', `composites (${comps.length})`)),
+    comps.length ? el('div', { class: 'st-grid', 'data-composites': '1' }, comps.map((n) => tile(n, true)))
+      : muted('None yet. A composite is one texture name made of up to eight pictures, laid out tile by tile so a big floor or wall stops showing its repeat.')
   ]
+  if (open && S.module.composites?.[open]) body.push(compositeCard(open))
   if (open && S.module.textures?.[open]) {
     const meta = S.module.textures[open]
     const u = uses(open)
@@ -226,7 +392,7 @@ function showTextures (open = null) {
         ...(S.editButtons?.('file:texture', open) ?? []),
         // A copy: the picture and its qPainter project under a new name, a variant to change.
         button(withIcon('action.duplicate', 'duplicate'), async () => {
-          const to = await askCopyName(S, open, (n) => !valid(n) || !!S.module.textures[n] || S.textureNames.includes(n))
+          const to = await askCopyName(S, open, (n) => !valid(n) || taken(n))
           if (!to || !duplicateTexture(S.rec, open, to)) return
           S.imageUrls.set(to, URL.createObjectURL(S.rec.assets[`textures/${to}.png`]))
           S.moduleChanged()
@@ -238,19 +404,24 @@ function showTextures (open = null) {
           const raw = await ask('new name (A-Z, 0-9, _; up to 24)', open)
           const n = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 24)
           if (!n || n === open) return
-          if (!valid(n) || S.module.textures[n] || S.textureNames.includes(n)) { S.status(`${n} is taken or not a usable name`, 'warn'); return }
+          if (!valid(n) || taken(n)) { S.status(`${n} is taken or not a usable name`, 'warn'); return }
           S.module.textures[n] = meta; delete S.module.textures[open]
           S.rec.assets[`textures/${n}.png`] = S.rec.assets[`textures/${open}.png`]; delete S.rec.assets[`textures/${open}.png`]
           S.imageUrls.set(n, S.imageUrls.get(open)); S.imageUrls.delete(open)
           for (const x of u) x.set(n)
+          // and in the composites made with it
+          const inComps = renameInComposites(S.module.composites, open, n)
           S.textures.forget(open)
           S.moduleChanged(); S.redraw()
-          S.status(`${open} is ${n} now, on ${u.length} surface${u.length === 1 ? '' : 's'}`, 'ok')
+          S.status(`${open} is ${n} now, on ${u.length} surface${u.length === 1 ? '' : 's'}${inComps ? ` and in ${inComps} composite${inComps === 1 ? '' : 's'}` : ''}`, 'ok')
           showTextures(n)
         }),
         button('delete', async () => {
-          if (u.length && !await confirmDialog(`${open} is on ${u.length} surface${u.length === 1 ? '' : 's'} (${maps.join(', ')}). Delete it and leave those bare?`)) return
+          const inComps = compositesUsing(S.module.composites, open)
+          const where = [u.length ? `on ${u.length} surface${u.length === 1 ? '' : 's'} (${maps.join(', ')})` : null, inComps.length ? `in the composite${inComps.length === 1 ? '' : 's'} ${inComps.join(', ')}` : null].filter(Boolean)
+          if (where.length && !await confirmDialog(`${open} is ${where.join(' and ')}. Delete it and leave ${u.length ? 'those bare' : 'them without it'}?`)) return
           for (const x of u) x.set(null)
+          dropFromComposites(S.module.composites, open)
           delete S.module.textures[open]; delete S.rec.assets[`textures/${open}.png`]
           URL.revokeObjectURL(S.imageUrls.get(open)); S.imageUrls.delete(open)
           S.textures.forget(open)
@@ -275,12 +446,17 @@ function showTextures (open = null) {
     served.length ? row('find', find) : null, served.length ? grid : muted('The app serves none.'),
     muted('The app\'s textures come with the engine build the module plays in; a map may name any of them. Only the module\'s own travel in its pack.'))
   S.ui.showSheet('Textures', body.filter(Boolean))
+  // A composite's tile is its flat drawing, which may still be being made after a change.
+  S.compositesDrawn?.then(() => {
+    for (const t of document.querySelectorAll('[data-composite-tile]')) { const url = S.compositeThumb(t.dataset.compositeTile); if (url) t.style.backgroundImage = `url("${url}")` }
+  })
 }
 
 /** Hand it the studio's state, and publish what others call. */
 export function install (s) {
   S = s
   S.importTexture = importTexture
+  S.addComposite = addComposite
   S.showTextures = S.sectionAlias('textures', showTextures)
 }
 
@@ -293,4 +469,18 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 .sd-sheet-cv,.sd-sheet-tile{image-rendering:pixelated;background:repeating-conic-gradient(var(--cv-common-checker-a-fill) 0 25%,var(--cv-common-checker-b-fill) 0 50%) 0 0/16px 16px;border:1px solid var(--dnp-color-line-main);border-radius:6px;max-width:100%}
 .sd-sheet-tile{width:min(192px,45vh);height:min(192px,45vh)}
 .sd-sheet-thumb{width:56px;height:56px;flex:0 0 auto;border-radius:6px;border:1px solid var(--dnp-color-line-main);background-size:cover;image-rendering:pixelated}
+.cp-body{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.cp-pic{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:6px}
+.cp-ctl{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.cp-preview{width:100%;max-width:640px;image-rendering:pixelated;border:1px solid var(--dnp-color-line-main);border-radius:6px;background:repeating-conic-gradient(var(--cv-common-checker-a-fill) 0 25%,var(--cv-common-checker-b-fill) 0 50%) 0 0/16px 16px}
+/* a grid, not the row's wrapping flex: on a phone the weight and the buttons stay beside the name */
+.st-row.cp-member{display:grid;grid-template-columns:44px minmax(0,1fr) auto 44px 44px;align-items:center;gap:8px}
+.st-row.cp-overlay{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:8px}
+.cp-thumb{width:44px;height:44px}
+.cp-member-name{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;overflow-wrap:anywhere}
+.cp-weight-label{display:flex;flex-direction:column;align-items:flex-start;gap:0;font-size:12px}
+.cp-weight{width:64px;min-height:44px;box-sizing:border-box}
+.cp-icon{min-width:44px;min-height:44px}
+.cp-advice{font-size:12px;margin-top:4px}
+.cp-line{font-family:var(--dnp-font-mono,monospace);font-size:12px;overflow-wrap:anywhere;margin:6px 0}
 ` }))

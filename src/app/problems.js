@@ -45,6 +45,8 @@ export function moduleProblems (S) {
   out.controls.push(...keyProblems(S.module).map((p) => p.msg))
   // Animated textures: a sheet the client would refuse or show with pixels left over.
   for (const [n, t] of Object.entries(S.module.textures ?? {})) out.textures.push(...sheetProblems(n, t.sheet, t.w, t.h))
+  // Composite textures: a texture missing or not a still picture, too many, a turn that cannot be (composites.js).
+  for (const [n, c] of Object.entries(S.module.composites ?? {})) out.textures.push(...(S.compositeProblems?.(n, c) ?? []))
   // The player's lines: a value of the wrong kind (docs/PLAYER.md).
   out.player.push(...playerProblems(S.module, Object.values(S.docs)))
   // Its movement states, as the engine's own parser reads them (movement.js).

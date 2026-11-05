@@ -11,6 +11,7 @@
 import * as THREE from 'three'
 import { configureTexture } from '/src/render/textures.js'
 import { TextureAnimator } from '/src/render/animtex.js'
+import { compositeAtlas, overlayTexture, applyComposite } from '/src/render/composite.js'
 import { frameRect } from './texsheet.js'
 
 export class TextureCache {
@@ -20,14 +21,18 @@ export class TextureCache {
    * @param sheetOf (name) => { layout, frames, fps } | null: a sprite sheet (texsheet.js)
    * @param groups  () => [{ fps, frames }]: every animation, sheets' and frame lists'
    *                (render/animtex.js parseAnimations' groups)
+   * @param compositeOf (name) => the client's definition of a composite texture, or
+   *                null (composites.js; render/composite.js)
    */
-  constructor ({ urlFor, cutout = {}, sheetOf = () => null, groups = () => [] }) {
+  constructor ({ urlFor, cutout = {}, sheetOf = () => null, groups = () => [], compositeOf = () => null }) {
     this.urlFor = urlFor
     this.cutout = cutout
     this.sheetOf = sheetOf
     this.groups = groups
+    this.compositeOf = compositeOf
     this.entries = new Map()       // name -> Promise<THREE.Texture | null>
     this.cuts = new Map()          // `${name}:${layout}:${frames}` -> [THREE.Texture] (frame 0 first)
+    this.atlases = new Map()       // the line's words + its pictures -> Promise<{ atlas, members, overlay } | null>
   }
 
   /**
@@ -78,18 +83,63 @@ export class TextureCache {
     return this.entries.get(name)
   }
 
+  /**
+   * A composite's atlas and overlay, built as the client builds them
+   * (render/textures.js loadRealTextures): its pictures in the line's order,
+   * one with no picture left out, each kept with its weight. Kept by what it
+   * is made of, so a bake after an edit elsewhere builds nothing.
+   */
+  #composite (def) {
+    const key = JSON.stringify([def.members, def.overlay])
+    if (!this.atlases.has(key)) {
+      this.atlases.set(key, (async () => {
+        const got = await Promise.all(def.members.map(async (m) => {
+          const tex = await this.shown(m.name)
+          return tex?.image ? { name: m.name, image: tex.image, w: tex.image.width, h: tex.image.height, cutout: !!this.cutout[m.name], weight: m.weight } : null
+        }))
+        const members = got.filter(Boolean)
+        if (!members.length) return null
+        const atlas = compositeAtlas(THREE, def, members, { configure: configureTexture, warn: () => {} })
+        let overlay = null
+        const o = def.overlay && await this.shown(def.overlay.name)
+        if (o?.image) overlay = { texture: overlayTexture(THREE, o.image), w: o.image.width, h: o.image.height }
+        return { atlas, members, overlay }
+      })())
+    }
+    return this.atlases.get(key)
+  }
+
   /** Drop a name, when its picture changed (a re-import) or its module closed. */
   forget (name) {
     for (const [k, frames] of this.cuts) if (k.startsWith(`${name}:`)) { for (const f of frames) f.dispose(); this.cuts.delete(k) }
+    // The composites made with it, too (their keys hold their textures' names).
+    for (const [k, p] of this.atlases) {
+      if (!k.includes(`"${name}"`)) continue
+      this.atlases.delete(k)
+      p.then((c) => { c?.atlas.texture.dispose(); c?.overlay?.texture.dispose() })
+    }
     const e = this.entries.get(name)
     if (!e) return
     this.entries.delete(name)
     e.then((tex) => tex?.dispose())
   }
 
-  /** Put the pictures on a MapView's materials, loading whatever is new. */
-  async apply (view, pxPerUnit) {
+  /**
+   * Put the pictures on a MapView's materials, loading whatever is new.
+   * `level` is the map's level number in the game (its place among the
+   * module's maps by name, as the server numbers them), which turns a
+   * composite's layout as the client turns it.
+   */
+  async apply (view, pxPerUnit, { level = 0 } = {}) {
     await Promise.all(view.map.textures.map(async (name, i) => {
+      // A COMPOSITE (composites.js): the material is one from the start
+      // (MapView.composites), and takes its atlas as the client's does.
+      const def = this.compositeOf(name)
+      if (def && view.materials[i]?.defines?.COMPOSITE !== undefined) {
+        const c = await this.#composite(def)
+        if (c) applyComposite(THREE, view.materials[i], { def, members: c.members, atlas: c.atlas, overlay: c.overlay, pxPerUnit, level })
+        return
+      }
       // A sheet shows one frame, sized as one frame (as the client does).
       const tex = await this.shown(name)
       const mat = view.materials[i]

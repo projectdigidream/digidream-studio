@@ -16,6 +16,7 @@
 //
 // Pure: the Textures section, the texture cache, the emitter and the tests use it.
 //
+import { compositeLine } from './composites.js'
 
 export const MAX_FRAMES = 256
 export const DEFAULT_FPS = 8
@@ -70,15 +71,20 @@ export function sheetLine (name, spec) {
 }
 
 /**
- * The module's assets/animations.txt: its sheets' lines. Written whenever the
- * module has textures of its own, with no lines when none is a sheet, so a
- * sheet turned off is not left animating by a file an earlier Play wrote.
- * Null for a module with no textures of its own.
+ * The module's assets/animations.txt: its sheets' lines, then its composite
+ * textures' (composites.js). Written whenever the module has textures or
+ * composites of its own, with no lines when none is a sheet, so a sheet turned
+ * off is not left animating by a file an earlier Play wrote. Null for a module
+ * with neither.
  */
 export function animationsTxt (module) {
   const own = Object.entries(module?.textures ?? {})
-  if (!own.length) return null
+  const comps = Object.entries(module?.composites ?? {})
+  if (!own.length && !comps.length) return null
   const lines = own.filter(([, t]) => t.sheet).sort(([a], [b]) => a.localeCompare(b)).map(([n, t]) => sheetLine(n, t.sheet))
+  // One without textures yet has no line: the client would refuse it.
+  const cLines = comps.sort(([a], [b]) => a.localeCompare(b)).map(([n, c]) => compositeLine(n, c)).filter(Boolean)
   return ['# animations.txt -- written by the studio from module.studio.json.',
-    '# Its textures that are sprite sheets (docs/TEXTURE_SHEETS.md).', ...lines, ''].join('\n')
+    '# Its textures that are sprite sheets (docs/TEXTURE_SHEETS.md).', ...lines,
+    ...(cLines.length ? ['# Its composite textures (docs/COMPOSITE_TEXTURES.md).', ...cLines] : []), ''].join('\n')
 }
