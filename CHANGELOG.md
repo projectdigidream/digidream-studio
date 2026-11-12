@@ -5,7 +5,25 @@ anything not released yet is under **Unreleased**.
 
 ## Unreleased
 
-- A composite's overlay picture with colour in it tints the whole surface; its card now offers "make a grey copy": the picture in greys, its average moved to mid-grey so it brightens and darkens the surface evenly, kept as a texture of the module's own (NAME_GREY) and made the overlay. Not offered for a picture that is grey already.
+## 0.4.4 -- 2026-11-12
+
+The stable release of what the development releases 0.4.3.1 to 0.4.3.6 brought,
+and a grey copy for a composite's overlay, built on engine 0.2.5.
+
+### Added
+
+- **Composite textures** (Textures → "+ composite"): one texture name made of up to eight pictures, laid out tile by tile so a big floor or wall stops showing its repeat. Each picture has a weight; tiles can be mirrored (both ways, or left-right only for walls) and turned; the grid can be hidden by shifting each tile or by irregular patches, dithered or blended where they meet; an overlay picture can shade the whole surface, and one with colour in it can be made a grey copy so it shades without tinting; Shuffle gives another layout. The surface is drawn live as the game lays it out; rooms and walls name a composite like any texture, and renaming or deleting a texture follows it into the composites that use it.
+- **The camera on a lead**: the Camera panel's "turns by itself" can follow the way the player goes without ever swinging round behind them, beside the swing round behind and off.
+- **Keep the player in view**: with "turns by itself" on, the camera turns round the player when a wall, a ceiling or a floor comes between them -- "keep in view" says how wide a view it keeps clear, "turn rate for walls" how fast it turns.
+- **Copy, cut and paste in ThreeSprite** (0.2.5): the selection, or the whole image, across views, parts, variants and projects.
+
+### Faster
+
+- The map editor keeps up with big maps: an edit on a map of 1920 rooms is checked and baked in about 0.2 s where it took 4 s, with the same result.
+
+### Bundled
+
+ThreeSprite 0.2.5, qPainter 0.2.1, the DAW of DigidreamSynth 0.2.1, the sound tool of DigidreamSound 0.2.1 and Packager 0.1.4, all stable.
 
 ## 0.4.3.6 -- 2026-11-05
 
